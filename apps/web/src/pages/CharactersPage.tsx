@@ -74,7 +74,7 @@ export function CharactersPage() {
       {busyId && busyId !== 'all' ? (
         <WaitCard
           title="Drawing a character sheet"
-          expectedSeconds={22}
+          expectedSeconds={35}
           detail={`Painting ${characters.find((character) => character.id === busyId)?.name ?? 'this character'}…`}
           stages={['Full-body reference, same face and costume every time…']}
         />
@@ -96,7 +96,7 @@ export function CharactersPage() {
               title="Drawing character sheets"
               current={progress.current}
               total={progress.total}
-              expectedSeconds={Math.max(20, progress.total * 22)}
+              expectedSeconds={Math.max(30, progress.total * 28)}
               detail={progress.name ? `Painting ${progress.name}…` : 'Preparing character sheets…'}
               stages={['Painting full-body references…']}
             />

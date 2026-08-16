@@ -70,7 +70,7 @@ export function BiblePage() {
         {busy ? (
           <WaitCard
             title={bible ? 'Rewriting the visual bible' : 'Creating the visual bible'}
-            expectedSeconds={35}
+            expectedSeconds={45}
             stages={[
               'Reading the lyrics and style…',
               'Casting characters and locations…',

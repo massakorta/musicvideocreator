@@ -86,8 +86,8 @@ export function ImagesPage() {
             total={busy ? batch.total : singleTitle ? undefined : project.scenes.length}
             expectedSeconds={
               singleTitle && !busy
-                ? 22
-                : Math.max(20, (busy ? batch.total - batch.done : project.scenes.length - completeCount) * 18)
+                ? 40
+                : Math.max(40, (busy ? batch.total - batch.done : project.scenes.length - completeCount) * 25)
             }
             detail={
               batch.title
@@ -98,7 +98,7 @@ export function ImagesPage() {
                     ? `${generatingCount} stills in flight`
                     : 'Starting the first still…'
             }
-            stages={['Each still takes about 15–25 seconds. Keep this tab open.']}
+            stages={['Each still takes about 20–40 seconds. Keep this tab open.']}
           />
         ) : null}
         <div className="row" style={{ marginBottom: 14 }}>
