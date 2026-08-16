@@ -37,4 +37,5 @@ export interface Repositories {
   aiLogs: {
     add(log: AiUsageLog): Promise<void>;
   };
+  recoverInterruptedJobs(): Promise<{ pipeline: number; render: number }>;
 }

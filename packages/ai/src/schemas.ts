@@ -1,11 +1,14 @@
 import { z } from 'zod';
 import { MOTION_PRESETS, TRANSITION_PRESETS } from '@music-video/shared';
 
+/** OpenAI structured outputs require every field; use null when a value is absent. */
+const nullableString = z.string().nullable();
+
 export const aiCharacterSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   role: z.string().min(1),
-  ageAppearance: z.string().optional(),
+  ageAppearance: nullableString,
   bodyType: z.string().min(1),
   face: z.string().min(1),
   hair: z.string().min(1),
@@ -78,17 +81,17 @@ export const aiStoryboardSceneSchema = z.object({
     'outro',
     'other',
   ]),
-  lyricsExcerpt: z.string().optional(),
+  lyricsExcerpt: nullableString,
   title: z.string().min(1),
   description: z.string().min(1),
   action: z.string().min(1),
   characterIds: z.array(z.string()),
-  environmentId: z.string().optional(),
+  environmentId: nullableString,
   shotType: z.enum(['extreme-wide', 'wide', 'medium', 'close-up', 'extreme-close-up']),
   cameraIntent: z.string().min(1),
-  visualComedy: z.string().optional(),
+  visualComedy: nullableString,
   imagePrompt: z.string().min(1),
-  negativePrompt: z.string().optional(),
+  negativePrompt: nullableString,
   suggestedMotion: z.enum(MOTION_PRESETS),
   transitionIn: z.enum(TRANSITION_PRESETS),
   transitionOut: z.enum(TRANSITION_PRESETS),

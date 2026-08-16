@@ -12,7 +12,12 @@ import { config, supabaseConfigured } from '../../api/src/config.js';
 import { getRepositories } from '../../api/src/repositories/index.js';
 import { getProjectOrThrow, saveProject, storeGeneratedFile } from '../../api/src/services/projects.js';
 import { getObjectStorage } from '../../api/src/storage/index.js';
-import { runPipelineJob } from './pipelineRunner.js';
+import { runPipelineJob, type PipelineRunOptions } from './pipelineRunner.js';
+import {
+  isRenderBlockedByPipeline,
+  setPipelineHeavy,
+  setPipelineWaitingForRender,
+} from './heavyWork.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -32,6 +37,18 @@ function assertJobStore(): void {
     process.exit(1);
   }
 }
+
+async function recoverInterruptedJobs(): Promise<void> {
+  const { pipeline, render } = await getRepositories().recoverInterruptedJobs();
+  if (pipeline || render) {
+    console.log(`Recovered ${pipeline} pipeline and ${render} render jobs back to queued`);
+  }
+}
+
+const pipelineRunOptions: PipelineRunOptions = {
+  onRenderWaitStart: () => setPipelineWaitingForRender(true),
+  onRenderWaitEnd: () => setPipelineWaitingForRender(false),
+};
 
 async function claimPipeline() {
   return getRepositories().pipelineJobs.claimNext(config.workerId);
@@ -154,14 +171,18 @@ async function pipelineLoop(): Promise<void> {
   for (;;) {
     try {
       const pipelineJob = await claimPipeline();
-      if (pipelineJob) {
+      if (pipelineJob?.id) {
         lastActivity = Date.now();
         console.log(`Claimed pipeline job ${pipelineJob.id} (${pipelineJob.kind})`);
+        setPipelineHeavy(true);
         try {
-          await runPipelineJob(pipelineJob);
+          await runPipelineJob(pipelineJob, pipelineRunOptions);
           console.log(`Finished pipeline job ${pipelineJob.id}`);
         } catch (error) {
           await failPipeline(pipelineJob.id, error);
+        } finally {
+          setPipelineHeavy(false);
+          setPipelineWaitingForRender(false);
         }
       } else if (Date.now() - lastActivity >= IDLE_HEARTBEAT_MS) {
         console.log('[worker] pipeline loop: no queued jobs');
@@ -178,8 +199,13 @@ async function renderLoop(): Promise<void> {
   let lastActivity = Date.now();
   for (;;) {
     try {
+      if (isRenderBlockedByPipeline()) {
+        await new Promise((r) => setTimeout(r, config.workerPollMs));
+        continue;
+      }
+
       const job = await claimRender();
-      if (job) {
+      if (job?.id) {
         lastActivity = Date.now();
         console.log(`Claimed render job ${job.id}`);
         try {
@@ -203,9 +229,11 @@ function start(): void {
   assertJobStore();
   healthCheck();
   console.log(`Worker ${config.workerId} polling every ${config.workerPollMs}ms`);
-  Promise.all([pipelineLoop(), renderLoop()]).catch((error) => {
-    console.error(error);
-    process.exit(1);
+  void recoverInterruptedJobs().finally(() => {
+    Promise.all([pipelineLoop(), renderLoop()]).catch((error) => {
+      console.error(error);
+      process.exit(1);
+    });
   });
 }
 

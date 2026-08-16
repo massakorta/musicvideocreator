@@ -173,5 +173,28 @@ export function createFileRepositories(): Repositories {
         });
       },
     },
+    async recoverInterruptedJobs() {
+      let pipeline = 0;
+      let render = 0;
+      await writeDb((db) => {
+        for (const job of Object.values(db.pipelineJobs)) {
+          if (job.status !== 'running') continue;
+          job.status = 'queued';
+          job.claimedBy = undefined;
+          db.pipelineJobs[job.id] = job;
+          pipeline += 1;
+        }
+        for (const job of Object.values(db.renderJobs)) {
+          if (job.status !== 'preparing' && job.status !== 'rendering' && job.status !== 'uploading') continue;
+          job.status = 'queued';
+          job.claimedBy = undefined;
+          job.startedAt = undefined;
+          job.progress = 0;
+          db.renderJobs[job.id] = job;
+          render += 1;
+        }
+      });
+      return { pipeline, render };
+    },
   };
 }

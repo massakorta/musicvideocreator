@@ -137,6 +137,15 @@ function renderJobFromRow(row: RenderJobRow): RenderJob {
   };
 }
 
+function parseClaimedRow<T extends { id?: string | null }, R>(
+  data: unknown,
+  map: (row: T) => R,
+): R | null {
+  const row = (Array.isArray(data) ? data[0] : data) as T | null | undefined;
+  if (!row || typeof row !== 'object' || !row.id) return null;
+  return map(row);
+}
+
 function pipelineJobFromRow(row: PipelineJobRow): PipelineJob {
   return {
     id: row.id,
@@ -293,8 +302,7 @@ export function createSupabaseRepositories(): Repositories {
       async claimNext(workerId: string) {
         const { data, error } = await client.rpc('video_claim_render_job', { worker_id: workerId });
         if (error) throw error;
-        const row = Array.isArray(data) ? data[0] : data;
-        return row ? renderJobFromRow(row as RenderJobRow) : null;
+        return parseClaimedRow<RenderJobRow, RenderJob>(data, renderJobFromRow);
       },
     },
     pipelineJobs: {
@@ -332,8 +340,7 @@ export function createSupabaseRepositories(): Repositories {
       async claimNext(workerId: string) {
         const { data, error } = await client.rpc('video_claim_pipeline_job', { worker_id: workerId });
         if (error) throw error;
-        const row = Array.isArray(data) ? data[0] : data;
-        return row ? pipelineJobFromRow(row as PipelineJobRow) : null;
+        return parseClaimedRow<PipelineJobRow, PipelineJob>(data, pipelineJobFromRow);
       },
     },
     aiLogs: {
@@ -354,6 +361,26 @@ export function createSupabaseRepositories(): Repositories {
         });
         if (error) throw error;
       },
+    },
+    async recoverInterruptedJobs() {
+      const { data: pipelineRows, error: pipelineError } = await client
+        .from('video_pipeline_jobs')
+        .update({ status: 'queued', claimed_by: null })
+        .eq('status', 'running')
+        .select('id');
+      if (pipelineError) throw pipelineError;
+
+      const { data: renderRows, error: renderError } = await client
+        .from('video_render_jobs')
+        .update({ status: 'queued', claimed_by: null, started_at: null, progress: 0 })
+        .in('status', ['preparing', 'rendering', 'uploading'])
+        .select('id');
+      if (renderError) throw renderError;
+
+      return {
+        pipeline: pipelineRows?.length ?? 0,
+        render: renderRows?.length ?? 0,
+      };
     },
   };
 }

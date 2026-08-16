@@ -54,6 +54,7 @@ Create the visual bible.`;
     ...data,
     characters: data.characters.map((c) => ({
       ...c,
+      ageAppearance: c.ageAppearance ?? undefined,
       lockedReferenceImage: false,
     })),
   };

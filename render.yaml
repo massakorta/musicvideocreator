@@ -55,6 +55,8 @@ projects:
             envVars:
               - key: NODE_ENV
                 value: production
+              - key: NODE_OPTIONS
+                value: --max-old-space-size=460
               - key: SESSION_SECRET
                 fromService:
                   name: music-video-api
@@ -69,7 +71,7 @@ projects:
               - key: OPENAI_IMAGE_SIZE
                 value: 1536x1024
               - key: IMAGE_GENERATION_CONCURRENCY
-                value: "6"
+                value: "3"
               - key: SUPABASE_URL
                 fromService:
                   name: music-video-api

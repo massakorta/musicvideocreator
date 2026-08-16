@@ -23,15 +23,29 @@ import { enqueueRender, getRenderJob } from '../../api/src/services/render.js';
 import { markRenderFingerprint } from '../../api/src/services/share.js';
 import { computeStaleAssets } from '@music-video/shared';
 
-async function waitForRender(renderJobId: string, onProgress: (progress: number) => void): Promise<void> {
-  for (;;) {
-    const job = await getRenderJob(renderJobId);
-    onProgress(job.progress);
-    if (job.status === 'complete') return;
-    if (job.status === 'failed') {
-      throw new Error(job.error || 'Render failed.');
+export interface PipelineRunOptions {
+  onRenderWaitStart?: () => void;
+  onRenderWaitEnd?: () => void;
+}
+
+async function waitForRender(
+  renderJobId: string,
+  onProgress: (progress: number) => void,
+  options?: PipelineRunOptions,
+): Promise<void> {
+  options?.onRenderWaitStart?.();
+  try {
+    for (;;) {
+      const job = await getRenderJob(renderJobId);
+      onProgress(job.progress);
+      if (job.status === 'complete') return;
+      if (job.status === 'failed') {
+        throw new Error(job.error || 'Render failed.');
+      }
+      await new Promise((r) => setTimeout(r, config.workerPollMs));
     }
-    await new Promise((r) => setTimeout(r, config.workerPollMs));
+  } finally {
+    options?.onRenderWaitEnd?.();
   }
 }
 
@@ -39,15 +53,15 @@ async function updateStage(job: PipelineJob, stage: PipelineStage, patch: Partia
   return patchPipelineJob(job, { stage, ...patch });
 }
 
-export async function runPipelineJob(job: PipelineJob): Promise<void> {
+export async function runPipelineJob(job: PipelineJob, options?: PipelineRunOptions): Promise<void> {
   let current = await patchPipelineJob(job, { status: 'running', startedAt: job.startedAt ?? new Date().toISOString() });
   const projectId = job.projectId;
 
   try {
     if (job.kind === 'full') {
-      await runFullPipeline(current);
+      await runFullPipeline(current, options);
     } else {
-      await runStalePipeline(current);
+      await runStalePipeline(current, options);
     }
     const finished = await getRepositories().pipelineJobs.get(job.id);
     if (!finished) return;
@@ -76,7 +90,7 @@ export async function runPipelineJob(job: PipelineJob): Promise<void> {
   }
 }
 
-async function runFullPipeline(job: PipelineJob): Promise<void> {
+async function runFullPipeline(job: PipelineJob, options?: PipelineRunOptions): Promise<void> {
   let current = job;
   current = await updateStage(current, 'bible', { stageDetail: 'Writing the visual world…', progress: 2 });
   const bibleResult = await generateProjectVisualBible(current.projectId);
@@ -133,15 +147,19 @@ async function runFullPipeline(job: PipelineJob): Promise<void> {
     current = await updateStage(current, 'render', { stageDetail: 'Rendering the music video…', progress: 86 });
   const { job: renderJob } = await enqueueRender(current.projectId);
   current = await patchPipelineJob(current, { renderJobId: renderJob.id });
-  await waitForRender(renderJob.id, (progress) => {
-    void patchPipelineJob(current, {
-      progress: 86 + Math.round(progress * 0.14),
-      stageDetail: `Rendering frames (${progress}%)`,
-    });
-  });
+  await waitForRender(
+    renderJob.id,
+    (progress) => {
+      void patchPipelineJob(current, {
+        progress: 86 + Math.round(progress * 0.14),
+        stageDetail: `Rendering frames (${progress}%)`,
+      });
+    },
+    options,
+  );
 }
 
-async function runStalePipeline(job: PipelineJob): Promise<void> {
+async function runStalePipeline(job: PipelineJob, options?: PipelineRunOptions): Promise<void> {
   let current = job;
   let project = await getProjectOrThrow(current.projectId);
   const stale = computeStaleAssets(project);
@@ -183,12 +201,16 @@ async function runStalePipeline(job: PipelineJob): Promise<void> {
   current = await updateStage(current, 'render', { stageDetail: 'Rendering updated video…', progress: 86 });
   const { job: renderJob } = await enqueueRender(current.projectId);
   current = await patchPipelineJob(current, { renderJobId: renderJob.id });
-  await waitForRender(renderJob.id, (progress) => {
-    void patchPipelineJob(current, {
-      progress: 86 + Math.round(progress * 0.14),
-      stageDetail: `Rendering frames (${progress}%)`,
-    });
-  });
+  await waitForRender(
+    renderJob.id,
+    (progress) => {
+      void patchPipelineJob(current, {
+        progress: 86 + Math.round(progress * 0.14),
+        stageDetail: `Rendering frames (${progress}%)`,
+      });
+    },
+    options,
+  );
 }
 
 async function generateCharacterBatch(
