@@ -192,9 +192,24 @@ export const api = {
     ),
   share: (id: string) => request<{ shareId: string; url: string }>(`/api/projects/${id}/share`, { method: 'POST' }),
   publicWatch: (shareId: string) =>
-    request<{ watch: { title: string; songTitle: string; durationSeconds: number; videoUrl: string; shareId: string } }>(
-      `/api/public/watch/${shareId}`,
-    ),
+    request<{
+      watch: {
+        title: string;
+        songTitle: string;
+        durationSeconds: number;
+        shareId: string;
+        mode: 'preview' | 'video';
+        videoUrl?: string;
+        preview?: {
+          composition: import('@music-video/video').CompositionProject;
+          durationInFrames: number;
+          fps: number;
+          width: number;
+          height: number;
+          audioUrl?: string;
+        };
+      };
+    }>(`/api/public/watch/${shareId}`),
   render: (id: string) =>
     request<{ project: import('@music-video/shared').MusicVideoProject; job: import('@music-video/shared').RenderJob }>(
       `/api/projects/${id}/render`,

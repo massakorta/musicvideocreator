@@ -4,12 +4,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { renderMedia, selectComposition } from '@remotion/renderer';
-import { projectToComposition } from '@music-video/video';
+import { makeCancelSignal, renderMedia, selectComposition } from '@remotion/renderer';
 import {
   EXPORT_AUDIO_BITRATE,
   EXPORT_CRF,
+  estimateRenderTimeoutMs,
   getExportPreset,
+  RENDER_STALL_TIMEOUT_MS,
   secondsToFrames,
   type MusicVideoProject,
   type RenderJob,
@@ -24,6 +25,7 @@ import {
   setPipelineHeavy,
   setPipelineWaitingForRender,
 } from './heavyWork.js';
+import { createRenderStallGuard, prefetchCompositionStills } from './renderHelpers.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -159,7 +161,11 @@ async function renderJob(job: RenderJob): Promise<void> {
   logMemory(`render ${job.id} start`);
 
   try {
-    const compositionProject = projectToComposition(project);
+    const { composition: compositionProject, prefetched, total } = await prefetchCompositionStills(
+      project,
+      workdir,
+    );
+    renderLog(job, project, 'prefetched stills', { prefetched, total });
     const inputProps = { project: compositionProject };
 
     current = await patchRenderJob(current, { status: 'rendering', progress: 8 });
@@ -194,25 +200,53 @@ async function renderJob(job: RenderJob): Promise<void> {
     });
     lastLoggedProgress = 20;
     const silentOutput = path.join(workdir, 'silent.mp4');
-    await renderMedia({
-      composition: exportComposition,
-      serveUrl,
-      codec: 'h264',
-      crf: EXPORT_CRF,
-      outputLocation: silentOutput,
-      inputProps: { ...inputProps, includeAudio: false },
-      timeoutInMilliseconds: 1000 * 60 * 30,
-      concurrency: effectiveRemotionConcurrency(),
-      chromiumOptions: {
-        enableMultiProcessOnLinux: false,
-        gl: 'swangle',
-      },
-      disallowParallelEncoding: true,
-      offthreadVideoCacheSizeInBytes: OFFTHREAD_CACHE_BYTES,
-      onProgress: ({ progress }) => {
-        reportProgress(20 + Math.round(progress * 68), 'rendering');
+    const { cancelSignal, cancel } = makeCancelSignal();
+    let firstProgressLogged = false;
+    let stalled = false;
+    const stallGuard = createRenderStallGuard({
+      stallMs: RENDER_STALL_TIMEOUT_MS,
+      onStall: () => {
+        stalled = true;
+        cancel();
       },
     });
+    try {
+      await renderMedia({
+        composition: exportComposition,
+        serveUrl,
+        codec: 'h264',
+        crf: EXPORT_CRF,
+        x264Preset: 'ultrafast',
+        outputLocation: silentOutput,
+        inputProps: { ...inputProps, includeAudio: false },
+        timeoutInMilliseconds: estimateRenderTimeoutMs(durationInFrames),
+        concurrency: effectiveRemotionConcurrency(),
+        chromiumOptions: {
+          enableMultiProcessOnLinux: false,
+          gl: 'swangle',
+        },
+        disallowParallelEncoding: true,
+        offthreadVideoCacheSizeInBytes: OFFTHREAD_CACHE_BYTES,
+        cancelSignal,
+        onProgress: ({ progress }) => {
+          stallGuard.touch();
+          if (!firstProgressLogged && progress > 0) {
+            firstProgressLogged = true;
+            renderLog(job, project, 'first frame encoded', {
+              progress: `${Math.round(progress * 100)}%`,
+            });
+          }
+          reportProgress(20 + Math.round(progress * 68), 'rendering');
+        },
+      });
+    } catch (error) {
+      if (stalled) {
+        throw new Error('Render stalled while encoding frames.');
+      }
+      throw error;
+    } finally {
+      stallGuard.stop();
+    }
     logMemory(`render ${job.id} encoded`);
     renderLog(job, project, 'muxing original audio');
     const output = await muxOriginalAudio(project, workdir, silentOutput);

@@ -42,10 +42,9 @@ import {
   assertPipelineNotLocked,
   enqueueGenerateAll,
   enqueueStaleAssets,
-  ensureShareId,
   getPipelineStatus,
 } from '../services/pipeline.js';
-import { publicWatchPageUrl } from '../services/share.js';
+import { createShareLink } from '../services/share.js';
 import { computeStaleAssets } from '@music-video/shared';
 import { AppError, ERROR_CODES } from '@music-video/shared';
 import { config } from '../config.js';
@@ -391,8 +390,7 @@ apiRouter.get(
 apiRouter.post(
   '/projects/:id/share',
   asyncHandler(async (req, res) => {
-    const shareId = await ensureShareId(param(req, 'id'));
-    res.json({ shareId, url: publicWatchPageUrl(shareId) });
+    res.json(await createShareLink(param(req, 'id')));
   }),
 );
 

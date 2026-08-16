@@ -149,7 +149,7 @@ export function VideoPage() {
               {rendering ? 'Queueing render…' : 'Render Music Video'}
             </button>
           )}
-          {project.status === 'complete' ? (
+          {health.readyToRender ? (
             <button
               className="btn"
               onClick={async () => {
@@ -163,7 +163,7 @@ export function VideoPage() {
                 }
               }}
             >
-              {copied ? 'Link copied!' : 'Copy watch link'}
+              {copied ? 'Link copied!' : project.status === 'complete' ? 'Copy watch link' : 'Copy preview link'}
             </button>
           ) : null}
         </div>

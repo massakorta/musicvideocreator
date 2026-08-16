@@ -46,6 +46,7 @@ export function ProjectLayout() {
   useEffect(() => {
     if (!pipeline?.active) return;
     if (location.pathname.includes('/pipeline')) return;
+    if (location.pathname.includes('/result/')) return;
     navigate(`/projects/${id}/pipeline`, { replace: true });
   }, [pipeline?.active, location.pathname, navigate, id]);
 

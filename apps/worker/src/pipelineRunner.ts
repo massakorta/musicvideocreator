@@ -1,7 +1,10 @@
 import {
   characterReferenceFingerprint,
   computeProjectHealth,
+  estimateRenderTimeoutMs,
+  exportDurationFrames,
   renderCompositionFingerprint,
+  RENDER_STALL_TIMEOUT_MS,
   sceneImageFingerprint,
   type PipelineJob,
   type PipelineStage,
@@ -26,6 +29,7 @@ import { computeStaleAssets } from '@music-video/shared';
 export interface PipelineRunOptions {
   onRenderWaitStart?: () => void;
   onRenderWaitEnd?: () => void;
+  renderTimeoutMs?: number;
 }
 
 async function waitForRender(
@@ -33,6 +37,14 @@ async function waitForRender(
   onProgress: (progress: number) => void,
   options?: PipelineRunOptions,
 ): Promise<void> {
+  const timeoutMs = options?.renderTimeoutMs ?? estimateRenderTimeoutMs(900);
+  const stallMs = RENDER_STALL_TIMEOUT_MS;
+  const startedAt = Date.now();
+  let lastProgress = -1;
+  let lastProgressAt = Date.now();
+  let lastStatus = '';
+  let lastStatusAt = Date.now();
+
   options?.onRenderWaitStart?.();
   try {
     for (;;) {
@@ -42,6 +54,26 @@ async function waitForRender(
       if (job.status === 'failed') {
         throw new Error(job.error || 'Render failed.');
       }
+
+      const now = Date.now();
+      if (now - startedAt > timeoutMs) {
+        throw new Error('Render timed out waiting for the export to finish.');
+      }
+
+      if (job.progress !== lastProgress) {
+        lastProgress = job.progress;
+        lastProgressAt = now;
+      } else if (job.status !== 'queued' && now - lastProgressAt > stallMs) {
+        throw new Error('Render stalled while encoding frames.');
+      }
+
+      if (job.status !== lastStatus) {
+        lastStatus = job.status;
+        lastStatusAt = now;
+      } else if (job.status === 'queued' && now - lastStatusAt > stallMs) {
+        throw new Error('Render job was not picked up by the worker.');
+      }
+
       await new Promise((r) => setTimeout(r, config.workerPollMs));
     }
   } finally {
@@ -238,8 +270,12 @@ async function runFullPipeline(job: PipelineJob, options?: PipelineRunOptions): 
 
   current = (await getRepositories().pipelineJobs.get(current.id)) ?? current;
   current = await updateStage(current, 'render', { stageDetail: 'Rendering the music video…', progress: 86 });
+  await ensureShareId(current.projectId);
   const { job: renderJob } = await enqueueRender(current.projectId);
   current = await patchPipelineJob(current, { renderJobId: renderJob.id });
+  const renderTimeoutMs = estimateRenderTimeoutMs(
+    exportDurationFrames(project.durationSeconds, project.formatId),
+  );
   await waitForRender(
     renderJob.id,
     (progress) => {
@@ -248,7 +284,7 @@ async function runFullPipeline(job: PipelineJob, options?: PipelineRunOptions): 
         stageDetail: `Rendering frames (${progress}%)`,
       });
     },
-    options,
+    { ...options, renderTimeoutMs },
   );
 }
 
@@ -292,8 +328,12 @@ async function runStalePipeline(job: PipelineJob, options?: PipelineRunOptions):
 
   current = (await getRepositories().pipelineJobs.get(current.id)) ?? current;
   current = await updateStage(current, 'render', { stageDetail: 'Rendering updated video…', progress: 86 });
+  await ensureShareId(current.projectId);
   const { job: renderJob } = await enqueueRender(current.projectId);
   current = await patchPipelineJob(current, { renderJobId: renderJob.id });
+  const renderTimeoutMs = estimateRenderTimeoutMs(
+    exportDurationFrames(project.durationSeconds, project.formatId),
+  );
   await waitForRender(
     renderJob.id,
     (progress) => {
@@ -302,7 +342,7 @@ async function runStalePipeline(job: PipelineJob, options?: PipelineRunOptions):
         stageDetail: `Rendering frames (${progress}%)`,
       });
     },
-    options,
+    { ...options, renderTimeoutMs },
   );
 }
 

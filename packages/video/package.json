@@ -7,6 +7,7 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./composition": "./src/compositionTypes.ts",
     "./player": "./src/player.ts",
     "./root": "./src/Root.tsx"
   },

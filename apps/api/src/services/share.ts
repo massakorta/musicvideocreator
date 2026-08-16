@@ -1,16 +1,52 @@
-import { AppError, ERROR_CODES, renderCompositionFingerprint } from '@music-video/shared';
+import {
+  AppError,
+  ERROR_CODES,
+  computeProjectHealth,
+  getVideoPreset,
+  renderCompositionFingerprint,
+} from '@music-video/shared';
+import { compositionDurationFrames, projectToComposition } from '@music-video/video/composition';
 import { config } from '../config.js';
 import { getRepositories } from '../repositories/index.js';
 import { getObjectStorage } from '../storage/index.js';
 import { LocalObjectStorage } from '../storage/local.js';
 import { getProjectOrThrow } from './projects.js';
+import { ensureShareId } from './pipeline.js';
+
+export interface PublicWatchPreview {
+  composition: ReturnType<typeof projectToComposition>;
+  durationInFrames: number;
+  fps: number;
+  width: number;
+  height: number;
+  audioUrl?: string;
+}
 
 export interface PublicWatchPayload {
   title: string;
   songTitle: string;
   durationSeconds: number;
-  videoUrl: string;
   shareId: string;
+  mode: 'preview' | 'video';
+  videoUrl?: string;
+  preview?: PublicWatchPreview;
+}
+
+export async function assertShareable(projectId: string): Promise<void> {
+  const project = await getProjectOrThrow(projectId);
+  const health = computeProjectHealth(project);
+  if (!health.readyToRender) {
+    throw new AppError(ERROR_CODES.RENDER_NOT_READY, 'Cannot share yet', 400, {
+      blockers: health.blockers,
+      missingImages: health.missingImages,
+    });
+  }
+}
+
+export async function createShareLink(projectId: string): Promise<{ shareId: string; url: string }> {
+  await assertShareable(projectId);
+  const shareId = await ensureShareId(projectId);
+  return { shareId, url: publicWatchPageUrl(shareId) };
 }
 
 export async function getPublicWatch(shareId: string): Promise<PublicWatchPayload> {
@@ -19,22 +55,46 @@ export async function getPublicWatch(shareId: string): Promise<PublicWatchPayloa
     throw new AppError(ERROR_CODES.NOT_FOUND, 'That shared video could not be found.', 404);
   }
   const hydrated = await getProjectOrThrow(project.id);
-  const jobs = await getRepositories().renderJobs.listByProject(project.id);
-  const complete = jobs.find((job) => job.status === 'complete' && job.outputUrl);
-  if (!complete?.outputUrl) {
+  const health = computeProjectHealth(hydrated);
+  if (!health.readyToRender) {
     throw new AppError(ERROR_CODES.NOT_FOUND, 'This video is not ready to watch yet.', 404);
   }
-  const storage = getObjectStorage();
-  const videoUrl =
-    storage instanceof LocalObjectStorage
-      ? `${config.apiUrl.replace(/\/$/, '')}/api/public/watch/${shareId}/file`
-      : complete.outputUrl;
+
+  const jobs = await getRepositories().renderJobs.listByProject(project.id);
+  const complete = jobs.find((job) => job.status === 'complete' && job.outputUrl);
+  if (complete?.outputUrl) {
+    const storage = getObjectStorage();
+    const videoUrl =
+      storage instanceof LocalObjectStorage
+        ? `${config.apiUrl.replace(/\/$/, '')}/api/public/watch/${shareId}/file`
+        : complete.outputUrl;
+    return {
+      title: hydrated.name,
+      songTitle: hydrated.songTitle,
+      durationSeconds: hydrated.durationSeconds,
+      shareId,
+      mode: 'video',
+      videoUrl,
+    };
+  }
+
+  const composition = projectToComposition(hydrated);
+  const preset = getVideoPreset(hydrated.formatId);
+  const durationInFrames = compositionDurationFrames(composition);
   return {
     title: hydrated.name,
     songTitle: hydrated.songTitle,
     durationSeconds: hydrated.durationSeconds,
-    videoUrl,
     shareId,
+    mode: 'preview',
+    preview: {
+      composition,
+      durationInFrames,
+      fps: preset.fps,
+      width: preset.width,
+      height: preset.height,
+      audioUrl: hydrated.audio?.url,
+    },
   };
 }
 

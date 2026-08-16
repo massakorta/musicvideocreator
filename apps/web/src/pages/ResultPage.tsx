@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { getExportPreset, RENDER_JOB_STATUS_LABELS, type RenderJob } from '@music-video/shared';
+import { getExportPreset, RENDER_JOB_STATUS_LABELS, exportDurationFrames, estimateRenderExpectedSeconds, type RenderJob } from '@music-video/shared';
 import { api, ApiClientError } from '../lib/api';
 import { useProject } from '../hooks/useProject';
 import { formatClockShort } from '../lib/time';
@@ -109,6 +109,10 @@ export function ResultPage() {
     );
   }
 
+  const exportPreset = getExportPreset(project.formatId);
+  const exportFrames = exportDurationFrames(project.durationSeconds, project.formatId);
+  const renderExpectedSeconds = estimateRenderExpectedSeconds(exportFrames);
+
   if (job && job.status !== 'complete') {
     return (
       <div className="page" style={{ maxWidth: 640 }}>
@@ -116,7 +120,7 @@ export function ResultPage() {
           title="Rendering the music video"
           current={job.progress}
           total={100}
-          expectedSeconds={Math.max(90, Math.round(project.durationSeconds * 4))}
+          expectedSeconds={renderExpectedSeconds}
           detail={RENDER_JOB_STATUS_LABELS[job.status]}
           stages={[
             'Queuing the cut…',
@@ -127,13 +131,13 @@ export function ResultPage() {
         />
         {error ? <div className="banner warning">{error} Retrying…</div> : null}
         <p className="muted">
-          A {formatClockShort(project.durationSeconds)} song usually takes a few minutes. You can leave and come back.
+          Export is {exportPreset.width}×{exportPreset.height} at {exportPreset.fps} fps — usually{' '}
+          {Math.ceil(renderExpectedSeconds / 60)} min for a {formatClockShort(project.durationSeconds)} song. You can
+          leave and come back.
         </p>
       </div>
     );
   }
-
-  const exportPreset = getExportPreset(project.formatId);
 
   return (
     <div className="page" style={{ maxWidth: 900 }}>

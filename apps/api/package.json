@@ -12,6 +12,7 @@
   "dependencies": {
     "@music-video/ai": "*",
     "@music-video/shared": "*",
+    "@music-video/video": "*",
     "@supabase/supabase-js": "^2.47.10",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",

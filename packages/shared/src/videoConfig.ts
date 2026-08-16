@@ -16,19 +16,43 @@ export function getVideoPreset(formatId: VideoFormatId = DEFAULT_VIDEO_FORMAT) {
   return VIDEO_PRESETS[formatId];
 }
 
-/** Fast MP4 export: lower resolution and frame rate for quicker renders. */
+/** Fast MP4 export: lower resolution and frame rate for quicker renders on 1-core workers. */
 export const EXPORT_PRESETS = {
-  '16x9': { width: 1280, height: 720, fps: 24 },
-  '9x16': { width: 720, height: 1280, fps: 24 },
-  '1x1': { width: 720, height: 720, fps: 24 },
-  '4x5': { width: 720, height: 900, fps: 24 },
+  '16x9': { width: 854, height: 480, fps: 15 },
+  '9x16': { width: 480, height: 854, fps: 15 },
+  '1x1': { width: 480, height: 480, fps: 15 },
+  '4x5': { width: 480, height: 600, fps: 15 },
 } as const satisfies Record<VideoFormatId, { width: number; height: number; fps: number }>;
 
 export const EXPORT_CRF = 28;
 export const EXPORT_AUDIO_BITRATE = '128k';
 
+/** Base timeout before frame-scaled render budget kicks in. */
+export const RENDER_BASE_TIMEOUT_MS = 3 * 60 * 1000;
+/** Per-frame budget used for Remotion timeout and UI estimates. */
+export const RENDER_MS_PER_FRAME = 2000;
+/** Abort when encode progress stops moving for this long. */
+export const RENDER_STALL_TIMEOUT_MS = 3 * 60 * 1000;
+
 export function getExportPreset(formatId: VideoFormatId = DEFAULT_VIDEO_FORMAT) {
   return EXPORT_PRESETS[formatId];
+}
+
+export function exportDurationFrames(
+  durationSeconds: number,
+  formatId: VideoFormatId = DEFAULT_VIDEO_FORMAT,
+): number {
+  const preset = getExportPreset(formatId);
+  return Math.max(1, secondsToFrames(durationSeconds, preset.fps));
+}
+
+export function estimateRenderTimeoutMs(frameCount: number): number {
+  return RENDER_BASE_TIMEOUT_MS + frameCount * RENDER_MS_PER_FRAME;
+}
+
+/** Honest UI ETA for Remotion export on a single CPU (seconds). */
+export function estimateRenderExpectedSeconds(frameCount: number): number {
+  return Math.max(120, Math.ceil((frameCount * RENDER_MS_PER_FRAME) / 1000));
 }
 
 export function secondsToFrames(seconds: number, fps: number = DEFAULT_FPS): number {
