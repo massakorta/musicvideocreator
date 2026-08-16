@@ -7,7 +7,7 @@ projects:
             name: music-video-api
             runtime: node
             plan: starter
-            buildCommand: npm install && npm run build -w @music-video/shared && npm run build -w @music-video/ai && npm run build -w @music-video/api
+            buildCommand: npm install --include=dev && npm run build -w @music-video/shared && npm run build -w @music-video/ai && npm run build -w @music-video/api
             startCommand: npm run start -w @music-video/api
             healthCheckPath: /api/health
             envVars:
@@ -42,7 +42,7 @@ projects:
             name: music-video-worker
             runtime: node
             plan: starter
-            buildCommand: npm install && npm run build -w @music-video/shared && npm run build -w @music-video/video
+            buildCommand: npm install --include=dev && npm run build -w @music-video/shared && npm run build -w @music-video/video
             startCommand: npm run start -w @music-video/worker
             envVars:
               - key: NODE_ENV
@@ -69,7 +69,7 @@ projects:
           - type: web
             name: music-video-web
             runtime: static
-            buildCommand: npm install && npm run build -w @music-video/web
+            buildCommand: npm install --include=dev && npm run build -w @music-video/web
             staticPublishPath: apps/web/dist
             envVars:
               - key: VITE_API_URL

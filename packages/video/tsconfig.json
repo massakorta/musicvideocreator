@@ -9,5 +9,5 @@
     "moduleResolution": "bundler"
   },
   "include": ["src"],
-  "exclude": ["src/entry.ts"]
+  "exclude": ["src/entry.ts", "**/*.test.ts"]
 }
