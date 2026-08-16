@@ -1,6 +1,6 @@
 import { createApp } from './app.js';
 import { config, openaiConfigured } from './config.js';
-import { ensureDemoProject } from './seed/demoProject.js';
+import { removeLegacyDemoProjects } from './seed/removeLegacyDemoProjects.js';
 
 const app = createApp();
 
@@ -10,8 +10,11 @@ app.listen(config.apiPort, async () => {
     `OpenAI: ${openaiConfigured() ? 'live' : 'demo mode (set OPENAI_API_KEY and restart)'} · model ${config.openaiTextModel} / ${config.openaiImageModel}`,
   );
   try {
-    await ensureDemoProject();
+    const removed = await removeLegacyDemoProjects();
+    if (removed > 0) {
+      console.log(`Removed ${removed} legacy demo project${removed === 1 ? '' : 's'}.`);
+    }
   } catch (error) {
-    console.warn('Demo seed skipped:', error instanceof Error ? error.message : error);
+    console.warn('Legacy demo cleanup skipped:', error instanceof Error ? error.message : error);
   }
 });

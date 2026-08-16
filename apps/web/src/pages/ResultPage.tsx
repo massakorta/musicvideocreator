@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { RENDER_JOB_STATUS_LABELS, type RenderJob } from '@music-video/shared';
+import { getExportPreset, RENDER_JOB_STATUS_LABELS, type RenderJob } from '@music-video/shared';
 import { api, ApiClientError } from '../lib/api';
 import { useProject } from '../hooks/useProject';
 import { formatClockShort } from '../lib/time';
@@ -133,6 +133,8 @@ export function ResultPage() {
     );
   }
 
+  const exportPreset = getExportPreset(project.formatId);
+
   return (
     <div className="page" style={{ maxWidth: 900 }}>
       <h1>Your Music Video Is Ready</h1>
@@ -142,7 +144,7 @@ export function ResultPage() {
         <div className="banner warning">The render finished, but the video file is not available yet. Try rendering again.</div>
       )}
       <p className="muted">
-        1920 × 1080 · {formatClockShort(project.durationSeconds)}
+        {exportPreset.width} × {exportPreset.height} · {formatClockShort(project.durationSeconds)}
         {job?.fileSizeBytes ? ` · ${(job.fileSizeBytes / (1024 * 1024)).toFixed(1)} MB` : ''}
       </p>
       <div className="row">

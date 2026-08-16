@@ -50,8 +50,6 @@ All three:
 npm run dev:all
 ```
 
-A demo project named **Harbor Lights (Demo)** is seeded on API startup so you can open a complete storyboard without credentials.
-
 ## Environment variables
 
 See `.env.example`.
@@ -92,7 +90,6 @@ Set `OPENAI_API_KEY`. Without it the app still runs: AI buttons produce structur
 ```bash
 npm run dev          # web + api
 npm run dev:worker   # render worker
-npm run seed         # force-create another demo project
 ```
 
 ## Building

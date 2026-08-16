@@ -6,7 +6,14 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { renderMedia, selectComposition } from '@remotion/renderer';
 import { projectToComposition } from '@music-video/video';
-import type { MusicVideoProject, RenderJob } from '@music-video/shared';
+import {
+  EXPORT_AUDIO_BITRATE,
+  EXPORT_CRF,
+  getExportPreset,
+  secondsToFrames,
+  type MusicVideoProject,
+  type RenderJob,
+} from '@music-video/shared';
 import { config, supabaseConfigured } from '../../api/src/config.js';
 import { getRepositories } from '../../api/src/repositories/index.js';
 import { getProjectOrThrow, saveProject, storeGeneratedFileFromPath } from '../../api/src/services/projects.js';
@@ -26,6 +33,29 @@ const IDLE_HEARTBEAT_MS = 60_000;
 const OFFTHREAD_CACHE_BYTES = 8 * 1024 * 1024;
 
 let cachedServeUrl: string | undefined;
+let lastRenderBlockedLogAt = 0;
+
+function renderLog(
+  job: RenderJob,
+  project: MusicVideoProject,
+  message: string,
+  details?: Record<string, string | number | boolean | undefined>,
+): void {
+  const suffix = details
+    ? ` ${Object.entries(details)
+        .filter(([, value]) => value !== undefined)
+        .map(([key, value]) => `${key}=${value}`)
+        .join(' ')}`
+    : '';
+  console.log(`[render] job=${job.id} project="${project.name}" (${project.id}) ${message}${suffix}`);
+}
+
+function logRenderBlocked(): void {
+  const now = Date.now();
+  if (now - lastRenderBlockedLogAt < IDLE_HEARTBEAT_MS) return;
+  lastRenderBlockedLogAt = now;
+  console.log('[render] waiting for pipeline work to finish before claiming another render job');
+}
 
 function logMemory(label: string): void {
   const { rss, heapUsed, heapTotal } = process.memoryUsage();
@@ -111,6 +141,17 @@ async function renderJob(job: RenderJob): Promise<void> {
   const project = await getProjectOrThrow(job.projectId);
   const workdir = path.join(os.tmpdir(), `mv-render-${job.id}`);
   await mkdir(workdir, { recursive: true });
+  const exportPreset = getExportPreset(project.formatId);
+  const durationSeconds = project.audio?.durationSeconds ?? project.durationSeconds;
+  const durationInFrames = Math.max(1, secondsToFrames(durationSeconds, exportPreset.fps));
+  renderLog(job, project, 'started', {
+    durationSeconds,
+    scenes: project.scenes.length,
+    export: `${exportPreset.width}x${exportPreset.height}@${exportPreset.fps}fps`,
+    frames: durationInFrames,
+    crf: EXPORT_CRF,
+    concurrency: Math.max(1, config.remotionConcurrency),
+  });
   logMemory(`render ${job.id} start`);
 
   try {
@@ -118,22 +159,42 @@ async function renderJob(job: RenderJob): Promise<void> {
     const inputProps = { project: compositionProject };
 
     current = await patchRenderJob(current, { status: 'rendering', progress: 8 });
-    const reportProgress = (progress: number) => {
+    renderLog(job, project, 'preparing Remotion bundle');
+    let lastLoggedProgress = -1;
+    const reportProgress = (progress: number, stage: string) => {
       current = { ...current, progress };
       void patchRenderJob(current, { progress });
+      const bucket = Math.floor(progress / 10) * 10;
+      if (bucket > lastLoggedProgress) {
+        lastLoggedProgress = bucket;
+        renderLog(job, project, stage, { progress: `${progress}%` });
+      }
     };
-    const serveUrl = await getServeUrl(reportProgress);
-    reportProgress(20);
+    const serveUrl = await getServeUrl((progress) => reportProgress(progress, 'bundling'));
+    reportProgress(20, 'bundle ready');
     const composition = await selectComposition({
       serveUrl,
       id: 'MusicVideo',
       inputProps,
     });
+    const exportComposition = {
+      ...composition,
+      width: exportPreset.width,
+      height: exportPreset.height,
+      fps: exportPreset.fps,
+      durationInFrames,
+    };
+    renderLog(job, project, 'rendering frames', {
+      frames: durationInFrames,
+      export: `${exportPreset.width}x${exportPreset.height}@${exportPreset.fps}fps`,
+    });
+    lastLoggedProgress = 20;
     const silentOutput = path.join(workdir, 'silent.mp4');
     await renderMedia({
-      composition,
+      composition: exportComposition,
       serveUrl,
       codec: 'h264',
+      crf: EXPORT_CRF,
       outputLocation: silentOutput,
       inputProps: { ...inputProps, includeAudio: false },
       timeoutInMilliseconds: 1000 * 60 * 30,
@@ -145,14 +206,16 @@ async function renderJob(job: RenderJob): Promise<void> {
       disallowParallelEncoding: true,
       offthreadVideoCacheSizeInBytes: OFFTHREAD_CACHE_BYTES,
       onProgress: ({ progress }) => {
-        reportProgress(20 + Math.round(progress * 68));
+        reportProgress(20 + Math.round(progress * 68), 'rendering');
       },
     });
     logMemory(`render ${job.id} encoded`);
+    renderLog(job, project, 'muxing original audio');
     const output = await muxOriginalAudio(project, workdir, silentOutput);
-    reportProgress(90);
+    reportProgress(90, 'audio muxed');
 
     current = await patchRenderJob(current, { status: 'uploading', progress: 92 });
+    renderLog(job, project, 'uploading finished MP4');
     const { stat } = await import('node:fs/promises');
     const info = await stat(output);
     const asset = await storeGeneratedFileFromPath({
@@ -172,6 +235,10 @@ async function renderJob(job: RenderJob): Promise<void> {
       outputAssetId: asset.id,
       fileSizeBytes: info.size,
     });
+    renderLog(job, project, 'complete', {
+      sizeMb: `${(info.size / (1024 * 1024)).toFixed(1)}MB`,
+      outputUrl: asset.publicUrl,
+    });
     const { renderCompositionFingerprint } = await import('@music-video/shared');
     const { ensureShareId } = await import('../../api/src/services/pipeline.js');
     await saveProject({
@@ -190,7 +257,12 @@ async function renderJob(job: RenderJob): Promise<void> {
 
 async function failRender(job: RenderJob, error: unknown): Promise<void> {
   const message = error instanceof Error ? error.message : 'Render failed.';
-  console.error('[worker]', job.id, message);
+  try {
+    const project = await getProjectOrThrow(job.projectId);
+    console.error(`[render] failed job=${job.id} project="${project.name}" (${project.id}) ${message}`);
+  } catch {
+    console.error(`[render] failed job=${job.id} project=${job.projectId} ${message}`);
+  }
   await patchRenderJob(job, {
     status: 'failed',
     error: message,
@@ -243,6 +315,7 @@ async function renderLoop(): Promise<void> {
   for (;;) {
     try {
       if (isRenderBlockedByPipeline()) {
+        logRenderBlocked();
         await new Promise((r) => setTimeout(r, config.workerPollMs));
         continue;
       }
@@ -250,10 +323,14 @@ async function renderLoop(): Promise<void> {
       const job = await claimRender();
       if (job?.id) {
         lastActivity = Date.now();
-        console.log(`Claimed render job ${job.id}`);
+        try {
+          const project = await getProjectOrThrow(job.projectId);
+          renderLog(job, project, 'claimed from queue');
+        } catch {
+          console.log(`[render] claimed job=${job.id} project=${job.projectId}`);
+        }
         try {
           await renderJob(job);
-          console.log(`Finished render job ${job.id}`);
         } catch (error) {
           await failRender(job, error);
         }
@@ -302,7 +379,7 @@ async function muxOriginalAudio(
       '-c:a',
       'aac',
       '-b:a',
-      '192k',
+      EXPORT_AUDIO_BITRATE,
       '-ac',
       '2',
       '-ar',

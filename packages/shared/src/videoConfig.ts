@@ -16,6 +16,21 @@ export function getVideoPreset(formatId: VideoFormatId = DEFAULT_VIDEO_FORMAT) {
   return VIDEO_PRESETS[formatId];
 }
 
+/** Fast MP4 export: lower resolution and frame rate for quicker renders. */
+export const EXPORT_PRESETS = {
+  '16x9': { width: 1280, height: 720, fps: 24 },
+  '9x16': { width: 720, height: 1280, fps: 24 },
+  '1x1': { width: 720, height: 720, fps: 24 },
+  '4x5': { width: 720, height: 900, fps: 24 },
+} as const satisfies Record<VideoFormatId, { width: number; height: number; fps: number }>;
+
+export const EXPORT_CRF = 28;
+export const EXPORT_AUDIO_BITRATE = '128k';
+
+export function getExportPreset(formatId: VideoFormatId = DEFAULT_VIDEO_FORMAT) {
+  return EXPORT_PRESETS[formatId];
+}
+
 export function secondsToFrames(seconds: number, fps: number = DEFAULT_FPS): number {
   if (!Number.isFinite(seconds) || seconds < 0) return 0;
   return Math.max(0, Math.round(seconds * fps));

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { framesToSeconds, secondsToFrames } from './videoConfig.js';
+import { framesToSeconds, getExportPreset, secondsToFrames } from './videoConfig.js';
 
 describe('secondsToFrames', () => {
   it('converts at 30fps', () => {
@@ -16,5 +16,11 @@ describe('secondsToFrames', () => {
 describe('framesToSeconds', () => {
   it('inverts secondsToFrames', () => {
     expect(framesToSeconds(90, 30)).toBe(3);
+  });
+});
+
+describe('getExportPreset', () => {
+  it('returns 720p24 for the default landscape format', () => {
+    expect(getExportPreset('16x9')).toEqual({ width: 1280, height: 720, fps: 24 });
   });
 });
