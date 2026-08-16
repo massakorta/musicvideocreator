@@ -1,0 +1,62 @@
+import React from 'react';
+import { AbsoluteFill, Audio, Img, Sequence, useCurrentFrame, useVideoConfig } from 'remotion';
+import { secondsToFrames } from '@music-video/shared';
+import type { CompositionScene, MusicVideoCompositionProps } from './compositionTypes.js';
+import { TRANSITION_FRAMES } from './compositionTypes.js';
+import { motionStyle } from './motionStyle.js';
+import { transitionStyleForFrame } from './transitions.js';
+
+export const MusicVideoComposition: React.FC<MusicVideoCompositionProps> = ({ project }) => {
+  const { fps } = useVideoConfig();
+
+  return (
+    <AbsoluteFill style={{ backgroundColor: '#090807' }}>
+      {project.scenes.map((scene, index) => {
+        const next = project.scenes[index + 1];
+        const overlap = next
+          ? Math.min(
+              TRANSITION_FRAMES[scene.transitionOut],
+              TRANSITION_FRAMES[next.transitionIn],
+            )
+          : 0;
+        const from = secondsToFrames(scene.startTime, fps);
+        const duration = Math.max(1, secondsToFrames(scene.endTime - scene.startTime, fps) + overlap);
+        return (
+          <Sequence key={scene.id} from={from} durationInFrames={duration} layout="none" name={scene.id}>
+            <SceneLayer scene={scene} durationInFrames={duration} />
+          </Sequence>
+        );
+      })}
+      {project.audioUrl ? <Audio src={project.audioUrl} /> : null}
+    </AbsoluteFill>
+  );
+};
+
+const SceneLayer: React.FC<{ scene: CompositionScene; durationInFrames: number }> = ({
+  scene,
+  durationInFrames,
+}) => {
+  const frame = useCurrentFrame();
+  const motion = motionStyle(scene.motion, frame, durationInFrames, scene.id);
+  const transition = transitionStyleForFrame({
+    frame,
+    durationFrames: durationInFrames,
+    transitionIn: scene.transitionIn,
+    transitionOut: scene.transitionOut,
+  });
+
+  return (
+    <AbsoluteFill style={{ overflow: 'hidden', opacity: transition.opacity, transform: transition.transform }}>
+      <Img src={scene.imageUrl} style={motion} />
+      {transition.overlayOpacity > 0 ? (
+        <AbsoluteFill
+          style={{
+            backgroundColor: transition.overlayColor,
+            opacity: transition.overlayOpacity,
+            pointerEvents: 'none',
+          }}
+        />
+      ) : null}
+    </AbsoluteFill>
+  );
+};

@@ -1,0 +1,74 @@
+services:
+  - type: web
+    name: music-video-api
+    runtime: node
+    plan: starter
+    buildCommand: npm install && npm run build -w @music-video/shared && npm run build -w @music-video/ai && npm run build -w @music-video/api
+    startCommand: npm run start -w @music-video/api
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_URL
+        sync: false
+      - key: API_URL
+        sync: false
+      - key: APP_ACCESS_CODE
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_TEXT_MODEL
+        value: gpt-4.1
+      - key: OPENAI_IMAGE_MODEL
+        value: gpt-image-1
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: music-video-assets
+      - key: MAX_AUDIO_MB
+        value: "50"
+      - key: IMAGE_GENERATION_CONCURRENCY
+        value: "2"
+
+  - type: worker
+    name: music-video-worker
+    runtime: node
+    plan: starter
+    buildCommand: npm install && npm run build -w @music-video/shared && npm run build -w @music-video/video
+    startCommand: npm run start -w @music-video/worker
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SESSION_SECRET
+        fromService:
+          name: music-video-api
+          type: web
+          envVarKey: SESSION_SECRET
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: music-video-assets
+      - key: API_URL
+        fromService:
+          name: music-video-api
+          type: web
+          envVarKey: API_URL
+
+  - type: web
+    name: music-video-web
+    runtime: static
+    buildCommand: npm install && npm run build -w @music-video/web
+    staticPublishPath: apps/web/dist
+    envVars:
+      - key: VITE_API_URL
+        sync: false
+      - key: NODE_VERSION
+        value: "22"

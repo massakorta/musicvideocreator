@@ -1,0 +1,162 @@
+# AI Music Video Creator
+
+Upload a song, lock a visual world, storyboard the cut, generate stills, and render a Ken Burns music video — with the original track as the master soundtrack.
+
+V1 does **not** generate AI video clips. Motion comes from camera moves on still images (zoom, pan, shake, transitions). The architecture leaves room for image-to-video later.
+
+## Architecture
+
+```text
+apps/web      React + Vite editor (Remotion Player preview)
+apps/api      Express API, OpenAI, storage, project persistence
+apps/worker   Polls render jobs and renders MP4s with Remotion
+
+packages/shared   Domain types, validators, motion presets
+packages/ai       Visual bible, storyboard, prompt builder, image provider
+packages/video    MusicVideoComposition used by preview AND final render
+```
+
+Persistence is abstracted:
+
+- **Local / demo:** JSON store + filesystem (`data/`)
+- **Production:** Supabase Postgres + Storage when `SUPABASE_URL` is set
+
+## Tech stack
+
+TypeScript monorepo (npm workspaces), React, Vite, Express, Zod, OpenAI, Remotion, optional Supabase.
+
+## Local setup
+
+```bash
+npm install
+cp .env.example .env
+npm run dev
+```
+
+This starts:
+
+- Web: http://localhost:5173
+- API: http://localhost:3001
+
+Optional worker (needed to finish an MP4):
+
+```bash
+npm run dev:worker
+```
+
+All three:
+
+```bash
+npm run dev:all
+```
+
+A demo project named **Harbor Lights (Demo)** is seeded on API startup so you can open a complete storyboard without credentials.
+
+## Environment variables
+
+See `.env.example`.
+
+| Variable | Purpose |
+| --- | --- |
+| `APP_ACCESS_CODE` | Beta gate. Blank disables it locally. |
+| `SESSION_SECRET` | Signs the access-code session cookie. |
+| `OPENAI_API_KEY` | Live bible / storyboard / image generation. Blank = demo mode. |
+| `OPENAI_TEXT_MODEL` | Default `gpt-4.1` |
+| `OPENAI_IMAGE_MODEL` | Default `gpt-image-1` |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Postgres + storage. Blank = local files. |
+| `SUPABASE_STORAGE_BUCKET` | Default `music-video-assets` |
+| `MAX_AUDIO_MB` | Audio upload cap |
+| `IMAGE_GENERATION_CONCURRENCY` | Batch still generation |
+| `APP_URL` / `API_URL` | CORS and public asset URLs |
+
+Never put the OpenAI key in the browser. AI routes require the beta session when `APP_ACCESS_CODE` is set.
+
+## Supabase setup
+
+1. Create a project.
+2. Run `supabase/migrations/0001_init.sql` in the SQL editor.
+3. Create a public storage bucket named `music-video-assets` (or match `SUPABASE_STORAGE_BUCKET`).
+4. Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` on the API and worker.
+
+The service role key stays server-side only.
+
+## OpenAI setup
+
+Set `OPENAI_API_KEY`. Without it the app still runs: AI buttons produce structured demo bibles, storyboards, and placeholder stills, and they explain that live generation is off.
+
+## Running locally
+
+```bash
+npm run dev          # web + api
+npm run dev:worker   # render worker
+npm run seed         # force-create another demo project
+```
+
+## Building
+
+```bash
+npm run typecheck
+npm run lint
+npm test
+npm run build
+```
+
+## Rendering locally
+
+1. Finish a project until health says **Ready to render**.
+2. Install **ffmpeg** (`brew install ffmpeg` on macOS).
+3. Start the worker (`npm run dev:worker`).
+4. Click **Render Music Video**.
+
+Chrome/Chromium is downloaded by `@remotion/renderer` on first run.
+
+If ffmpeg is missing, the worker logs a warning and the job fails with a clear error instead of hanging.
+
+## Deployment to Render
+
+`render.yaml` defines:
+
+- Static site for `apps/web`
+- Web service for `apps/api`
+- Background worker for `apps/worker`
+
+Set secrets in the Render dashboard. Do not put keys in `render.yaml`.
+
+Production frontend needs:
+
+```text
+VITE_API_URL=https://your-api.onrender.com
+```
+
+Production API needs matching `APP_URL` and `API_URL`.
+
+Worker and API must share the same database (Supabase in production). Local JSON storage is not shared across Render services.
+
+## Project structure
+
+```text
+apps/web          Editor UI
+apps/api          REST API
+apps/worker       Remotion renderer
+packages/shared   Types + timeline validation
+packages/ai       Prompts and providers
+packages/video    Remotion composition
+supabase/migrations
+```
+
+## Known V1 limitations
+
+- Still images only; no generated video clips.
+- Character continuity uses locked descriptions (and prompt hints). Native reference-image conditioning depends on the configured OpenAI image model.
+- Demo placeholders are used when OpenAI is not configured.
+- Local file storage is single-node. Use Supabase for multi-service deploys.
+- Karaoke/captions are not rendered (`captionsEnabled` is reserved).
+- Format is 16:9 1920×1080; other aspect ratios are modeled but not a first-class editor yet.
+
+## Future image-to-video plan
+
+`VideoGenerationProvider` and `mediaType: "image" | "video"` already exist. A later scene can swap a still for a generated clip; `MusicVideoComposition` should then render `<OffthreadVideo>` for video scenes and keep Ken Burns for image scenes.
+
+## Product philosophy
+
+AI does the heavy lifting. The user stays the director: every bible, scene, prompt, still, motion, and transition is editable.
