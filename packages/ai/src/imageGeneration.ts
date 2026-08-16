@@ -3,19 +3,22 @@ import type { StoryboardScene } from '@music-video/shared';
 import type OpenAI from 'openai';
 import { buildCharacterReferencePrompt, buildSceneImagePrompt } from './promptBuilder.js';
 
+export type ImageSize = '1536x1024' | '1792x1024' | '1024x1024' | '1024x1536';
+export type ImageOutputFormat = 'jpeg' | 'png' | 'webp';
+
 export interface SceneImageGenerationRequest {
   scene: StoryboardScene;
   bible: VisualBible;
   style: VisualStylePreset;
   referenceImages?: Array<{ characterId: string; url: string }>;
-  size?: '1536x1024' | '1792x1024' | '1024x1024' | '1024x1536';
+  size?: ImageSize;
 }
 
 export interface CharacterReferenceRequest {
   character: CharacterDefinition;
   bible: VisualBible;
   style: VisualStylePreset;
-  size?: '1536x1024' | '1792x1024' | '1024x1024' | '1024x1536';
+  size?: ImageSize;
 }
 
 export interface GeneratedImageBytes {
@@ -41,13 +44,26 @@ export interface VideoGenerationProvider {
   generateVideo(request: VideoGenerationRequest): Promise<GeneratedAsset>;
 }
 
-type ImageSize = '1536x1024' | '1792x1024' | '1024x1024' | '1024x1536';
+export interface OpenAiImageProviderOptions {
+  defaultSize?: ImageSize;
+  quality?: string;
+  outputFormat?: ImageOutputFormat;
+}
 
 export class OpenAiImageProvider implements ImageGenerationProvider {
+  private readonly defaultSize: ImageSize;
+  private readonly quality: string;
+  private readonly outputFormat: ImageOutputFormat;
+
   constructor(
     private readonly client: OpenAI,
     private readonly model: string,
-  ) {}
+    options: OpenAiImageProviderOptions = {},
+  ) {
+    this.defaultSize = options.defaultSize ?? '1536x1024';
+    this.quality = options.quality ?? 'low';
+    this.outputFormat = options.outputFormat ?? 'jpeg';
+  }
 
   async generateSceneImage(request: SceneImageGenerationRequest): Promise<GeneratedImageBytes> {
     const { prompt, negativePrompt } = buildSceneImagePrompt({
@@ -68,7 +84,7 @@ export class OpenAiImageProvider implements ImageGenerationProvider {
     if (this.model.includes('dall-e-3')) {
       return requested === '1024x1024' ? '1024x1024' : '1792x1024';
     }
-    return requested ?? '1536x1024';
+    return requested ?? this.defaultSize;
   }
 
   private async generate(
@@ -83,11 +99,27 @@ export class OpenAiImageProvider implements ImageGenerationProvider {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (/gpt-image-1|model.*not found|does not exist/i.test(message) && !this.model.includes('dall-e-3')) {
-        const fallback = new OpenAiImageProvider(this.client, 'dall-e-3');
+        const fallback = new OpenAiImageProvider(this.client, 'dall-e-3', {
+          defaultSize: '1792x1024',
+          quality: 'standard',
+          outputFormat: 'png',
+        });
         return fallback.requestImage(fullPrompt, '1792x1024');
       }
       throw new Error(humanizeImageError(error));
     }
+  }
+
+  private gptQuality(): 'low' | 'medium' | 'high' | 'auto' {
+    if (this.quality === 'low' || this.quality === 'medium' || this.quality === 'high' || this.quality === 'auto') {
+      return this.quality;
+    }
+    return 'low';
+  }
+
+  private mimeTypeForOutput(): string {
+    if (this.model.includes('dall-e')) return 'image/png';
+    return `image/${this.outputFormat}`;
   }
 
   private async requestImage(fullPrompt: string, size: ImageSize): Promise<GeneratedImageBytes> {
@@ -99,6 +131,12 @@ export class OpenAiImageProvider implements ImageGenerationProvider {
     if (this.model.includes('dall-e')) {
       params.n = 1;
       params.response_format = 'b64_json';
+      if (this.model.includes('dall-e-3')) {
+        params.quality = this.quality === 'hd' ? 'hd' : 'standard';
+      }
+    } else {
+      params.quality = this.gptQuality();
+      params.output_format = this.outputFormat;
     }
     const result = await this.client.images.generate(params);
     const image = result.data?.[0];
@@ -108,7 +146,7 @@ export class OpenAiImageProvider implements ImageGenerationProvider {
     if (image.b64_json) {
       return {
         bytes: Buffer.from(image.b64_json, 'base64'),
-        mimeType: 'image/png',
+        mimeType: this.mimeTypeForOutput(),
         prompt: fullPrompt,
         model: this.model,
         revisedPrompt: image.revised_prompt,
@@ -119,7 +157,7 @@ export class OpenAiImageProvider implements ImageGenerationProvider {
       if (!response.ok) {
         throw new Error('Failed to download generated image.');
       }
-      const mimeType = response.headers.get('content-type') ?? 'image/png';
+      const mimeType = response.headers.get('content-type') ?? this.mimeTypeForOutput();
       return {
         bytes: Buffer.from(await response.arrayBuffer()),
         mimeType,

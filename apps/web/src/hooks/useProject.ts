@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { AccessSession, MusicVideoProject, ProjectHealth, TimelineIssue } from '@music-video/shared';
+import type { AccessSession, MusicVideoProject, ProjectHealth, StaleAssets, TimelineIssue, PipelineStatus } from '@music-video/shared';
 
 export interface SessionState extends AccessSession {
   accessRequired: boolean;
@@ -19,9 +19,17 @@ export interface ProjectContextValue {
   project: MusicVideoProject;
   health: ProjectHealth;
   timingIssues: TimelineIssue[];
+  pipeline: PipelineStatus | null;
+  stale: StaleAssets | null;
   saveState: 'idle' | 'saving' | 'saved' | 'error';
   reload: () => Promise<void>;
-  setProject: (project: MusicVideoProject, health?: ProjectHealth, issues?: TimelineIssue[]) => void;
+  setProject: (
+    project: MusicVideoProject,
+    health?: ProjectHealth,
+    issues?: TimelineIssue[],
+    pipeline?: PipelineStatus | null,
+    stale?: StaleAssets | null,
+  ) => void;
   markSave: (state: 'idle' | 'saving' | 'saved' | 'error') => void;
 }
 

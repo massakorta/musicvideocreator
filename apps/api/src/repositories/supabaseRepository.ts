@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { AiUsageLog, AssetRecord, MusicVideoProject, RenderJob } from '@music-video/shared';
+import type { AiUsageLog, AssetRecord, MusicVideoProject, PipelineJob, RenderJob } from '@music-video/shared';
 import { config } from '../config.js';
 import type { Repositories } from './types.js';
 
@@ -33,7 +33,7 @@ interface AssetRow {
   created_at: string;
 }
 
-interface JobRow {
+interface RenderJobRow {
   id: string;
   project_id: string;
   status: RenderJob['status'];
@@ -48,7 +48,7 @@ interface JobRow {
   file_size_bytes: number | null;
 }
 
-function projectFromRow(row: ProjectRow): MusicVideoProject {
+function projectFromRow(row: ProjectRow & { share_id?: string | null }): MusicVideoProject {
   return {
     ...row.document,
     id: row.id,
@@ -58,6 +58,7 @@ function projectFromRow(row: ProjectRow): MusicVideoProject {
     styleId: row.style_id ?? undefined,
     durationSeconds: Number(row.duration_seconds),
     lyrics: row.lyrics,
+    shareId: row.share_id ?? row.document.shareId,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -74,6 +75,7 @@ function projectToRow(project: MusicVideoProject) {
     duration_seconds: project.durationSeconds,
     lyrics: project.lyrics,
     document: project,
+    share_id: project.shareId ?? null,
     created_at: project.createdAt,
     updated_at: project.updatedAt,
   };
@@ -97,7 +99,28 @@ function assetFromRow(row: AssetRow): AssetRecord {
   };
 }
 
-function jobFromRow(row: JobRow): RenderJob {
+interface PipelineJobRow {
+  id: string;
+  project_id: string;
+  kind: PipelineJob['kind'];
+  status: PipelineJob['status'];
+  stage: PipelineJob['stage'];
+  progress: number;
+  stage_detail: string | null;
+  expected_seconds: number;
+  characters_done: number;
+  characters_total: number;
+  images_done: number;
+  images_total: number;
+  render_job_id: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  error: string | null;
+  claimed_by: string | null;
+}
+
+function renderJobFromRow(row: RenderJobRow): RenderJob {
   return {
     id: row.id,
     projectId: row.project_id,
@@ -111,6 +134,52 @@ function jobFromRow(row: JobRow): RenderJob {
     error: row.error ?? undefined,
     claimedBy: row.claimed_by ?? undefined,
     fileSizeBytes: row.file_size_bytes ?? undefined,
+  };
+}
+
+function pipelineJobFromRow(row: PipelineJobRow): PipelineJob {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    kind: row.kind,
+    status: row.status,
+    stage: row.stage,
+    progress: row.progress,
+    stageDetail: row.stage_detail ?? undefined,
+    expectedSeconds: row.expected_seconds,
+    charactersDone: row.characters_done,
+    charactersTotal: row.characters_total,
+    imagesDone: row.images_done,
+    imagesTotal: row.images_total,
+    renderJobId: row.render_job_id ?? undefined,
+    createdAt: row.created_at,
+    startedAt: row.started_at ?? undefined,
+    completedAt: row.completed_at ?? undefined,
+    error: row.error ?? undefined,
+    claimedBy: row.claimed_by ?? undefined,
+  };
+}
+
+function pipelineJobToRow(job: PipelineJob) {
+  return {
+    id: job.id,
+    project_id: job.projectId,
+    kind: job.kind,
+    status: job.status,
+    stage: job.stage,
+    progress: job.progress,
+    stage_detail: job.stageDetail ?? null,
+    expected_seconds: job.expectedSeconds,
+    characters_done: job.charactersDone,
+    characters_total: job.charactersTotal,
+    images_done: job.imagesDone,
+    images_total: job.imagesTotal,
+    render_job_id: job.renderJobId ?? null,
+    created_at: job.createdAt,
+    started_at: job.startedAt ?? null,
+    completed_at: job.completedAt ?? null,
+    error: job.error ?? null,
+    claimed_by: job.claimedBy ?? null,
   };
 }
 
@@ -134,6 +203,11 @@ export function createSupabaseRepositories(): Repositories {
         if (error) throw error;
         return data ? projectFromRow(data as ProjectRow) : null;
       },
+      async getByShareId(shareId) {
+        const { data, error } = await client.from('video_projects').select('*').eq('share_id', shareId).maybeSingle();
+        if (error) throw error;
+        return data ? projectFromRow(data as ProjectRow) : null;
+      },
       async save(project) {
         const { error } = await client.from('video_projects').upsert(projectToRow(project));
         if (error) throw error;
@@ -142,6 +216,7 @@ export function createSupabaseRepositories(): Repositories {
       async delete(id) {
         await client.from('video_ai_usage_logs').delete().eq('project_id', id);
         await client.from('video_render_jobs').delete().eq('project_id', id);
+        await client.from('video_pipeline_jobs').delete().eq('project_id', id);
         await client.from('video_assets').delete().eq('project_id', id);
         const { error } = await client.from('video_projects').delete().eq('id', id);
         if (error) throw error;
@@ -190,12 +265,12 @@ export function createSupabaseRepositories(): Repositories {
           .eq('project_id', projectId)
           .order('created_at', { ascending: false });
         if (error) throw error;
-        return (data as JobRow[]).map(jobFromRow);
+        return (data as RenderJobRow[]).map(renderJobFromRow);
       },
       async get(id) {
         const { data, error } = await client.from('video_render_jobs').select('*').eq('id', id).maybeSingle();
         if (error) throw error;
-        return data ? jobFromRow(data as JobRow) : null;
+        return data ? renderJobFromRow(data as RenderJobRow) : null;
       },
       async save(job) {
         const { error } = await client.from('video_render_jobs').upsert({
@@ -219,7 +294,46 @@ export function createSupabaseRepositories(): Repositories {
         const { data, error } = await client.rpc('video_claim_render_job', { worker_id: workerId });
         if (error) throw error;
         const row = Array.isArray(data) ? data[0] : data;
-        return row ? jobFromRow(row as JobRow) : null;
+        return row ? renderJobFromRow(row as RenderJobRow) : null;
+      },
+    },
+    pipelineJobs: {
+      async listByProject(projectId) {
+        const { data, error } = await client
+          .from('video_pipeline_jobs')
+          .select('*')
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data as PipelineJobRow[]).map(pipelineJobFromRow);
+      },
+      async get(id) {
+        const { data, error } = await client.from('video_pipeline_jobs').select('*').eq('id', id).maybeSingle();
+        if (error) throw error;
+        return data ? pipelineJobFromRow(data as PipelineJobRow) : null;
+      },
+      async getActiveByProject(projectId) {
+        const { data, error } = await client
+          .from('video_pipeline_jobs')
+          .select('*')
+          .eq('project_id', projectId)
+          .in('status', ['queued', 'running'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (error) throw error;
+        return data ? pipelineJobFromRow(data as PipelineJobRow) : null;
+      },
+      async save(job) {
+        const { error } = await client.from('video_pipeline_jobs').upsert(pipelineJobToRow(job));
+        if (error) throw error;
+        return job;
+      },
+      async claimNext(workerId: string) {
+        const { data, error } = await client.rpc('video_claim_pipeline_job', { worker_id: workerId });
+        if (error) throw error;
+        const row = Array.isArray(data) ? data[0] : data;
+        return row ? pipelineJobFromRow(row as PipelineJobRow) : null;
       },
     },
     aiLogs: {

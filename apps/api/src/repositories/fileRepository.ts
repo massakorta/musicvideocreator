@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { AiUsageLog, AssetRecord, RenderJob } from '@music-video/shared';
+import type { AiUsageLog, AssetRecord, PipelineJob, RenderJob } from '@music-video/shared';
 import { config } from '../config.js';
 import type { AppDatabase, Repositories } from './types.js';
 
@@ -11,13 +11,15 @@ const emptyDb = (): AppDatabase => ({
   projects: {},
   assets: {},
   renderJobs: {},
+  pipelineJobs: {},
   aiLogs: [],
 });
 
 async function readDb(): Promise<AppDatabase> {
   try {
     const raw = await readFile(dbPath, 'utf8');
-    return { ...emptyDb(), ...(JSON.parse(raw) as AppDatabase) };
+    const parsed = JSON.parse(raw) as Partial<AppDatabase>;
+    return { ...emptyDb(), ...parsed, pipelineJobs: parsed.pipelineJobs ?? {} };
   } catch {
     return emptyDb();
   }
@@ -46,6 +48,10 @@ export function createFileRepositories(): Repositories {
         const db = await readDb();
         return db.projects[id] ?? null;
       },
+      async getByShareId(shareId) {
+        const db = await readDb();
+        return Object.values(db.projects).find((p) => p.shareId === shareId) ?? null;
+      },
       async save(project) {
         await writeDb((db) => {
           db.projects[project.id] = project;
@@ -60,6 +66,9 @@ export function createFileRepositories(): Repositories {
           }
           for (const [jobId, job] of Object.entries(db.renderJobs)) {
             if (job.projectId === id) delete db.renderJobs[jobId];
+          }
+          for (const [jobId, job] of Object.entries(db.pipelineJobs)) {
+            if (job.projectId === id) delete db.pipelineJobs[jobId];
           }
         });
       },
@@ -110,6 +119,47 @@ export function createFileRepositories(): Repositories {
           next.claimedBy = workerId;
           next.startedAt = new Date().toISOString();
           db.renderJobs[next.id] = next;
+          claimed = next;
+        });
+        return claimed;
+      },
+    },
+    pipelineJobs: {
+      async listByProject(projectId) {
+        const db = await readDb();
+        return Object.values(db.pipelineJobs)
+          .filter((j) => j.projectId === projectId)
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      },
+      async get(id) {
+        const db = await readDb();
+        return db.pipelineJobs[id] ?? null;
+      },
+      async getActiveByProject(projectId) {
+        const db = await readDb();
+        return (
+          Object.values(db.pipelineJobs)
+            .filter((j) => j.projectId === projectId && (j.status === 'queued' || j.status === 'running'))
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null
+        );
+      },
+      async save(job: PipelineJob) {
+        await writeDb((db) => {
+          db.pipelineJobs[job.id] = job;
+        });
+        return job;
+      },
+      async claimNext(workerId: string) {
+        let claimed: PipelineJob | null = null;
+        await writeDb((db) => {
+          const next = Object.values(db.pipelineJobs)
+            .filter((j) => j.status === 'queued')
+            .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
+          if (!next) return;
+          next.status = 'running';
+          next.claimedBy = workerId;
+          next.startedAt = new Date().toISOString();
+          db.pipelineJobs[next.id] = next;
           claimed = next;
         });
         return claimed;

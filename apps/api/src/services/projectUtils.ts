@@ -2,8 +2,11 @@ import { randomUUID } from 'node:crypto';
 import {
   completedEditorStepCount,
   computeProjectHealth,
+  computeEtaAt,
   EDITOR_STEPS,
   nextEditorStep,
+  PIPELINE_STAGE_LABELS,
+  pipelineProgressFromJob,
   PROJECT_STATUS_LABELS,
   reindexScenes,
   type MusicVideoProject,
@@ -25,7 +28,8 @@ export function touch(project: MusicVideoProject, patch: Partial<MusicVideoProje
   return { ...project, ...patch, updatedAt: nowIso() };
 }
 
-export function deriveStatus(project: MusicVideoProject): ProjectStatus {
+export function deriveStatus(project: MusicVideoProject, pipelineActive = false): ProjectStatus {
+  if (pipelineActive) return 'generating_images';
   if (project.status === 'rendering' && !project.lastError) return 'rendering';
   if (project.status === 'error' && project.lastError) return 'error';
   if (!project.audio || !project.lyrics.trim() || !project.styleId) return 'setup';

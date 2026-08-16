@@ -75,7 +75,7 @@ function formatUsual(expectedSeconds: number): string {
 function waitHint(elapsed: number, expectedSeconds: number, remaining: number): string {
   if (remaining > 12) return `About ${formatWaitHint(remaining)} left`;
   if (elapsed <= expectedSeconds) return 'Almost there…';
-  return 'Keep this tab open';
+  return 'Still working in the background';
 }
 
 function formatWaitHint(seconds: number): string {

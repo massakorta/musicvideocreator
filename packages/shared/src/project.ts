@@ -1,5 +1,14 @@
 import type { MotionPresetId } from './motion.js';
-import type { AssetSource, AssetType, EditorStep, ProjectStatus, RenderJobStatus } from './status.js';
+import type {
+  AssetSource,
+  AssetType,
+  EditorStep,
+  PipelineJobKind,
+  PipelineJobStatus,
+  PipelineStage,
+  ProjectStatus,
+  RenderJobStatus,
+} from './status.js';
 import type { StoryboardScene } from './storyboard.js';
 import type { VideoFormatId } from './videoConfig.js';
 import type { VisualBible } from './visualBible.js';
@@ -28,8 +37,46 @@ export interface MusicVideoProject {
   formatId: VideoFormatId;
   captionsEnabled: boolean;
   lastError?: string;
+  shareId?: string;
+  renderFingerprint?: string;
+  lastRenderJobId?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface PipelineJob {
+  id: string;
+  projectId: string;
+  kind: PipelineJobKind;
+  status: PipelineJobStatus;
+  stage: PipelineStage;
+  progress: number;
+  stageDetail?: string;
+  expectedSeconds: number;
+  charactersDone: number;
+  charactersTotal: number;
+  imagesDone: number;
+  imagesTotal: number;
+  renderJobId?: string;
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  error?: string;
+  claimedBy?: string;
+}
+
+export interface PipelineStatus {
+  active: boolean;
+  job: PipelineJob | null;
+  etaAt?: string;
+  stageLabel?: string;
+}
+
+export interface StaleAssets {
+  staleCharacterIds: string[];
+  staleSceneIds: string[];
+  videoStale: boolean;
+  totalStaleImages: number;
 }
 
 export interface ProjectSummary {
@@ -42,6 +89,10 @@ export interface ProjectSummary {
   updatedAt: string;
   progress: number;
   nextStep: EditorStep;
+  pipelineActive?: boolean;
+  pipelineProgress?: number;
+  pipelineStage?: string;
+  pipelineEtaAt?: string;
 }
 
 export interface RenderJob {

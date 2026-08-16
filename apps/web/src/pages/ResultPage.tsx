@@ -12,6 +12,8 @@ export function ResultPage() {
   const [job, setJob] = useState<RenderJob | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -42,6 +44,18 @@ export function ResultPage() {
       window.clearTimeout(timer);
     };
   }, [jobId]);
+
+  async function copyShareLink() {
+    try {
+      const data = await api.share(project.id);
+      setShareUrl(data.url);
+      await navigator.clipboard.writeText(data.url);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : 'Could not create a share link.');
+    }
+  }
 
   async function renderAgain() {
     setRetrying(true);
@@ -113,7 +127,7 @@ export function ResultPage() {
         />
         {error ? <div className="banner warning">{error} Retrying…</div> : null}
         <p className="muted">
-          A {formatClockShort(project.durationSeconds)} song usually takes a few minutes. Keep this tab open.
+          A {formatClockShort(project.durationSeconds)} song usually takes a few minutes. You can leave and come back.
         </p>
       </div>
     );
@@ -137,6 +151,9 @@ export function ResultPage() {
             Download MP4
           </a>
         ) : null}
+        <button className="btn" onClick={() => void copyShareLink()}>
+          {copied ? 'Link copied!' : 'Copy watch link'}
+        </button>
         <Link className="btn" to={`/projects/${project.id}/video`}>
           Back to Editor
         </Link>
@@ -144,6 +161,7 @@ export function ResultPage() {
           {retrying ? 'Queueing…' : 'Render Again'}
         </button>
       </div>
+      {shareUrl ? <p className="faint">Share: {shareUrl}</p> : null}
     </div>
   );
 }

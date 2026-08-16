@@ -28,6 +28,7 @@ export const characterDefinitionSchema = z.object({
   referenceAssetId: z.string().optional(),
   referenceUrl: z.string().optional(),
   lockedReferenceImage: z.boolean().default(false),
+  referenceFingerprint: z.string().optional(),
 });
 
 export const environmentDefinitionSchema = z.object({
@@ -114,6 +115,7 @@ export const storyboardSceneSchema = z.object({
   generationError: z.string().optional(),
   approved: z.boolean().default(false),
   captionsEnabled: z.boolean().optional(),
+  imageFingerprint: z.string().optional(),
 });
 
 export const audioInfoSchema = z.object({

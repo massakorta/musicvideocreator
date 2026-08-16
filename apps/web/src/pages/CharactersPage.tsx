@@ -6,7 +6,7 @@ import { EmptyState } from '../components/EmptyState';
 import { CardWaitOverlay, WaitCard } from '../components/WaitCard';
 
 export function CharactersPage() {
-  const { project, setProject } = useProject();
+  const { project, setProject, stale } = useProject();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState({ current: 0, total: 0, name: '' });
@@ -121,7 +121,9 @@ export function CharactersPage() {
                     <CardWaitOverlay label="In queue" />
                   ) : null}
                 </div>
-                {character.lockedReferenceImage ? (
+                {stale?.staleCharacterIds.includes(character.id) ? (
+                  <div className="pill warning">Inaktuell</div>
+                ) : character.lockedReferenceImage ? (
                   <div className="pill success">Approved</div>
                 ) : busyId === character.id || (busyId === 'all' && progress.name === character.name) ? (
                   <div className="pill warning">Painting</div>

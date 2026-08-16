@@ -36,6 +36,15 @@ import {
   updateScene,
 } from '../services/projects.js';
 import { enqueueRender, getRenderJob, listRenderJobs } from '../services/render.js';
+import {
+  assertPipelineNotLocked,
+  enqueueGenerateAll,
+  enqueueStaleAssets,
+  ensureShareId,
+  getPipelineStatus,
+} from '../services/pipeline.js';
+import { publicWatchPageUrl } from '../services/share.js';
+import { computeStaleAssets } from '@music-video/shared';
 import { AppError, ERROR_CODES } from '@music-video/shared';
 import { config } from '../config.js';
 import { getObjectStorage } from '../storage/index.js';
@@ -74,10 +83,13 @@ apiRouter.get(
   '/projects/:id',
   asyncHandler(async (req, res) => {
     const project = await getProjectOrThrow(param(req, 'id'));
+    const pipeline = await getPipelineStatus(param(req, 'id'));
     res.json({
       project,
       health: computeProjectHealth(project),
       timingIssues: validateSceneTiming(project.scenes, project.durationSeconds),
+      pipeline,
+      stale: computeStaleAssets(project),
     });
   }),
 );
@@ -85,6 +97,7 @@ apiRouter.get(
 apiRouter.patch(
   '/projects/:id',
   asyncHandler(async (req, res) => {
+    await assertPipelineNotLocked(param(req, 'id'));
     const project = await patchProject(param(req, 'id'), req.body);
     res.json({ project, health: computeProjectHealth(project) });
   }),
@@ -165,6 +178,7 @@ apiRouter.post(
 apiRouter.post(
   '/projects/:id/visual-bible/generate',
   asyncHandler(async (req, res) => {
+    await assertPipelineNotLocked(param(req, 'id'));
     const result = await generateProjectVisualBible(param(req, 'id'));
     res.json(result);
   }),
@@ -173,6 +187,7 @@ apiRouter.post(
 apiRouter.patch(
   '/projects/:id/visual-bible',
   asyncHandler(async (req, res) => {
+    await assertPipelineNotLocked(param(req, 'id'));
     const body = patchVisualBibleBodySchema.parse(req.body);
     const project = await patchVisualBible(param(req, 'id'), body);
     res.json({ project });
@@ -200,6 +215,7 @@ apiRouter.post(
 apiRouter.post(
   '/projects/:id/storyboard/generate',
   asyncHandler(async (req, res) => {
+    await assertPipelineNotLocked(param(req, 'id'));
     const result = await generateProjectStoryboard(param(req, 'id'));
     res.json(result);
   }),
@@ -217,6 +233,7 @@ apiRouter.post(
 apiRouter.patch(
   '/projects/:id/scenes/:sceneId',
   asyncHandler(async (req, res) => {
+    await assertPipelineNotLocked(param(req, 'id'));
     const patch = patchSceneBodySchema.parse(req.body);
     const project = await updateScene(param(req, 'id'), param(req, 'sceneId'), patch);
     res.json({ project, health: computeProjectHealth(project) });
@@ -299,6 +316,39 @@ apiRouter.post(
   asyncHandler(async (req, res) => {
     const project = await generateMissingImages(param(req, 'id'));
     res.json({ project });
+  }),
+);
+
+apiRouter.post(
+  '/projects/:id/generate-all',
+  asyncHandler(async (req, res) => {
+    const job = await enqueueGenerateAll(param(req, 'id'));
+    res.status(201).json({ job });
+  }),
+);
+
+apiRouter.post(
+  '/projects/:id/regenerate-stale',
+  asyncHandler(async (req, res) => {
+    const job = await enqueueStaleAssets(param(req, 'id'));
+    res.status(201).json({ job });
+  }),
+);
+
+apiRouter.get(
+  '/projects/:id/pipeline',
+  asyncHandler(async (req, res) => {
+    const status = await getPipelineStatus(param(req, 'id'));
+    const stale = computeStaleAssets(await getProjectOrThrow(param(req, 'id')));
+    res.json({ ...status, stale });
+  }),
+);
+
+apiRouter.post(
+  '/projects/:id/share',
+  asyncHandler(async (req, res) => {
+    const shareId = await ensureShareId(param(req, 'id'));
+    res.json({ shareId, url: publicWatchPageUrl(shareId) });
   }),
 );
 

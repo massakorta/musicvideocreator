@@ -9,6 +9,7 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { authRouter } from './routes/auth.js';
 import { apiRouter } from './routes/api.js';
 import { internalRouter } from './routes/internal.js';
+import { publicRouter } from './routes/public.js';
 
 export function createApp() {
   const app = express();
@@ -31,6 +32,7 @@ export function createApp() {
     res.json({ ok: true, service: 'api' });
   });
 
+  app.use('/api/public', publicRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/internal', internalRouter);
 

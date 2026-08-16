@@ -21,6 +21,7 @@ export interface CharacterDefinition {
   referenceAssetId?: string;
   referenceUrl?: string;
   lockedReferenceImage: boolean;
+  referenceFingerprint?: string;
 }
 
 export interface EnvironmentDefinition {

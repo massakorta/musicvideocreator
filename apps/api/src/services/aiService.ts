@@ -120,7 +120,11 @@ export function createImageProvider(): OpenAiImageProvider | null {
     textModel: config.openaiTextModel,
     imageModel: config.openaiImageModel,
   });
-  return new OpenAiImageProvider(client, config.openaiImageModel);
+  return new OpenAiImageProvider(client, config.openaiImageModel, {
+    defaultSize: config.openaiImageSize,
+    quality: config.openaiImageQuality,
+    outputFormat: 'jpeg',
+  });
 }
 
 function preserveLockedCharacters(next: VisualBible, previous?: VisualBible): VisualBible {

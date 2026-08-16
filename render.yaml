@@ -7,6 +7,7 @@ projects:
             name: music-video-api
             runtime: node
             plan: starter
+            region: frankfurt
             buildCommand: npm install --include=dev && npm run build -w @music-video/shared && npm run build -w @music-video/ai && npm run build -w @music-video/api
             startCommand: npm run start -w @music-video/api
             healthCheckPath: /api/health
@@ -26,7 +27,11 @@ projects:
               - key: OPENAI_TEXT_MODEL
                 value: gpt-4.1
               - key: OPENAI_IMAGE_MODEL
-                value: gpt-image-1
+                value: gpt-image-1-mini
+              - key: OPENAI_IMAGE_QUALITY
+                value: low
+              - key: OPENAI_IMAGE_SIZE
+                value: 1536x1024
               - key: SUPABASE_URL
                 sync: false
               - key: SUPABASE_SERVICE_ROLE_KEY
@@ -36,13 +41,16 @@ projects:
               - key: MAX_AUDIO_MB
                 value: "50"
               - key: IMAGE_GENERATION_CONCURRENCY
-                value: "2"
+                value: "6"
+              - key: AI_RATE_LIMIT_PER_MINUTE
+                value: "80"
 
           - type: worker
             name: music-video-worker
             runtime: node
             plan: starter
-            buildCommand: npm install --include=dev && npm run build -w @music-video/shared && npm run build -w @music-video/video
+            region: frankfurt
+            buildCommand: npm install --include=dev && npm run build -w @music-video/shared && npm run build -w @music-video/ai && npm run build -w @music-video/video && npm run build -w @music-video/worker
             startCommand: npm run start -w @music-video/worker
             envVars:
               - key: NODE_ENV
@@ -54,6 +62,14 @@ projects:
                   envVarKey: SESSION_SECRET
               - key: OPENAI_API_KEY
                 sync: false
+              - key: OPENAI_IMAGE_MODEL
+                value: gpt-image-1-mini
+              - key: OPENAI_IMAGE_QUALITY
+                value: low
+              - key: OPENAI_IMAGE_SIZE
+                value: 1536x1024
+              - key: IMAGE_GENERATION_CONCURRENCY
+                value: "6"
               - key: SUPABASE_URL
                 sync: false
               - key: SUPABASE_SERVICE_ROLE_KEY

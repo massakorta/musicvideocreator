@@ -1,9 +1,10 @@
-import type { AiUsageLog, AssetRecord, MusicVideoProject, RenderJob } from '@music-video/shared';
+import type { AiUsageLog, AssetRecord, MusicVideoProject, PipelineJob, RenderJob } from '@music-video/shared';
 
 export interface AppDatabase {
   projects: Record<string, MusicVideoProject>;
   assets: Record<string, AssetRecord>;
   renderJobs: Record<string, RenderJob>;
+  pipelineJobs: Record<string, PipelineJob>;
   aiLogs: AiUsageLog[];
 }
 
@@ -11,6 +12,7 @@ export interface Repositories {
   projects: {
     list(): Promise<MusicVideoProject[]>;
     get(id: string): Promise<MusicVideoProject | null>;
+    getByShareId(shareId: string): Promise<MusicVideoProject | null>;
     save(project: MusicVideoProject): Promise<MusicVideoProject>;
     delete(id: string): Promise<void>;
   };
@@ -24,6 +26,13 @@ export interface Repositories {
     get(id: string): Promise<RenderJob | null>;
     save(job: RenderJob): Promise<RenderJob>;
     claimNext(workerId: string): Promise<RenderJob | null>;
+  };
+  pipelineJobs: {
+    listByProject(projectId: string): Promise<PipelineJob[]>;
+    get(id: string): Promise<PipelineJob | null>;
+    getActiveByProject(projectId: string): Promise<PipelineJob | null>;
+    save(job: PipelineJob): Promise<PipelineJob>;
+    claimNext(workerId: string): Promise<PipelineJob | null>;
   };
   aiLogs: {
     add(log: AiUsageLog): Promise<void>;

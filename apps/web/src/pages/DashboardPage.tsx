@@ -101,16 +101,31 @@ export function DashboardPage({ onLogout }: { onLogout: () => void }) {
                     <span className="pill">{PROJECT_STATUS_LABELS[project.status]}</span>
                     <span className="mono faint">{formatClockShort(project.durationSeconds)}</span>
                   </div>
-                  <div className="progress" aria-label={`${project.progress}% complete`} role="progressbar" aria-valuenow={project.progress} aria-valuemin={0} aria-valuemax={100}>
-                    <span style={{ width: `${project.progress}%` }} />
+                  <div className="progress" aria-label={`${project.pipelineActive ? project.pipelineProgress : project.progress}% complete`} role="progressbar" aria-valuenow={project.pipelineActive ? (project.pipelineProgress ?? 0) : project.progress} aria-valuemin={0} aria-valuemax={100}>
+                    <span style={{ width: `${project.pipelineActive ? (project.pipelineProgress ?? 0) : project.progress}%` }} />
                   </div>
-                  <div className="faint">Updated {formatRelative(project.updatedAt)}</div>
+                  {project.pipelineActive && project.pipelineStage ? (
+                    <div className="faint">
+                      {project.pipelineStage}
+                      {project.pipelineEtaAt
+                        ? ` · ready ca ${new Date(project.pipelineEtaAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                        : ''}
+                    </div>
+                  ) : (
+                    <div className="faint">Updated {formatRelative(project.updatedAt)}</div>
+                  )}
                   <div className="row" style={{ marginTop: 14 }}>
                     <button
                       className="btn btn-primary"
-                      onClick={() => navigate(`/projects/${project.id}/${project.nextStep || 'setup'}`)}
+                      onClick={() =>
+                        navigate(
+                          project.pipelineActive
+                            ? `/projects/${project.id}/pipeline`
+                            : `/projects/${project.id}/${project.status === 'complete' ? 'video' : project.nextStep || 'setup'}`,
+                        )
+                      }
                     >
-                      {project.status === 'complete' ? 'Watch' : 'Continue'}
+                      {project.pipelineActive ? 'View progress' : project.status === 'complete' ? 'Watch' : 'Continue'}
                     </button>
                     <button
                       className="btn"

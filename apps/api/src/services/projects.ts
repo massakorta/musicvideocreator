@@ -2,9 +2,12 @@ import {
   AppError,
   ERROR_CODES,
   computeProjectHealth,
+  computeEtaAt,
   createProjectBodySchema,
   getVisualStyle,
   patchProjectBodySchema,
+  PIPELINE_STAGE_LABELS,
+  pipelineProgressFromJob,
   type AssetRecord,
   type GeneratedAsset,
   type MusicVideoProject,
@@ -18,7 +21,22 @@ import { applyScenePatch, deriveStatus, newId, nowIso, replaceScenes, toSummary,
 
 export async function listProjects(): Promise<ProjectSummary[]> {
   const projects = await getRepositories().projects.list();
-  return projects.map(toSummary);
+  const summaries = await Promise.all(
+    projects.map(async (project) => {
+      const active = await getRepositories().pipelineJobs.getActiveByProject(project.id);
+      if (!active) return toSummary(project);
+      const progress = pipelineProgressFromJob(active);
+      return {
+        ...toSummary(project),
+        status: 'generating_images' as const,
+        pipelineActive: true,
+        pipelineProgress: progress,
+        pipelineStage: PIPELINE_STAGE_LABELS[active.stage],
+        pipelineEtaAt: computeEtaAt(active.startedAt, active.expectedSeconds, progress),
+      };
+    }),
+  );
+  return summaries;
 }
 
 export async function getProjectOrThrow(id: string): Promise<MusicVideoProject> {

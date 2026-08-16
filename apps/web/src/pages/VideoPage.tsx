@@ -10,12 +10,14 @@ import { SceneEditor } from '../components/SceneEditor';
 import { formatClock } from '../lib/time';
 
 export function VideoPage() {
-  const { project, health, reload } = useProject();
+  const { project, health, stale, reload } = useProject();
   const player = useRef<PlayerRef>(null);
   const [frame, setFrame] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [rendering, setRendering] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [copied, setCopied] = useState(false);
   const navigate = useNavigate();
   const composition = useMemo(() => projectToComposition(project), [project]);
   const preset = getVideoPreset(project.formatId);
@@ -93,25 +95,83 @@ export function VideoPage() {
             if (scene) player.current?.seekTo(Math.round(scene.startTime * preset.fps));
           }}
         />
-        <div className="row" style={{ marginTop: 16 }}>
-          <button
-            className="btn btn-primary"
-            disabled={!health.readyToRender || rendering}
-            onClick={async () => {
-              setRendering(true);
-              setError(null);
-              try {
-                const data = await api.render(project.id);
-                navigate(`/projects/${project.id}/result/${data.job.id}`);
-              } catch (err) {
-                setError(err instanceof ApiClientError ? err.message : 'Could not start the render.');
-              } finally {
-                setRendering(false);
-              }
-            }}
-          >
-            {rendering ? 'Queueing render…' : 'Render Music Video'}
-          </button>
+        <div className="row" style={{ marginTop: 16, flexWrap: 'wrap' }}>
+          {stale && stale.totalStaleImages > 0 ? (
+            <button
+              className="btn btn-primary"
+              disabled={regenerating}
+              onClick={async () => {
+                setRegenerating(true);
+                setError(null);
+                try {
+                  await api.regenerateStale(project.id);
+                  navigate(`/projects/${project.id}/pipeline`);
+                } catch (err) {
+                  setError(err instanceof ApiClientError ? err.message : 'Could not start updates.');
+                } finally {
+                  setRegenerating(false);
+                }
+              }}
+            >
+              {regenerating ? 'Queueing…' : `Uppdatera ändrade bilder (${stale.totalStaleImages})`}
+            </button>
+          ) : null}
+          {stale?.videoStale && stale.totalStaleImages === 0 ? (
+            <button
+              className="btn btn-primary"
+              disabled={!health.readyToRender || rendering}
+              onClick={async () => {
+                setRendering(true);
+                setError(null);
+                try {
+                  const data = await api.render(project.id);
+                  navigate(`/projects/${project.id}/result/${data.job.id}`);
+                } catch (err) {
+                  setError(err instanceof ApiClientError ? err.message : 'Could not start the render.');
+                } finally {
+                  setRendering(false);
+                }
+              }}
+            >
+              {rendering ? 'Queueing render…' : 'Rendera om filmen'}
+            </button>
+          ) : (
+            <button
+              className="btn btn-primary"
+              disabled={!health.readyToRender || rendering}
+              onClick={async () => {
+                setRendering(true);
+                setError(null);
+                try {
+                  const data = await api.render(project.id);
+                  navigate(`/projects/${project.id}/result/${data.job.id}`);
+                } catch (err) {
+                  setError(err instanceof ApiClientError ? err.message : 'Could not start the render.');
+                } finally {
+                  setRendering(false);
+                }
+              }}
+            >
+              {rendering ? 'Queueing render…' : 'Render Music Video'}
+            </button>
+          )}
+          {project.status === 'complete' ? (
+            <button
+              className="btn"
+              onClick={async () => {
+                try {
+                  const data = await api.share(project.id);
+                  await navigator.clipboard.writeText(data.url);
+                  setCopied(true);
+                  window.setTimeout(() => setCopied(false), 2000);
+                } catch (err) {
+                  setError(err instanceof ApiClientError ? err.message : 'Could not copy share link.');
+                }
+              }}
+            >
+              {copied ? 'Link copied!' : 'Copy watch link'}
+            </button>
+          ) : null}
         </div>
       </div>
       <div>

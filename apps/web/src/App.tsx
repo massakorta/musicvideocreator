@@ -16,6 +16,8 @@ import { StoryboardPage } from './pages/StoryboardPage';
 import { ImagesPage } from './pages/ImagesPage';
 import { VideoPage } from './pages/VideoPage';
 import { ResultPage } from './pages/ResultPage';
+import { PipelinePage } from './pages/PipelinePage';
+import { WatchPage } from './pages/WatchPage';
 
 export function App() {
   const [session, setSession] = useState<SessionState | null>(null);
@@ -91,6 +93,10 @@ export function App() {
               element={<AccessPage onAuthed={() => setSession({ ...session, authenticated: true })} />}
             />
             <Route
+              path="/watch/:shareId"
+              element={<WatchPage />}
+            />
+            <Route
               path="/"
               element={
                 <RequireAuth>
@@ -121,6 +127,7 @@ export function App() {
               <Route path="storyboard" element={<StoryboardPage />} />
               <Route path="images" element={<ImagesPage />} />
               <Route path="video" element={<VideoPage />} />
+              <Route path="pipeline" element={<PipelinePage />} />
               <Route path="result/:jobId" element={<ResultPage />} />
               <Route index element={<Navigate to="setup" replace />} />
             </Route>

@@ -47,4 +47,5 @@ export interface StoryboardScene {
   generationError?: string;
   approved: boolean;
   captionsEnabled?: boolean;
+  imageFingerprint?: string;
 }

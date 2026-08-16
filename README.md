@@ -62,11 +62,14 @@ See `.env.example`.
 | `SESSION_SECRET` | Signs the access-code session cookie. |
 | `OPENAI_API_KEY` | Live bible / storyboard / image generation. Blank = demo mode. |
 | `OPENAI_TEXT_MODEL` | Default `gpt-4.1` |
-| `OPENAI_IMAGE_MODEL` | Default `gpt-image-1` |
+| `OPENAI_IMAGE_MODEL` | Default `gpt-image-1-mini` |
+| `OPENAI_IMAGE_QUALITY` | Default `low` (faster stills; try `medium` or `high` for quality) |
+| `OPENAI_IMAGE_SIZE` | Default `1536x1024` |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Postgres + storage. Blank = local files. |
 | `SUPABASE_STORAGE_BUCKET` | Default `music-video-assets` |
 | `MAX_AUDIO_MB` | Audio upload cap |
-| `IMAGE_GENERATION_CONCURRENCY` | Batch still generation |
+| `IMAGE_GENERATION_CONCURRENCY` | Parallel still generation (default `6`) |
+| `AI_RATE_LIMIT_PER_MINUTE` | API rate cap on AI routes (default `80`) |
 | `APP_URL` / `API_URL` | CORS and public asset URLs |
 
 Never put the OpenAI key in the browser. AI routes require the beta session when `APP_ACCESS_CODE` is set.
@@ -116,9 +119,11 @@ If ffmpeg is missing, the worker logs a warning and the job fails with a clear e
 
 `render.yaml` defines:
 
-- Static site for `apps/web`
-- Web service for `apps/api`
-- Background worker for `apps/worker`
+- Static site for `apps/web` (global CDN)
+- Web service for `apps/api` in **Frankfurt**
+- Background worker for `apps/worker` in **Frankfurt**
+
+Do not omit `region` on compute services. Render defaults to Oregon.
 
 Set secrets in the Render dashboard. Do not put keys in `render.yaml`.
 

@@ -1,4 +1,5 @@
 import { AppError, ERROR_CODES, type CharacterDefinition } from '@music-video/shared';
+import { characterReferenceFingerprint, sceneImageFingerprint } from '@music-video/shared';
 import { config } from '../config.js';
 import { placeholderSvg } from './demo.js';
 import { createImageProvider, requireOpenAiOrDemo } from './aiService.js';
@@ -65,7 +66,19 @@ export async function generateCharacterReference(projectId: string, characterId:
   });
 
   const characters = project.visualBible.characters.map((c) =>
-    c.id === characterId ? { ...c, referenceAssetId: asset.id, referenceUrl: asset.publicUrl } : c,
+    c.id === characterId
+      ? {
+          ...c,
+          referenceAssetId: asset.id,
+          referenceUrl: asset.publicUrl,
+          referenceFingerprint: characterReferenceFingerprint(
+            { ...c, referenceAssetId: asset.id },
+            project.styleId,
+            project.visualBible!.masterPrompt,
+            project.visualBible!.overallStyle,
+          ),
+        }
+      : c,
   );
   await saveProject({
     ...project,
@@ -137,7 +150,13 @@ export async function generateSceneImage(projectId: string, sceneId: string) {
     });
     const latest = await getProjectOrThrow(projectId);
     const saved = await attachAssetToScene(latest, sceneId, asset);
-    return { project: saved, asset, demo: source === 'demo' };
+    const sceneAfter = saved.scenes.find((s) => s.id === sceneId);
+    if (sceneAfter) {
+      const fp = sceneImageFingerprint(sceneAfter, saved);
+      const scenes = saved.scenes.map((s) => (s.id === sceneId ? { ...s, imageFingerprint: fp } : s));
+      await saveProject({ ...saved, scenes });
+    }
+    return { project: await getProjectOrThrow(projectId), asset, demo: source === 'demo' };
   } catch (error) {
     const latest = await getProjectOrThrow(projectId).catch(() => generating);
     await saveProject({

@@ -109,3 +109,20 @@ export type ShotType = (typeof SHOT_TYPES)[number];
 
 export const MEDIA_TYPES = ['image', 'video'] as const;
 export type MediaType = (typeof MEDIA_TYPES)[number];
+
+export const PIPELINE_JOB_KINDS = ['full', 'stale_assets'] as const;
+export type PipelineJobKind = (typeof PIPELINE_JOB_KINDS)[number];
+
+export const PIPELINE_JOB_STATUSES = ['queued', 'running', 'complete', 'failed'] as const;
+export type PipelineJobStatus = (typeof PIPELINE_JOB_STATUSES)[number];
+
+export const PIPELINE_STAGES = ['bible', 'characters', 'storyboard', 'images', 'render'] as const;
+export type PipelineStage = (typeof PIPELINE_STAGES)[number];
+
+export const PIPELINE_STAGE_LABELS: Record<PipelineStage, string> = {
+  bible: 'Visual bible',
+  characters: 'Character references',
+  storyboard: 'Storyboard',
+  images: 'Scene stills',
+  render: 'Final video',
+};

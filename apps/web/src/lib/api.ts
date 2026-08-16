@@ -79,6 +79,8 @@ export const api = {
       project: import('@music-video/shared').MusicVideoProject;
       health: import('@music-video/shared').ProjectHealth;
       timingIssues: import('@music-video/shared').TimelineIssue[];
+      pipeline: import('@music-video/shared').PipelineStatus;
+      stale: import('@music-video/shared').StaleAssets;
     }>(`/api/projects/${id}`),
   patchProject: (id: string, body: unknown) =>
     request<{ project: import('@music-video/shared').MusicVideoProject; health: import('@music-video/shared').ProjectHealth }>(
@@ -167,6 +169,23 @@ export const api = {
     request<{ project: import('@music-video/shared').MusicVideoProject }>(`/api/projects/${id}/images/generate-missing`, {
       method: 'POST',
     }),
+  generateAll: (id: string) =>
+    request<{ job: import('@music-video/shared').PipelineJob }>(`/api/projects/${id}/generate-all`, {
+      method: 'POST',
+    }),
+  regenerateStale: (id: string) =>
+    request<{ job: import('@music-video/shared').PipelineJob }>(`/api/projects/${id}/regenerate-stale`, {
+      method: 'POST',
+    }),
+  pipeline: (id: string) =>
+    request<import('@music-video/shared').PipelineStatus & { stale: import('@music-video/shared').StaleAssets }>(
+      `/api/projects/${id}/pipeline`,
+    ),
+  share: (id: string) => request<{ shareId: string; url: string }>(`/api/projects/${id}/share`, { method: 'POST' }),
+  publicWatch: (shareId: string) =>
+    request<{ watch: { title: string; songTitle: string; durationSeconds: number; videoUrl: string; shareId: string } }>(
+      `/api/public/watch/${shareId}`,
+    ),
   render: (id: string) =>
     request<{ project: import('@music-video/shared').MusicVideoProject; job: import('@music-video/shared').RenderJob }>(
       `/api/projects/${id}/render`,

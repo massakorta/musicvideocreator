@@ -9,8 +9,10 @@ import { EmptyState } from '../components/EmptyState';
 import { SceneEditor } from '../components/SceneEditor';
 import { CardWaitOverlay, WaitCard } from '../components/WaitCard';
 
+const IMAGE_GENERATION_CONCURRENCY = 6;
+
 export function ImagesPage() {
-  const { project, setProject, health, reload } = useProject();
+  const { project, setProject, health, reload, stale } = useProject();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -18,6 +20,7 @@ export function ImagesPage() {
   const [singleTitle, setSingleTitle] = useState<string | null>(null);
   const [paintingIds, setPaintingIds] = useState<string[]>([]);
   const [queuedIds, setQueuedIds] = useState<string[]>([]);
+  const [regenerating, setRegenerating] = useState(false);
   const navigate = useNavigate();
   const missingRefs = missingCharacterReferences(project.scenes, project.visualBible);
   const selected = project.scenes.find((s) => s.id === selectedId);
@@ -60,7 +63,9 @@ export function ImagesPage() {
         setBatch((current) => ({ ...current, done: current.done + 1 }));
       }
     }
-    await Promise.all(Array.from({ length: Math.min(2, missing.length) }, () => worker()));
+    await Promise.all(
+      Array.from({ length: Math.min(IMAGE_GENERATION_CONCURRENCY, missing.length) }, () => worker()),
+    );
     await reload();
     if (failures > 0) {
       setError(`${failures} still${failures === 1 ? '' : 's'} failed. Retry those cards, or generate missing again.`);
@@ -96,8 +101,8 @@ export function ImagesPage() {
             total={busy ? batch.total : singleTitle ? undefined : project.scenes.length}
             expectedSeconds={
               singleTitle && !busy
-                ? 40
-                : Math.max(40, (busy ? batch.total - batch.done : project.scenes.length - completeCount) * 25)
+                ? 10
+                : Math.max(10, (busy ? batch.total - batch.done : project.scenes.length - completeCount) * 8)
             }
             detail={
               batch.title
@@ -108,10 +113,10 @@ export function ImagesPage() {
                     ? `${generatingCount} stills in flight`
                     : 'Starting the first still…'
             }
-            stages={['Each still takes about 20–40 seconds. Keep this tab open.']}
+            stages={['Each still takes a few seconds. Keep this tab open.']}
           />
         ) : null}
-        <div className="row" style={{ marginBottom: 14 }}>
+        <div className="row" style={{ marginBottom: 14, flexWrap: 'wrap' }}>
           <button
             className="btn btn-primary"
             disabled={busy || project.scenes.length === 0 || completeCount === project.scenes.length}
@@ -119,6 +124,26 @@ export function ImagesPage() {
           >
             {busy ? 'Generating stills…' : 'Generate Missing Images'}
           </button>
+          {stale && stale.staleSceneIds.length > 0 ? (
+            <button
+              className="btn"
+              disabled={regenerating}
+              onClick={async () => {
+                setRegenerating(true);
+                setError(null);
+                try {
+                  await api.regenerateStale(project.id);
+                  navigate(`/projects/${project.id}/pipeline`);
+                } catch (err) {
+                  setError(err instanceof ApiClientError ? err.message : 'Could not queue updates.');
+                } finally {
+                  setRegenerating(false);
+                }
+              }}
+            >
+              {regenerating ? 'Queueing…' : `Uppdatera ändrade bilder (${stale.staleSceneIds.length})`}
+            </button>
+          ) : null}
           <span className="muted">
             {completeCount} / {project.scenes.length} ready
           </span>
@@ -155,20 +180,24 @@ export function ImagesPage() {
                   <div className="pill">{MOTION_PRESET_LABELS[scene.motion]}</div>
                   <div
                     className={`pill ${
-                      scene.generationState === 'failed'
-                        ? 'error'
-                        : scene.generationState === 'complete' || scene.image
-                          ? 'success'
-                          : paintingIds.includes(scene.id) || scene.generationState === 'generating'
-                            ? 'warning'
-                            : ''
+                      stale?.staleSceneIds.includes(scene.id)
+                        ? 'warning'
+                        : scene.generationState === 'failed'
+                          ? 'error'
+                          : scene.generationState === 'complete' || scene.image
+                            ? 'success'
+                            : paintingIds.includes(scene.id) || scene.generationState === 'generating'
+                              ? 'warning'
+                              : ''
                     }`}
                   >
-                    {paintingIds.includes(scene.id) || scene.generationState === 'generating'
-                      ? 'Painting'
-                      : queuedIds.includes(scene.id)
-                        ? 'In queue'
-                        : GENERATION_STATE_LABELS[scene.generationState]}
+                    {stale?.staleSceneIds.includes(scene.id)
+                      ? 'Inaktuell'
+                      : paintingIds.includes(scene.id) || scene.generationState === 'generating'
+                        ? 'Painting'
+                        : queuedIds.includes(scene.id)
+                          ? 'In queue'
+                          : GENERATION_STATE_LABELS[scene.generationState]}
                   </div>
                   {scene.generationError ? <p className="muted">{scene.generationError}</p> : null}
                   <div className="row" style={{ marginTop: 10, flexWrap: 'wrap' }}>

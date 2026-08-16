@@ -10,3 +10,4 @@ export * from './project.js';
 export * from './errors.js';
 export * from './validation/storyboard.js';
 export * from './validation/schemas.js';
+export * from './pipeline.js';
