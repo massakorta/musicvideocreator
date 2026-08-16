@@ -20,28 +20,24 @@ function project(partial: Partial<MusicVideoProject> = {}): MusicVideoProject {
   };
 }
 
+const audio = {
+  url: '/a.mp3',
+  filename: 'a.mp3',
+  durationSeconds: 30,
+  mimeType: 'audio/mpeg',
+};
+
 describe('editor flow', () => {
-  it('starts on setup until audio and lyrics exist', () => {
+  it('starts on setup until audio exists', () => {
     expect(nextEditorStep(project())).toBe('setup');
-    expect(
-      nextEditorStep(
-        project({
-          audio: {
-            url: '/a.mp3',
-            filename: 'a.mp3',
-            durationSeconds: 30,
-            mimeType: 'audio/mpeg',
-          },
-          lyrics: '[Verse]\nHello',
-        }),
-      ),
-    ).toBe('style');
+    expect(isEditorStepComplete(project(), 'setup')).toBe(false);
+    expect(isEditorStepComplete(project({ audio }), 'setup')).toBe(true);
+    expect(nextEditorStep(project({ audio }))).toBe('style');
   });
 
   it('moves through bible, characters, storyboard, then images', () => {
     const base = project({
-      audio: { url: '/a.mp3', filename: 'a.mp3', durationSeconds: 30, mimeType: 'audio/mpeg' },
-      lyrics: '[Verse]\nHello',
+      audio,
       styleId: 'cartoon',
       visualBibleApproved: true,
       visualBible: {

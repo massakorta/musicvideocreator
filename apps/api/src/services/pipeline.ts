@@ -73,9 +73,6 @@ export async function enqueueGenerateAll(projectId: string): Promise<PipelineJob
   if (!project.audio) {
     throw new AppError(ERROR_CODES.VALIDATION, 'Upload a song before generating.', 400);
   }
-  if (!project.lyrics.trim()) {
-    throw new AppError(ERROR_CODES.VALIDATION, 'Paste lyrics before generating.', 400);
-  }
   if (!project.styleId) {
     throw new AppError(ERROR_CODES.VALIDATION, 'Choose a visual style before generating.', 400);
   }

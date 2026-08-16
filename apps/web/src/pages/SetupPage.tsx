@@ -8,7 +8,6 @@ import { WaitCard } from '../components/WaitCard';
 
 export function SetupPage() {
   const { project, setProject, reload, markSave } = useProject();
-  const [lyrics, setLyrics] = useState(project.lyrics);
   const [name, setName] = useState(project.name);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -17,11 +16,10 @@ export function SetupPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    setLyrics(project.lyrics);
     setName(project.name);
-  }, [project.id, project.lyrics, project.name]);
+  }, [project.id, project.name]);
 
-  const autosave = useDebouncedCallback(async (patch: { name?: string; lyrics?: string }) => {
+  const autosave = useDebouncedCallback(async (patch: { name?: string }) => {
     markSave('saving');
     try {
       const data = await api.patchProject(project.id, patch);
@@ -56,12 +54,12 @@ export function SetupPage() {
     }
   }
 
-  const canContinue = Boolean(project.audio && lyrics.trim());
+  const canContinue = Boolean(project.audio);
 
   return (
     <div className="page">
       <p className="hero-copy">
-        The song is the clock. Paste lyrics with labels like [Chorus] so the pictures turn with the track.
+        The song is the clock. When you generate, we listen to the track and line up scenes to the vocals.
       </p>
       <div
         className={`intake-well ${dragOver ? 'dragover' : ''} ${project.audio ? 'ready' : ''}`}
@@ -108,17 +106,6 @@ export function SetupPage() {
         ) : null}
       </div>
       <div className="field" style={{ marginTop: 18 }}>
-        <label>Lyrics</label>
-        <textarea
-          value={lyrics}
-          onChange={(e) => {
-            setLyrics(e.target.value);
-            autosave({ lyrics: e.target.value });
-          }}
-          placeholder={'[Intro]\n…\n[Verse 1]\n…'}
-        />
-      </div>
-      <div className="field">
         <label>Film title</label>
         <input
           value={name}
@@ -130,7 +117,7 @@ export function SetupPage() {
       </div>
       {message ? <div className="banner success">{message}</div> : null}
       {error ? <div className="banner error">{error}</div> : null}
-      {!canContinue ? <p className="faint">Add a song and lyrics to unlock the next step.</p> : null}
+      {!canContinue ? <p className="faint">Add a song to unlock the next step.</p> : null}
       <button
         className="btn btn-primary"
         disabled={!canContinue}

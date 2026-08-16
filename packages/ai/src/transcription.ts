@@ -1,10 +1,17 @@
 import { toFile, type OpenAI } from 'openai';
 import type { TimedWord } from '@music-video/shared';
 
+export interface TranscriptionSegment {
+  start: number;
+  end: number;
+  text: string;
+}
+
 export interface TranscriptionResult {
   language?: string;
   text: string;
   words: TimedWord[];
+  segments: TranscriptionSegment[];
 }
 
 export async function transcribeAudioWords(
@@ -21,11 +28,24 @@ export async function transcribeAudioWords(
   });
 
   const words = extractWords(result);
+  const segments = extractSegments(result);
   return {
     language: typeof result.language === 'string' ? result.language : undefined,
     text: result.text ?? '',
     words,
+    segments,
   };
+}
+
+function extractSegments(result: {
+  segments?: Array<{ start?: number; end?: number; text?: string }>;
+}): TranscriptionSegment[] {
+  return (result.segments ?? [])
+    .flatMap((segment) => {
+      const text = segment.text?.trim();
+      if (!text || segment.start == null || segment.end == null) return [];
+      return [{ start: segment.start, end: segment.end, text }];
+    });
 }
 
 function extractWords(result: {

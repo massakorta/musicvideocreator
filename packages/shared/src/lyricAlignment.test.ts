@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   alignLyricsToWords,
+  alignmentFromTranscription,
+  alignmentLinesFromTranscription,
   estimateLyricAlignment,
+  lyricsTextFromSegments,
   parseLyricLines,
   sceneSlotsFromAlignment,
 } from './lyricAlignment.js';
@@ -19,6 +22,42 @@ describe('parseLyricLines', () => {
   it('keeps section labels on each line', () => {
     const lines = parseLyricLines(lyrics);
     expect(lines.map((line) => line.section)).toEqual(['intro', 'verse', 'verse', 'chorus', 'chorus']);
+  });
+});
+
+describe('alignmentFromTranscription', () => {
+  const segments = [
+    { start: 8.0, end: 9.2, text: 'Walking down the harbor' },
+    { start: 9.4, end: 10.6, text: 'Lights on the water' },
+    { start: 14.0, end: 15.5, text: 'Harbor lights stay on' },
+    { start: 16.0, end: 17.6, text: 'Harbor lights stay on' },
+  ];
+  const words = [
+    { start: 8.0, end: 8.3, word: 'Walking' },
+    { start: 8.3, end: 8.5, word: 'down' },
+    { start: 14.0, end: 14.4, word: 'Harbor' },
+    { start: 16.0, end: 16.4, word: 'Harbor' },
+  ];
+
+  it('builds lyric text from whisper segments', () => {
+    expect(lyricsTextFromSegments(segments)).toBe(
+      'Walking down the harbor\nLights on the water\nHarbor lights stay on\nHarbor lights stay on',
+    );
+  });
+
+  it('marks repeated lines as chorus and unique lines as verse', () => {
+    const lines = alignmentLinesFromTranscription(segments, 24);
+    expect(lines.map((line) => line.section)).toEqual(['verse', 'verse', 'chorus', 'chorus']);
+    expect(lines[0]?.startTime).toBeCloseTo(8.0, 1);
+    expect(lines[2]?.text).toBe('Harbor lights stay on');
+  });
+
+  it('feeds scene slots that cover the song', () => {
+    const alignment = alignmentFromTranscription(segments, words, 24);
+    const slots = sceneSlotsFromAlignment(alignment, 24);
+    expect(slots[0]?.startTime).toBe(0);
+    expect(slots.at(-1)?.endTime).toBe(24);
+    expect(slots.some((slot) => slot.lyricsExcerpt?.includes('Harbor lights stay on'))).toBe(true);
   });
 });
 

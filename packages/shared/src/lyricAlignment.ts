@@ -39,6 +39,72 @@ export function normalizeLyricToken(value: string): string {
     .replace(/[^a-z0-9]+/g, '');
 }
 
+export interface TranscriptionSegment {
+  start: number;
+  end: number;
+  text: string;
+}
+
+export function lyricsTextFromSegments(segments: TranscriptionSegment[]): string {
+  return segments
+    .map((segment) => segment.text.trim())
+    .filter(Boolean)
+    .join('\n');
+}
+
+export function alignmentLinesFromTranscription(
+  segments: TranscriptionSegment[],
+  durationSeconds: number,
+): TimedLyricLine[] {
+  const rawLines = segments
+    .map((segment) => ({
+      startTime: segment.start,
+      endTime: segment.end,
+      text: segment.text.trim(),
+    }))
+    .filter((line) => line.text.length > 0);
+
+  if (rawLines.length === 0) return [];
+
+  const chorusKeys = new Set<string>();
+  const counts = new Map<string, number>();
+  for (const line of rawLines) {
+    const norm = normalizeLyricToken(line.text);
+    if (norm.length >= 8) {
+      counts.set(norm, (counts.get(norm) ?? 0) + 1);
+    }
+  }
+  for (const [norm, count] of counts) {
+    if (count >= 2) chorusKeys.add(norm);
+  }
+
+  const lines = rawLines.map((line) => {
+    const norm = normalizeLyricToken(line.text);
+    const section: SongSection = chorusKeys.has(norm) ? 'chorus' : 'verse';
+    return {
+      startTime: roundTime(line.startTime),
+      endTime: roundTime(Math.max(line.endTime, line.startTime + 0.3)),
+      text: line.text,
+      section,
+    };
+  });
+
+  return clampAlignedLines(lines, durationSeconds);
+}
+
+export function alignmentFromTranscription(
+  segments: TranscriptionSegment[],
+  words: TimedWord[],
+  durationSeconds: number,
+): LyricAlignment {
+  return {
+    source: 'whisper',
+    words,
+    lines: alignmentLinesFromTranscription(segments, durationSeconds),
+    createdAt: new Date().toISOString(),
+  };
+}
+
 export function parseLyricLines(lyrics: string): Array<{ text: string; section: SongSection; label: string }> {
   return parseLyricSections(lyrics).flatMap((section) => {
     const songSection = classifySongSection(section.label);

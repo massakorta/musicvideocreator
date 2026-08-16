@@ -3,7 +3,7 @@ import { AppError, ERROR_CODES, visualBibleSchema, type AiUsageLog, type VisualB
 import { config, openaiConfigured } from '../config.js';
 import { getRepositories } from '../repositories/index.js';
 import { demoStoryboard, demoVisualBible } from './demo.js';
-import { ensureLyricAlignment } from './lyricSync.js';
+import { ensureTranscribedLyrics } from './lyricSync.js';
 import { getProjectOrThrow, saveProject, styleOrThrow } from './projects.js';
 import { newId, nowIso, touch } from './projectUtils.js';
 
@@ -12,10 +12,12 @@ export function requireOpenAiOrDemo(): 'live' | 'demo' {
 }
 
 export async function generateProjectVisualBible(projectId: string): Promise<{ project: Awaited<ReturnType<typeof getProjectOrThrow>>; demo: boolean }> {
-  const project = await getProjectOrThrow(projectId);
-  if (!project.lyrics.trim()) {
-    throw new AppError(ERROR_CODES.VALIDATION, 'Paste lyrics before generating a visual bible.', 400);
+  let project = await getProjectOrThrow(projectId);
+  if (!project.audio) {
+    throw new AppError(ERROR_CODES.VALIDATION, 'Upload a song before generating a visual bible.', 400);
   }
+  const transcribed = await ensureTranscribedLyrics(project);
+  project = transcribed.project;
   const style = styleOrThrow(project.styleId);
   const log = startLog('visual_bible', projectId, config.openaiTextModel);
   try {
@@ -75,19 +77,22 @@ export async function patchVisualBible(projectId: string, patch: Partial<VisualB
 }
 
 export async function generateProjectStoryboard(projectId: string) {
-  const project = await getProjectOrThrow(projectId);
+  let project = await getProjectOrThrow(projectId);
   if (!project.visualBible || !project.visualBibleApproved) {
     throw new AppError(ERROR_CODES.VALIDATION, 'Approve the visual bible before generating a storyboard.', 400);
   }
+  const visualBible = project.visualBible;
   if (!project.durationSeconds) {
     throw new AppError(ERROR_CODES.VALIDATION, 'Song duration is unknown. Re-upload the audio or set duration.', 400);
   }
   const style = styleOrThrow(project.styleId);
   const log = startLog('storyboard', projectId, config.openaiTextModel);
   try {
-    const alignment = await ensureLyricAlignment(project);
+    const transcribed = await ensureTranscribedLyrics(project);
+    project = transcribed.project;
+    const alignment = transcribed.alignment;
     if (requireOpenAiOrDemo() === 'demo') {
-      const scenes = demoStoryboard(project.durationSeconds, project.visualBible, project.lyrics, style, alignment);
+      const scenes = demoStoryboard(project.durationSeconds, visualBible, project.lyrics, style, alignment);
       const saved = await saveProject(touch(project, { scenes, status: 'storyboard', lyricAlignment: alignment }));
       await finishLog(log, 'success');
       return { project: saved, demo: true };
@@ -104,7 +109,7 @@ export async function generateProjectStoryboard(projectId: string) {
       lyrics: project.lyrics,
       durationSeconds: project.durationSeconds,
       style,
-      bible: project.visualBible,
+      bible: visualBible,
       alignment,
     });
     const saved = await saveProject(touch(project, { scenes, status: 'storyboard', lyricAlignment: alignment }));

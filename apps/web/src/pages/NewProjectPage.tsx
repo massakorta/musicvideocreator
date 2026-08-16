@@ -7,7 +7,6 @@ import { WaitCard } from '../components/WaitCard';
 export function NewProjectPage() {
   const [file, setFile] = useState<File | null>(null);
   const [duration, setDuration] = useState<number | undefined>();
-  const [lyrics, setLyrics] = useState('');
   const [title, setTitle] = useState('');
   const [titleTouched, setTitleTouched] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -24,12 +23,12 @@ export function NewProjectPage() {
   }
 
   async function start() {
-    if (!file || !lyrics.trim()) return;
+    if (!file) return;
     setBusy(true);
     setError(null);
     try {
       const name = title.trim() || titleFromFilename(file.name);
-      const { project } = await api.createProject({ name, songTitle: name, lyrics: lyrics.trim() });
+      const { project } = await api.createProject({ name, songTitle: name });
       const data = await api.uploadAudio(project.id, file, duration);
       if (!data.durationDetected && duration) {
         await api.setDuration(project.id, duration);
@@ -42,7 +41,7 @@ export function NewProjectPage() {
     }
   }
 
-  const ready = Boolean(file && lyrics.trim());
+  const ready = Boolean(file);
 
   return (
     <div className="page intake-page">
@@ -52,7 +51,8 @@ export function NewProjectPage() {
       <p className="intake-kicker">New cut</p>
       <h1 className="intake-title">Bring the master.</h1>
       <p className="hero-copy">
-        Drop the finished song and paste the lyrics. The film title is taken from the file — you can change it later.
+        Drop the finished song. We read the vocals from the track when the cut starts. The film title is taken from the
+        file — you can change it later.
       </p>
 
       <div className="intake-desk">
@@ -93,17 +93,6 @@ export function NewProjectPage() {
             />
           </label>
         </div>
-
-        <div className="intake-script">
-          <label htmlFor="lyrics">The lyrics</label>
-          <textarea
-            id="lyrics"
-            value={lyrics}
-            onChange={(e) => setLyrics(e.target.value)}
-            placeholder={'[Intro]\n…\n[Verse 1]\n…\n[Chorus]\n…'}
-          />
-          <p className="faint">Keep labels like [Chorus]. They tell the storyboard where the pictures should turn.</p>
-        </div>
       </div>
 
       {file || title ? (
@@ -134,7 +123,7 @@ export function NewProjectPage() {
         <button className="btn btn-primary" disabled={!ready || busy} onClick={() => void start()}>
           {busy ? 'Starting…' : 'Start the cut'}
         </button>
-        {!ready ? <p className="faint">Add a song and lyrics to continue.</p> : null}
+        {!ready ? <p className="faint">Add a song to continue.</p> : null}
       </div>
     </div>
   );

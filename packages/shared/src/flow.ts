@@ -4,7 +4,7 @@ import { EDITOR_STEPS, type EditorStep, type ProjectStatus } from './status.js';
 export function isEditorStepComplete(project: MusicVideoProject, step: EditorStep): boolean {
   switch (step) {
     case 'setup':
-      return Boolean(project.audio && project.lyrics.trim());
+      return Boolean(project.audio);
     case 'style':
       return Boolean(project.styleId);
     case 'bible':

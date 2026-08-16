@@ -32,7 +32,7 @@ export function deriveStatus(project: MusicVideoProject, pipelineActive = false)
   if (pipelineActive) return 'generating_images';
   if (project.status === 'rendering' && !project.lastError) return 'rendering';
   if (project.status === 'error' && project.lastError) return 'error';
-  if (!project.audio || !project.lyrics.trim() || !project.styleId) return 'setup';
+  if (!project.audio || !project.styleId) return 'setup';
   if (!project.visualBible || !project.visualBibleApproved) return 'visual_bible';
   if (project.scenes.length === 0) return 'storyboard';
   const generating = project.scenes.some((s) => s.generationState === 'generating');

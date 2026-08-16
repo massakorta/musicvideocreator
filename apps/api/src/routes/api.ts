@@ -152,6 +152,7 @@ apiRouter.post(
       },
       durationSeconds: duration ?? project.durationSeconds,
       songTitle: project.songTitle || filename.replace(/\.[^.]+$/, ''),
+      lyrics: '',
       lyricAlignment: undefined,
     });
     res.json({ project: saved, asset, durationDetected: Boolean(duration) });

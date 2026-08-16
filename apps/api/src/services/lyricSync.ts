@@ -1,46 +1,88 @@
-import { createOpenAiClient, isOpenAiConfigured, transcribeAudioWords } from '@music-video/ai';
+import { createOpenAiClient, transcribeAudioWords } from '@music-video/ai';
 import {
-  alignLyricsToWords,
-  estimateLyricAlignment,
+  alignmentFromTranscription,
+  lyricsTextFromSegments,
+  AppError,
+  ERROR_CODES,
   type LyricAlignment,
   type MusicVideoProject,
 } from '@music-video/shared';
-import { config, openaiConfigured } from '../config.js';
+import { config } from '../config.js';
 import { getRepositories } from '../repositories/index.js';
 import { getObjectStorage } from '../storage/index.js';
 import { prepareAudioForTranscription } from './audio.js';
 import { nowIso } from './projectUtils.js';
+import { saveProject } from './projects.js';
 
-export async function ensureLyricAlignment(project: MusicVideoProject): Promise<LyricAlignment> {
+const TRANSCRIPTION_FAILED = 'Kunde inte läsa sången. Försök ladda upp igen.';
+
+export async function ensureTranscribedLyrics(
+  project: MusicVideoProject,
+): Promise<{ project: MusicVideoProject; alignment: LyricAlignment }> {
   const audioAssetId = project.audio?.assetId;
+  if (!audioAssetId) {
+    throw new AppError(ERROR_CODES.VALIDATION, 'Upload a song before generating.', 400);
+  }
+  if (!project.durationSeconds) {
+    throw new AppError(
+      ERROR_CODES.VALIDATION,
+      'Song duration is unknown. Re-upload the audio or set duration.',
+      400,
+    );
+  }
+
   const existing = project.lyricAlignment;
-  if (existing?.words.length && existing.audioAssetId === audioAssetId) {
-    return {
-      ...existing,
-      lines: alignLyricsToWords(project.lyrics, existing.words, project.durationSeconds),
-    };
+  if (
+    project.lyrics.trim() &&
+    existing?.words.length &&
+    existing.audioAssetId === audioAssetId &&
+    existing.source === 'whisper'
+  ) {
+    return { project, alignment: existing };
   }
 
-  if (openaiConfigured() && isOpenAiConfigured(config.openaiApiKey) && audioAssetId) {
-    try {
-      const transcribed = await transcribeProjectAudio(project);
-      return {
-        audioAssetId,
-        source: 'whisper',
-        language: transcribed.language,
-        words: transcribed.words,
-        lines: alignLyricsToWords(project.lyrics, transcribed.words, project.durationSeconds),
-        createdAt: nowIso(),
-      };
-    } catch (error) {
-      console.warn('[lyric-sync] whisper failed, estimating from lyrics', error);
+  try {
+    const transcribed = await transcribeProjectAudio(project);
+    const segments =
+      transcribed.segments.length > 0
+        ? transcribed.segments
+        : transcribed.text.trim()
+          ? [{ start: 0, end: project.durationSeconds, text: transcribed.text.trim() }]
+          : [];
+
+    if (segments.length === 0) {
+      throw new Error('Whisper returned no lyrics.');
     }
-  }
 
-  return {
-    ...estimateLyricAlignment(project.lyrics, project.durationSeconds),
-    audioAssetId,
-  };
+    const lyrics = lyricsTextFromSegments(segments);
+    const alignment: LyricAlignment = {
+      ...alignmentFromTranscription(segments, transcribed.words, project.durationSeconds),
+      audioAssetId,
+      language: transcribed.language,
+      createdAt: nowIso(),
+    };
+
+    if (!lyrics.trim() || alignment.lines.length === 0) {
+      throw new Error('Whisper returned no usable lyric lines.');
+    }
+
+    const saved = await saveProject({
+      ...project,
+      lyrics,
+      lyricAlignment: alignment,
+    });
+    return { project: saved, alignment };
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    console.warn('[lyric-sync] whisper failed', error);
+    throw new AppError(ERROR_CODES.OPENAI_FAILED, TRANSCRIPTION_FAILED, 502);
+  }
+}
+
+/** @deprecated Use ensureTranscribedLyrics — kept for callers that only need alignment. */
+export async function ensureLyricAlignment(project: MusicVideoProject): Promise<LyricAlignment> {
+  const { alignment } = await ensureTranscribedLyrics(project);
+  return alignment;
 }
 
 async function transcribeProjectAudio(project: MusicVideoProject) {

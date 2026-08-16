@@ -11,7 +11,7 @@ export function StylePage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [generatingAll, setGeneratingAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const canGenerateAll = Boolean(project.audio && project.lyrics.trim());
+  const canGenerateAll = Boolean(project.audio && project.styleId);
 
   async function choose(styleId: string) {
     setBusyId(styleId);
@@ -111,7 +111,7 @@ export function StylePage() {
       ) : null}
       {!canGenerateAll ? (
         <p className="faint" style={{ marginTop: 10 }}>
-          Upload a song and paste lyrics on the Song step before autopilot can run.
+          Upload a song on the Song step before autopilot can run.
         </p>
       ) : null}
     </div>
