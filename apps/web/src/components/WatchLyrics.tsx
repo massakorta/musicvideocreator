@@ -1,4 +1,3 @@
-import { useEffect, useRef } from 'react';
 import { parseLyricSections } from '@music-video/shared';
 import { activeLyricLineIndex, type PublicWatchLyrics } from './watch/types';
 
@@ -11,17 +10,8 @@ export function WatchLyrics({
   currentSeconds: number;
   hidden?: boolean;
 }) {
-  const activeRef = useRef<HTMLParagraphElement>(null);
   const hasTimedLines = Boolean(lyrics?.lines.length);
   const activeIndex = hasTimedLines && lyrics ? activeLyricLineIndex(lyrics.lines, currentSeconds) : -1;
-
-  useEffect(() => {
-    if (!hasTimedLines || activeIndex < 0 || hidden) return;
-    activeRef.current?.scrollIntoView({
-      block: 'center',
-      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-    });
-  }, [activeIndex, hasTimedLines, hidden]);
 
   if (!lyrics || hidden) return null;
 
@@ -37,7 +27,6 @@ export function WatchLyrics({
             return (
               <p
                 key={`${line.startTime}-${index}`}
-                ref={index === activeIndex ? activeRef : undefined}
                 className={`watch-lyric-line watch-lyric-line--${state}`}
               >
                 {line.text}
