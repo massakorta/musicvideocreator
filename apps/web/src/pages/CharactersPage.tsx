@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useProject } from '../hooks/useProject';
 import { api, ApiClientError } from '../lib/api';
 import { EmptyState } from '../components/EmptyState';
-import { WaitCard } from '../components/WaitCard';
+import { CardWaitOverlay, WaitCard } from '../components/WaitCard';
 
 export function CharactersPage() {
   const { project, setProject } = useProject();
@@ -111,18 +111,20 @@ export function CharactersPage() {
               <article className="card" key={character.id} style={{ padding: 16 }}>
                 <h3>{character.name}</h3>
                 <p className="muted">{character.role}</p>
-                {character.referenceUrl ? (
-                  <img
-                    className="scene-thumb"
-                    src={character.referenceUrl}
-                    alt={`${character.name} reference`}
-                    style={{ width: '100%', height: 140, objectFit: 'cover' }}
-                  />
-                ) : (
-                  <div className="card-media" />
-                )}
+                <div className="card-media" style={{ height: 140 }}>
+                  {character.referenceUrl ? (
+                    <img src={character.referenceUrl} alt={`${character.name} reference`} />
+                  ) : null}
+                  {busyId === character.id || (busyId === 'all' && progress.name === character.name) ? (
+                    <CardWaitOverlay label="Painting now" ticking />
+                  ) : busyId === 'all' && !character.referenceUrl ? (
+                    <CardWaitOverlay label="In queue" />
+                  ) : null}
+                </div>
                 {character.lockedReferenceImage ? (
                   <div className="pill success">Approved</div>
+                ) : busyId === character.id || (busyId === 'all' && progress.name === character.name) ? (
+                  <div className="pill warning">Painting</div>
                 ) : (
                   <div className="pill warning">Needs approval</div>
                 )}
@@ -133,7 +135,7 @@ export function CharactersPage() {
                     onClick={() => void generateOne(character.id, Boolean(character.lockedReferenceImage))}
                   >
                     {busyId === character.id
-                      ? 'Generating…'
+                      ? 'Painting…'
                       : character.referenceAssetId
                         ? 'Regenerate'
                         : 'Generate sheet'}

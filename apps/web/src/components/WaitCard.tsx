@@ -17,14 +17,19 @@ export function WaitCard({
 }) {
   const elapsed = useElapsed(true);
   const hasCount = typeof current === 'number' && typeof total === 'number' && total > 0;
-  const percent = hasCount ? Math.min(100, Math.round((current / total) * 100)) : Math.min(92, Math.round((elapsed / expectedSeconds) * 100));
+  const overtime = elapsed > expectedSeconds + 6;
+  const percent = hasCount
+    ? Math.min(100, Math.round((current / total) * 100))
+    : Math.min(96, Math.round((1 - Math.exp(-elapsed / Math.max(8, expectedSeconds))) * 100));
   const remaining = hasCount
     ? estimateRemaining(elapsed, current, total, expectedSeconds)
     : Math.max(0, expectedSeconds - elapsed);
-  const stage = detail || pickStage(elapsed, stages);
+  const stage = overtime
+    ? 'Still working — this one is taking longer than usual.'
+    : detail || pickStage(elapsed, stages);
 
   return (
-    <div className="wait-card" role="status" aria-live="polite">
+    <div className={`wait-card${overtime ? ' overtime' : ''}`} role="status" aria-live="polite">
       <div className="wait-card-top">
         <div>
           <div className="wait-kicker">Working</div>
@@ -41,13 +46,36 @@ export function WaitCard({
           <span>
             {current} of {total} · {percent}%
           </span>
+        ) : overtime ? (
+          <span>Longer than the usual {formatUsual(expectedSeconds)}</span>
         ) : (
-          <span>Usually about {expectedSeconds < 75 ? `${expectedSeconds} seconds` : `${Math.ceil(expectedSeconds / 60)} min`}</span>
+          <span>Usually about {formatUsual(expectedSeconds)}</span>
         )}
-        <span>{remaining > 0 ? `About ${formatWaitHint(remaining)} left` : 'Finishing up…'}</span>
+        <span>{waitHint(elapsed, expectedSeconds, remaining)}</span>
       </div>
     </div>
   );
+}
+
+export function CardWaitOverlay({ label, ticking = false }: { label: string; ticking?: boolean }) {
+  const elapsed = useElapsed(ticking);
+  return (
+    <div className="card-wait" role="status">
+      <span className="card-wait-dot" />
+      <span>{label}</span>
+      {ticking ? <span className="mono">{formatElapsed(elapsed)}</span> : null}
+    </div>
+  );
+}
+
+function formatUsual(expectedSeconds: number): string {
+  return expectedSeconds < 75 ? `${expectedSeconds} seconds` : `${Math.ceil(expectedSeconds / 60)} min`;
+}
+
+function waitHint(elapsed: number, expectedSeconds: number, remaining: number): string {
+  if (remaining > 12) return `About ${formatWaitHint(remaining)} left`;
+  if (elapsed <= expectedSeconds) return 'Almost there…';
+  return 'Keep this tab open';
 }
 
 function formatWaitHint(seconds: number): string {

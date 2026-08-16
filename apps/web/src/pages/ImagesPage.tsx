@@ -7,7 +7,7 @@ import { formatClockShort } from '../lib/time';
 import { HealthPanel } from '../components/HealthPanel';
 import { EmptyState } from '../components/EmptyState';
 import { SceneEditor } from '../components/SceneEditor';
-import { WaitCard } from '../components/WaitCard';
+import { CardWaitOverlay, WaitCard } from '../components/WaitCard';
 
 export function ImagesPage() {
   const { project, setProject, health, reload } = useProject();
@@ -16,6 +16,8 @@ export function ImagesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [batch, setBatch] = useState({ done: 0, total: 0, title: '' });
   const [singleTitle, setSingleTitle] = useState<string | null>(null);
+  const [paintingIds, setPaintingIds] = useState<string[]>([]);
+  const [queuedIds, setQueuedIds] = useState<string[]>([]);
   const navigate = useNavigate();
   const missingRefs = missingCharacterReferences(project.scenes, project.visualBible);
   const selected = project.scenes.find((s) => s.id === selectedId);
@@ -27,6 +29,8 @@ export function ImagesPage() {
     if (missing.length === 0) return;
     setBusy(true);
     setError(null);
+    setQueuedIds(missing.map((scene) => scene.id));
+    setPaintingIds([]);
     setBatch({ done: 0, total: missing.length, title: missing[0]?.title ?? '' });
     let cursor = 0;
     let failures = 0;
@@ -36,6 +40,8 @@ export function ImagesPage() {
         cursor += 1;
         const scene = missing[index];
         if (!scene) return;
+        setQueuedIds((ids) => ids.filter((id) => id !== scene.id));
+        setPaintingIds((ids) => [...ids, scene.id]);
         setBatch((current) => ({ ...current, title: scene.title }));
         try {
           const data = await api.generateSceneImage(project.id, scene.id);
@@ -48,6 +54,8 @@ export function ImagesPage() {
               : `Scene ${scene.order} could not be generated. The rest will keep going.`,
           );
           await reload();
+        } finally {
+          setPaintingIds((ids) => ids.filter((id) => id !== scene.id));
         }
         setBatch((current) => ({ ...current, done: current.done + 1 }));
       }
@@ -59,6 +67,8 @@ export function ImagesPage() {
     }
     setBusy(false);
     setBatch({ done: 0, total: 0, title: '' });
+    setPaintingIds([]);
+    setQueuedIds([]);
   }
 
   useEffect(() => {
@@ -127,16 +137,16 @@ export function ImagesPage() {
           <div className="grid-cards">
             {project.scenes.map((scene) => (
               <article className="card" key={scene.id}>
-                {scene.image?.publicUrl ? (
-                  <img
-                    className="card-media"
-                    src={scene.image.publicUrl}
-                    alt={scene.title}
-                    style={{ width: '100%', objectFit: 'cover' }}
-                  />
-                ) : (
-                  <div className="card-media" />
-                )}
+                <div className="card-media">
+                  {scene.image?.publicUrl ? (
+                    <img src={scene.image.publicUrl} alt={scene.title} />
+                  ) : null}
+                  {paintingIds.includes(scene.id) || scene.generationState === 'generating' ? (
+                    <CardWaitOverlay label="Painting now" ticking />
+                  ) : queuedIds.includes(scene.id) ? (
+                    <CardWaitOverlay label="In queue" />
+                  ) : null}
+                </div>
                 <div className="card-body">
                   <h3>{scene.title}</h3>
                   <div className="mono faint">
@@ -144,9 +154,21 @@ export function ImagesPage() {
                   </div>
                   <div className="pill">{MOTION_PRESET_LABELS[scene.motion]}</div>
                   <div
-                    className={`pill ${scene.generationState === 'failed' ? 'error' : scene.generationState === 'complete' ? 'success' : ''}`}
+                    className={`pill ${
+                      scene.generationState === 'failed'
+                        ? 'error'
+                        : scene.generationState === 'complete' || scene.image
+                          ? 'success'
+                          : paintingIds.includes(scene.id) || scene.generationState === 'generating'
+                            ? 'warning'
+                            : ''
+                    }`}
                   >
-                    {GENERATION_STATE_LABELS[scene.generationState]}
+                    {paintingIds.includes(scene.id) || scene.generationState === 'generating'
+                      ? 'Painting'
+                      : queuedIds.includes(scene.id)
+                        ? 'In queue'
+                        : GENERATION_STATE_LABELS[scene.generationState]}
                   </div>
                   {scene.generationError ? <p className="muted">{scene.generationError}</p> : null}
                   <div className="row" style={{ marginTop: 10, flexWrap: 'wrap' }}>
@@ -155,6 +177,7 @@ export function ImagesPage() {
                       disabled={busy || Boolean(singleTitle)}
                       onClick={async () => {
                         setSingleTitle(scene.title);
+                        setPaintingIds([scene.id]);
                         setError(null);
                         try {
                           const data = await api.generateSceneImage(project.id, scene.id);
@@ -168,6 +191,7 @@ export function ImagesPage() {
                           await reload();
                         } finally {
                           setSingleTitle(null);
+                          setPaintingIds([]);
                         }
                       }}
                     >
