@@ -71,9 +71,15 @@ projects:
               - key: IMAGE_GENERATION_CONCURRENCY
                 value: "6"
               - key: SUPABASE_URL
-                sync: false
+                fromService:
+                  name: music-video-api
+                  type: web
+                  envVarKey: SUPABASE_URL
               - key: SUPABASE_SERVICE_ROLE_KEY
-                sync: false
+                fromService:
+                  name: music-video-api
+                  type: web
+                  envVarKey: SUPABASE_SERVICE_ROLE_KEY
               - key: SUPABASE_STORAGE_BUCKET
                 value: music-video-assets
               - key: API_URL

@@ -8,7 +8,7 @@ import { bundle } from '@remotion/bundler';
 import { renderMedia, selectComposition } from '@remotion/renderer';
 import { projectToComposition } from '@music-video/video';
 import type { MusicVideoProject, RenderJob } from '@music-video/shared';
-import { config } from '../../api/src/config.js';
+import { config, supabaseConfigured } from '../../api/src/config.js';
 import { getRepositories } from '../../api/src/repositories/index.js';
 import { getProjectOrThrow, saveProject, storeGeneratedFile } from '../../api/src/services/projects.js';
 import { getObjectStorage } from '../../api/src/storage/index.js';
@@ -18,6 +18,20 @@ const execFileAsync = promisify(execFile);
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const videoEntry = path.resolve(here, '../../../packages/video/src/entry.ts');
+const IDLE_HEARTBEAT_MS = 60_000;
+
+function assertJobStore(): void {
+  if (supabaseConfigured()) {
+    const host = new URL(config.supabaseUrl).host;
+    console.log(`Using Supabase job store at ${host}`);
+    return;
+  }
+  console.warn(`Using local file job store (${config.dataDir})`);
+  if (config.isProduction) {
+    console.error('Production worker requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.');
+    process.exit(1);
+  }
+}
 
 async function claimPipeline() {
   return getRepositories().pipelineJobs.claimNext(config.workerId);
@@ -135,12 +149,13 @@ async function failPipeline(jobId: string, error: unknown): Promise<void> {
   console.error('[worker] pipeline', jobId, message);
 }
 
-async function loop(): Promise<void> {
-  console.log(`Worker ${config.workerId} polling every ${config.workerPollMs}ms`);
+async function pipelineLoop(): Promise<void> {
+  let lastActivity = Date.now();
   for (;;) {
     try {
       const pipelineJob = await claimPipeline();
       if (pipelineJob) {
+        lastActivity = Date.now();
         console.log(`Claimed pipeline job ${pipelineJob.id} (${pipelineJob.kind})`);
         try {
           await runPipelineJob(pipelineJob);
@@ -148,11 +163,24 @@ async function loop(): Promise<void> {
         } catch (error) {
           await failPipeline(pipelineJob.id, error);
         }
-        continue;
+      } else if (Date.now() - lastActivity >= IDLE_HEARTBEAT_MS) {
+        console.log('[worker] pipeline loop: no queued jobs');
+        lastActivity = Date.now();
       }
+    } catch (error) {
+      console.error('[worker] pipeline poll error', error);
+    }
+    await new Promise((r) => setTimeout(r, config.workerPollMs));
+  }
+}
 
+async function renderLoop(): Promise<void> {
+  let lastActivity = Date.now();
+  for (;;) {
+    try {
       const job = await claimRender();
       if (job) {
+        lastActivity = Date.now();
         console.log(`Claimed render job ${job.id}`);
         try {
           await renderJob(job);
@@ -160,12 +188,25 @@ async function loop(): Promise<void> {
         } catch (error) {
           await failRender(job, error);
         }
+      } else if (Date.now() - lastActivity >= IDLE_HEARTBEAT_MS) {
+        console.log('[worker] render loop: no queued jobs');
+        lastActivity = Date.now();
       }
     } catch (error) {
-      console.error('[worker] poll error', error);
+      console.error('[worker] render poll error', error);
     }
     await new Promise((r) => setTimeout(r, config.workerPollMs));
   }
+}
+
+function start(): void {
+  assertJobStore();
+  healthCheck();
+  console.log(`Worker ${config.workerId} polling every ${config.workerPollMs}ms`);
+  Promise.all([pipelineLoop(), renderLoop()]).catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
 }
 
 async function muxOriginalAudio(
@@ -226,8 +267,4 @@ function healthCheck(): void {
     .catch(() => console.warn('ffmpeg not found. Install ffmpeg before rendering MP4s.'));
 }
 
-healthCheck();
-loop().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+start();
