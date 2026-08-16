@@ -6,6 +6,7 @@ import { api, ApiClientError } from '../lib/api';
 import { AudioPlayer } from '../components/AudioPlayer';
 import { HealthPanel } from '../components/HealthPanel';
 import { EmptyState } from '../components/EmptyState';
+import { WaitCard } from '../components/WaitCard';
 import { formatClockShort } from '../lib/time';
 import { SceneEditor } from '../components/SceneEditor';
 
@@ -42,6 +43,18 @@ export function StoryboardPage() {
           </div>
         ) : null}
         {error ? <div className="banner error">{error}</div> : null}
+        {busy ? (
+          <WaitCard
+            title="Cutting the storyboard"
+            expectedSeconds={Math.max(40, Math.round(project.durationSeconds * 0.35))}
+            stages={[
+              'Mapping verses, choruses, and turns…',
+              'Timing frozen moments to the song…',
+              'Writing the stills and camera moves…',
+              'Still directing — this is the long beat.',
+            ]}
+          />
+        ) : null}
         <div className="row" style={{ marginBottom: 14 }}>
           <button className="btn btn-primary" disabled={busy || !project.visualBibleApproved} onClick={() => void generate()}>
             {busy ? 'Creating storyboard…' : project.scenes.length ? 'Regenerate Storyboard' : 'Generate Storyboard'}

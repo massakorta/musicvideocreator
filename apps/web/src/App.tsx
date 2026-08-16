@@ -56,6 +56,7 @@ export function App() {
             <strong>{PRODUCT_NAME}</strong>
           </div>
           <p className="muted">Opening the director’s desk…</p>
+          <div className="boot-spinner" aria-hidden="true" />
         </div>
       </div>
     );

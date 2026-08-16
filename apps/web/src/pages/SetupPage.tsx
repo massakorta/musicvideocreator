@@ -4,6 +4,7 @@ import { useProject } from '../hooks/useProject';
 import { api, ApiClientError } from '../lib/api';
 import { useDebouncedCallback } from '../hooks/useDebouncedCallback';
 import { readAudioDurationInBrowser } from '../lib/time';
+import { WaitCard } from '../components/WaitCard';
 
 export function SetupPage() {
   const { project, setProject, reload, markSave } = useProject();
@@ -100,7 +101,13 @@ export function SetupPage() {
             {project.audio.filename} · {project.durationSeconds.toFixed(1)}s
           </p>
         ) : null}
-        {busy ? <p>Uploading…</p> : null}
+        {busy ? (
+          <WaitCard
+            title="Uploading the song"
+            expectedSeconds={12}
+            stages={['Reading the file…', 'Measuring duration…', 'Saving the master track…']}
+          />
+        ) : null}
       </div>
       <div className="field" style={{ marginTop: 18 }}>
         <label>Lyrics</label>

@@ -4,6 +4,7 @@ import { RENDER_JOB_STATUS_LABELS, type RenderJob } from '@music-video/shared';
 import { api, ApiClientError } from '../lib/api';
 import { useProject } from '../hooks/useProject';
 import { formatClockShort } from '../lib/time';
+import { WaitCard } from '../components/WaitCard';
 
 export function ResultPage() {
   const { jobId } = useParams();
@@ -27,7 +28,7 @@ export function ResultPage() {
         setJob(data.job);
         setError(null);
         if (data.job.status !== 'complete' && data.job.status !== 'failed') {
-          timer = window.setTimeout(() => void poll(), 2500);
+          timer = window.setTimeout(() => void poll(), 2000);
         }
       } catch (err) {
         if (cancelled) return;
@@ -55,7 +56,17 @@ export function ResultPage() {
     }
   }
 
-  if (!job && !error) return <div className="page">Loading render…</div>;
+  if (!job && !error) {
+    return (
+      <div className="page" style={{ maxWidth: 640 }}>
+        <WaitCard
+          title="Looking up the render"
+          expectedSeconds={8}
+          stages={['Checking the render queue…']}
+        />
+      </div>
+    );
+  }
 
   if (error && !job) {
     return (
@@ -87,13 +98,23 @@ export function ResultPage() {
   if (job && job.status !== 'complete') {
     return (
       <div className="page" style={{ maxWidth: 640 }}>
-        <h1>Rendering video</h1>
-        <p className="muted">{RENDER_JOB_STATUS_LABELS[job.status]}</p>
+        <WaitCard
+          title="Rendering the music video"
+          current={job.progress}
+          total={100}
+          expectedSeconds={Math.max(90, Math.round(project.durationSeconds * 4))}
+          detail={RENDER_JOB_STATUS_LABELS[job.status]}
+          stages={[
+            'Queuing the cut…',
+            'Preparing frames…',
+            'Rendering the Ken Burns moves…',
+            'Uploading the finished MP4…',
+          ]}
+        />
         {error ? <div className="banner warning">{error} Retrying…</div> : null}
-        <div className="progress" style={{ height: 10 }}>
-          <span style={{ width: `${job.progress}%` }} />
-        </div>
-        <p className="mono">{job.progress}%</p>
+        <p className="muted">
+          A {formatClockShort(project.durationSeconds)} song usually takes a few minutes. Keep this tab open.
+        </p>
       </div>
     );
   }

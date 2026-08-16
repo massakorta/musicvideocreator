@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { VISUAL_STYLE_PRESETS } from '@music-video/shared';
 import { useProject } from '../hooks/useProject';
 import { api, ApiClientError } from '../lib/api';
+import { WaitCard } from '../components/WaitCard';
 
 export function StylePage() {
   const { project, setProject } = useProject();
@@ -28,6 +29,13 @@ export function StylePage() {
     <div className="page">
       <p className="hero-copy">Pick the look. Every later still — bible, characters, and scenes — stays inside this world.</p>
       {error ? <div className="banner error">{error}</div> : null}
+      {busyId ? (
+        <WaitCard
+          title="Locking the look"
+          expectedSeconds={6}
+          stages={['Saving the style so every later still stays in this world…']}
+        />
+      ) : null}
       <div className="style-grid">
         {VISUAL_STYLE_PRESETS.map((style) => (
           <button

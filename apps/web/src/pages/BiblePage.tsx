@@ -4,6 +4,7 @@ import type { VisualBible } from '@music-video/shared';
 import { useProject, useSession } from '../hooks/useProject';
 import { api, ApiClientError } from '../lib/api';
 import { HealthPanel } from '../components/HealthPanel';
+import { WaitCard } from '../components/WaitCard';
 import { useDebouncedCallback } from '../hooks/useDebouncedCallback';
 
 export function BiblePage() {
@@ -66,6 +67,18 @@ export function BiblePage() {
         <p className="hero-copy">
           This is the film’s look-book. Generate it, tweak the people, then approve so the storyboard can start.
         </p>
+        {busy ? (
+          <WaitCard
+            title={bible ? 'Rewriting the visual bible' : 'Creating the visual bible'}
+            expectedSeconds={35}
+            stages={[
+              'Reading the lyrics and style…',
+              'Casting characters and locations…',
+              'Locking colors, clothes, and continuity…',
+              'Still writing — long songs take a little longer.',
+            ]}
+          />
+        ) : null}
         <div className="row" style={{ marginBottom: 16 }}>
           <button className="btn btn-primary" onClick={() => void generate()} disabled={busy}>
             {busy ? 'Creating visual bible…' : bible ? 'Regenerate Visual Bible' : 'Generate Visual Bible'}
@@ -81,7 +94,7 @@ export function BiblePage() {
             </>
           ) : null}
         </div>
-        {busy && !bible ? <div className="skeleton" style={{ height: 240 }} /> : null}
+        {busy && !bible ? <div className="skeleton" style={{ height: 180 }} /> : null}
         {bible ? (
           <BibleEditor />
         ) : (

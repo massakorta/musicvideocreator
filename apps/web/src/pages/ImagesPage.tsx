@@ -7,17 +7,59 @@ import { formatClockShort } from '../lib/time';
 import { HealthPanel } from '../components/HealthPanel';
 import { EmptyState } from '../components/EmptyState';
 import { SceneEditor } from '../components/SceneEditor';
+import { WaitCard } from '../components/WaitCard';
 
 export function ImagesPage() {
   const { project, setProject, health, reload } = useProject();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [batch, setBatch] = useState({ done: 0, total: 0, title: '' });
+  const [singleTitle, setSingleTitle] = useState<string | null>(null);
   const navigate = useNavigate();
   const missingRefs = missingCharacterReferences(project.scenes, project.visualBible);
   const selected = project.scenes.find((s) => s.id === selectedId);
   const generatingCount = project.scenes.filter((s) => s.generationState === 'generating').length;
   const completeCount = project.scenes.filter((s) => s.currentAssetId || s.image).length;
+
+  async function generateMissing() {
+    const missing = project.scenes.filter((scene) => !scene.approved && !scene.currentAssetId && scene.generationState !== 'generating');
+    if (missing.length === 0) return;
+    setBusy(true);
+    setError(null);
+    setBatch({ done: 0, total: missing.length, title: missing[0]?.title ?? '' });
+    let cursor = 0;
+    let failures = 0;
+    async function worker() {
+      while (cursor < missing.length) {
+        const index = cursor;
+        cursor += 1;
+        const scene = missing[index];
+        if (!scene) return;
+        setBatch((current) => ({ ...current, title: scene.title }));
+        try {
+          const data = await api.generateSceneImage(project.id, scene.id);
+          setProject(data.project);
+        } catch (err) {
+          failures += 1;
+          setError(
+            err instanceof ApiClientError
+              ? err.message
+              : `Scene ${scene.order} could not be generated. The rest will keep going.`,
+          );
+          await reload();
+        }
+        setBatch((current) => ({ ...current, done: current.done + 1 }));
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(2, missing.length) }, () => worker()));
+    await reload();
+    if (failures > 0) {
+      setError(`${failures} still${failures === 1 ? '' : 's'} failed. Retry those cards, or generate missing again.`);
+    }
+    setBusy(false);
+    setBatch({ done: 0, total: 0, title: '' });
+  }
 
   useEffect(() => {
     if (generatingCount === 0) return;
@@ -37,29 +79,33 @@ export function ImagesPage() {
           </div>
         ) : null}
         {error ? <div className="banner error">{error}</div> : null}
-        {busy || generatingCount > 0 ? (
-          <div className="banner">
-            Generating stills — {completeCount} of {project.scenes.length} ready
-            {generatingCount > 0 ? ` · ${generatingCount} in flight` : ''}
-          </div>
+        {busy || generatingCount > 0 || singleTitle ? (
+          <WaitCard
+            title={singleTitle && !busy ? 'Painting one still' : 'Painting scene stills'}
+            current={busy ? batch.done : singleTitle ? undefined : completeCount}
+            total={busy ? batch.total : singleTitle ? undefined : project.scenes.length}
+            expectedSeconds={
+              singleTitle && !busy
+                ? 22
+                : Math.max(20, (busy ? batch.total - batch.done : project.scenes.length - completeCount) * 18)
+            }
+            detail={
+              batch.title
+                ? `Painting “${batch.title}”…`
+                : singleTitle
+                  ? `Painting “${singleTitle}”…`
+                  : generatingCount > 0
+                    ? `${generatingCount} stills in flight`
+                    : 'Starting the first still…'
+            }
+            stages={['Each still takes about 15–25 seconds. Keep this tab open.']}
+          />
         ) : null}
         <div className="row" style={{ marginBottom: 14 }}>
           <button
             className="btn btn-primary"
-            disabled={busy || project.scenes.length === 0}
-            onClick={async () => {
-              setBusy(true);
-              setError(null);
-              try {
-                const data = await api.generateMissing(project.id);
-                setProject(data.project);
-              } catch (err) {
-                setError(err instanceof ApiClientError ? err.message : 'Batch generation failed.');
-                await reload();
-              } finally {
-                setBusy(false);
-              }
-            }}
+            disabled={busy || project.scenes.length === 0 || completeCount === project.scenes.length}
+            onClick={() => void generateMissing()}
           >
             {busy ? 'Generating stills…' : 'Generate Missing Images'}
           </button>
@@ -106,7 +152,10 @@ export function ImagesPage() {
                   <div className="row" style={{ marginTop: 10, flexWrap: 'wrap' }}>
                     <button
                       className="btn"
+                      disabled={busy || Boolean(singleTitle)}
                       onClick={async () => {
+                        setSingleTitle(scene.title);
+                        setError(null);
                         try {
                           const data = await api.generateSceneImage(project.id, scene.id);
                           setProject(data.project);
@@ -117,6 +166,8 @@ export function ImagesPage() {
                               : `Scene ${scene.order} could not be generated. The image provider returned an error.`,
                           );
                           await reload();
+                        } finally {
+                          setSingleTitle(null);
                         }
                       }}
                     >
