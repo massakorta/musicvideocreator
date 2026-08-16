@@ -7,11 +7,13 @@ import {
   patchSceneBodySchema,
   patchVisualBibleBodySchema,
   reorderScenesBodySchema,
+  sunoImportBodySchema,
   validateSceneTiming,
   VISUAL_STYLE_PRESETS,
 } from '@music-video/shared';
 import { asyncHandler, param } from '../middleware/errorHandler.js';
 import { readAudioDuration, sanitizeFilename, validateAudioUpload } from '../services/audio.js';
+import { importSunoTrack } from '../services/suno.js';
 import { generateProjectStoryboard, generateProjectVisualBible, patchVisualBible } from '../services/aiService.js';
 import {
   approveCharacterReference,
@@ -156,6 +158,46 @@ apiRouter.post(
       lyricAlignment: undefined,
     });
     res.json({ project: saved, asset, durationDetected: Boolean(duration) });
+  }),
+);
+
+apiRouter.post(
+  '/projects/:id/audio/suno',
+  asyncHandler(async (req, res) => {
+    const { url } = sunoImportBodySchema.parse(req.body);
+    const project = await getProjectOrThrow(param(req, 'id'));
+    const imported = await importSunoTrack(url);
+    const duration = await readAudioDuration(imported.buffer, 'audio/mpeg');
+    const asset = await storeGeneratedFile({
+      projectId: project.id,
+      type: 'audio',
+      source: 'upload',
+      filename: imported.filename,
+      body: imported.buffer,
+      mimeType: 'audio/mpeg',
+      durationSeconds: duration,
+      metadata: {
+        sunoUrl: imported.sunoUrl,
+        sunoId: imported.songId,
+        title: imported.title,
+        resolvedUrl: imported.resolvedUrl,
+      },
+    });
+    const saved = await saveProject({
+      ...project,
+      audio: {
+        url: asset.publicUrl,
+        filename: imported.filename,
+        durationSeconds: duration ?? project.durationSeconds,
+        mimeType: asset.mimeType,
+        assetId: asset.id,
+      },
+      durationSeconds: duration ?? project.durationSeconds,
+      songTitle: project.songTitle || imported.title,
+      lyrics: '',
+      lyricAlignment: undefined,
+    });
+    res.json({ project: saved, asset, durationDetected: Boolean(duration), title: imported.title });
   }),
 );
 

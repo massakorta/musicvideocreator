@@ -585,6 +585,45 @@ h3 {
   background: rgba(228, 184, 74, 0.08);
 }
 
+.intake-suno-mark {
+  width: 148px;
+  height: 148px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 56px;
+  font-weight: 700;
+  font-style: italic;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 50% 35%, rgba(228, 184, 74, 0.35), transparent 55%),
+    linear-gradient(145deg, #2a2218, #14100c);
+  box-shadow:
+    inset 0 0 0 1px rgba(241, 215, 176, 0.18),
+    0 16px 36px rgba(0, 0, 0, 0.45);
+}
+
+.intake-suno-form {
+  display: grid;
+  gap: 10px;
+  width: min(100%, 320px);
+}
+
+.intake-suno-input {
+  width: 100%;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--ink);
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.intake-suno-input:focus {
+  outline: none;
+  border-color: rgba(228, 184, 74, 0.55);
+}
+
 .intake-disc {
   width: 148px;
   height: 148px;

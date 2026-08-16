@@ -4,7 +4,7 @@ import { useProject } from '../hooks/useProject';
 import { api, ApiClientError } from '../lib/api';
 import { useDebouncedCallback } from '../hooks/useDebouncedCallback';
 import { formatClockShort, readAudioDurationInBrowser, titleFromFilename } from '../lib/time';
-import { WaitCard } from '../components/WaitCard';
+import { SongIntake } from '../components/SongIntake';
 
 export function SetupPage() {
   const { project, setProject, reload, markSave } = useProject();
@@ -12,7 +12,7 @@ export function SetupPage() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [dragOver, setDragOver] = useState(false);
+  const [sunoUrl, setSunoUrl] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -47,8 +47,29 @@ export function SetupPage() {
         autosave({ name: nextName });
       }
       setMessage(`Uploaded ${file.name}`);
+      setSunoUrl('');
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : 'Audio upload failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onSunoImport(url: string) {
+    setBusy(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const data = await api.importSunoAudio(project.id, url);
+      setProject(data.project);
+      if (data.title && (!name.trim() || name === 'Untitled film')) {
+        setName(data.title);
+        autosave({ name: data.title });
+      }
+      setMessage(`Imported ${data.title ?? 'song'} from Suno`);
+      setSunoUrl(url);
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : 'Suno import failed.');
     } finally {
       setBusy(false);
     }
@@ -61,50 +82,23 @@ export function SetupPage() {
       <p className="hero-copy">
         The song is the clock. When you generate, we listen to the track and line up scenes to the vocals.
       </p>
-      <div
-        className={`intake-well ${dragOver ? 'dragover' : ''} ${project.audio ? 'ready' : ''}`}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragOver(true);
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragOver(false);
-          const file = e.dataTransfer.files[0];
-          if (file) void onFile(file);
-        }}
-      >
-        <div className={`intake-disc ${project.audio ? 'ready' : ''}`} aria-hidden="true" />
-        <div>
-          <strong>{project.audio ? 'Master loaded' : 'The song'}</strong>
-          <p className="muted">
-            {project.audio
-              ? `${project.audio.filename} · ${formatClockShort(project.durationSeconds)}`
-              : 'Drop an MP3, WAV, or M4A here.'}
-          </p>
-        </div>
-        <label className="btn">
-          {project.audio ? 'Replace song' : 'Choose audio file'}
-          <input
-            hidden
-            type="file"
-            accept=".mp3,.wav,.m4a,audio/mpeg,audio/wav,audio/mp4"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              e.target.value = '';
-              if (file) void onFile(file);
-            }}
-          />
-        </label>
-        {busy ? (
-          <WaitCard
-            title="Uploading the song"
-            expectedSeconds={12}
-            stages={['Reading the file…', 'Measuring duration…', 'Saving the master track…']}
-          />
-        ) : null}
-      </div>
+      <SongIntake
+        busy={busy}
+        waitTitle="Importing from Suno"
+        waitStages={['Resolving the Suno link…', 'Downloading the MP3…', 'Saving the master track…']}
+        loaded={
+          project.audio
+            ? {
+                label: project.audio.filename,
+                detail: `${project.audio.filename} · ${formatClockShort(project.durationSeconds)}`,
+              }
+            : undefined
+        }
+        onFileSelect={onFile}
+        onSunoImport={onSunoImport}
+        sunoUrl={sunoUrl}
+        onSunoUrlChange={setSunoUrl}
+      />
       <div className="field" style={{ marginTop: 18 }}>
         <label>Film title</label>
         <input

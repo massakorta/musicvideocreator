@@ -215,3 +215,7 @@ export const reorderScenesBodySchema = z.object({
 export const clientDurationBodySchema = z.object({
   durationSeconds: z.number().positive(),
 });
+
+export const sunoImportBodySchema = z.object({
+  url: z.string().min(8).max(500),
+});

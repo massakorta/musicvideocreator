@@ -101,6 +101,15 @@ export const api = {
       { method: 'POST', body, headers: {} },
     );
   },
+  importSunoAudio: (id: string, url: string) =>
+    request<{
+      project: import('@music-video/shared').MusicVideoProject;
+      durationDetected: boolean;
+      title?: string;
+    }>(`/api/projects/${id}/audio/suno`, {
+      method: 'POST',
+      body: JSON.stringify({ url }),
+    }),
   setDuration: (id: string, durationSeconds: number) =>
     request(`/api/projects/${id}/duration`, { method: 'POST', body: JSON.stringify({ durationSeconds }) }),
   generateBible: (id: string) =>
