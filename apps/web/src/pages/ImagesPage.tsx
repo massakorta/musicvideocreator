@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { GENERATION_STATE_LABELS, MOTION_PRESET_LABELS, missingCharacterReferences } from '@music-video/shared';
 import { useProject } from '../hooks/useProject';
@@ -8,6 +8,7 @@ import { HealthPanel } from '../components/HealthPanel';
 import { EmptyState } from '../components/EmptyState';
 import { SceneEditor } from '../components/SceneEditor';
 import { CardWaitOverlay, WaitCard } from '../components/WaitCard';
+import { mergeProjectFromServer, scenesMissingImages } from '../lib/mergeProject';
 
 const IMAGE_GENERATION_CONCURRENCY = 6;
 
@@ -22,13 +23,32 @@ export function ImagesPage() {
   const [queuedIds, setQueuedIds] = useState<string[]>([]);
   const [regenerating, setRegenerating] = useState(false);
   const navigate = useNavigate();
+  const projectRef = useRef(project);
+  useEffect(() => {
+    projectRef.current = project;
+  }, [project]);
   const missingRefs = missingCharacterReferences(project.scenes, project.visualBible);
   const selected = project.scenes.find((s) => s.id === selectedId);
-  const generatingCount = project.scenes.filter((s) => s.generationState === 'generating').length;
+  const generatingCount = project.scenes.filter(
+    (s) => s.generationState === 'generating' && !s.currentAssetId && !s.image,
+  ).length;
   const completeCount = project.scenes.filter((s) => s.currentAssetId || s.image).length;
 
+  function applyProjectUpdate(incoming: typeof project) {
+    const merged = mergeProjectFromServer(projectRef.current, incoming);
+    projectRef.current = merged;
+    setProject(merged);
+  }
+
+  function sceneIsActivelyPainting(scene: (typeof project.scenes)[number]): boolean {
+    return (
+      paintingIds.includes(scene.id) ||
+      (scene.generationState === 'generating' && !scene.currentAssetId && !scene.image)
+    );
+  }
+
   async function generateMissing() {
-    const missing = project.scenes.filter((scene) => !scene.approved && !scene.currentAssetId && scene.generationState !== 'generating');
+    const missing = scenesMissingImages(project.scenes);
     if (missing.length === 0) return;
     setBusy(true);
     setError(null);
@@ -48,7 +68,7 @@ export function ImagesPage() {
         setBatch((current) => ({ ...current, title: scene.title }));
         try {
           const data = await api.generateSceneImage(project.id, scene.id);
-          setProject(data.project);
+          applyProjectUpdate(data.project);
         } catch (err) {
           failures += 1;
           setError(
@@ -166,7 +186,7 @@ export function ImagesPage() {
                   {scene.image?.publicUrl ? (
                     <img src={scene.image.publicUrl} alt={scene.title} />
                   ) : null}
-                  {paintingIds.includes(scene.id) || scene.generationState === 'generating' ? (
+                  {sceneIsActivelyPainting(scene) ? (
                     <CardWaitOverlay label="Painting now" ticking />
                   ) : queuedIds.includes(scene.id) ? (
                     <CardWaitOverlay label="In queue" />
@@ -186,14 +206,14 @@ export function ImagesPage() {
                           ? 'error'
                           : scene.generationState === 'complete' || scene.image
                             ? 'success'
-                            : paintingIds.includes(scene.id) || scene.generationState === 'generating'
+                            : sceneIsActivelyPainting(scene)
                               ? 'warning'
                               : ''
                     }`}
                   >
                     {stale?.staleSceneIds.includes(scene.id)
                       ? 'Inaktuell'
-                      : paintingIds.includes(scene.id) || scene.generationState === 'generating'
+                      : sceneIsActivelyPainting(scene)
                         ? 'Painting'
                         : queuedIds.includes(scene.id)
                           ? 'In queue'
@@ -210,7 +230,7 @@ export function ImagesPage() {
                         setError(null);
                         try {
                           const data = await api.generateSceneImage(project.id, scene.id);
-                          setProject(data.project);
+                          applyProjectUpdate(data.project);
                         } catch (err) {
                           setError(
                             err instanceof ApiClientError

@@ -9,7 +9,13 @@ import {
   saveProject,
   storeGeneratedFile,
   styleOrThrow,
+  updateProjectDocument,
 } from './projects.js';
+import {
+  releaseSceneGeneration,
+  tryAcquireSceneGeneration,
+} from './sceneGenerationLock.js';
+import { replaceScenes } from './projectUtils.js';
 
 export async function generateCharacterReference(projectId: string, characterId: string, force = false) {
   const project = await getProjectOrThrow(projectId);
@@ -105,24 +111,38 @@ export async function generateSceneImage(projectId: string, sceneId: string) {
   if (!project.visualBible) {
     throw new AppError(ERROR_CODES.VALIDATION, 'Approve a visual bible first.', 400);
   }
+  if (scene.currentAssetId) {
+    return { project, asset: scene.image, demo: scene.image?.source === 'demo' };
+  }
+  if (!tryAcquireSceneGeneration(projectId, sceneId)) {
+    throw new AppError(
+      ERROR_CODES.CONFLICT,
+      'This scene is already being generated. Wait a moment, then retry.',
+      409,
+    );
+  }
+
   const style = styleOrThrow(project.styleId);
-  const generating = await saveProject({
-    ...project,
-    scenes: project.scenes.map((s) =>
-      s.id === sceneId ? { ...s, generationState: 'generating', generationError: undefined } : s,
-    ),
-  });
 
   try {
+    await updateProjectDocument(projectId, (latest) =>
+      replaceScenes(
+        latest,
+        latest.scenes.map((s) =>
+          s.id === sceneId ? { ...s, generationState: 'generating', generationError: undefined } : s,
+        ),
+      ),
+    );
+
     const provider = createImageProvider();
     let body: Buffer;
     let mimeType = 'image/svg+xml';
     let source: 'ai' | 'demo' = 'demo';
     if (provider && requireOpenAiOrDemo() === 'live') {
-      const refs = referenceUrls(generating.visualBible!.characters, scene.characters);
+      const refs = referenceUrls(project.visualBible!.characters, scene.characters);
       const image = await provider.generateSceneImage({
         scene,
-        bible: generating.visualBible!,
+        bible: project.visualBible!,
         style,
         referenceImages: refs,
       });
@@ -137,6 +157,7 @@ export async function generateSceneImage(projectId: string, sceneId: string) {
         secondary: style.secondary,
       });
     }
+
     const asset = await storeGeneratedFile({
       projectId,
       type: 'scene_image',
@@ -148,44 +169,55 @@ export async function generateSceneImage(projectId: string, sceneId: string) {
       height: 1080,
       metadata: { sceneId },
     });
-    const latest = await getProjectOrThrow(projectId);
-    const saved = await attachAssetToScene(latest, sceneId, asset);
+
+    let saved = await attachAssetToScene(await getProjectOrThrow(projectId), sceneId, asset);
     const sceneAfter = saved.scenes.find((s) => s.id === sceneId);
     if (sceneAfter) {
       const fp = sceneImageFingerprint(sceneAfter, saved);
-      const scenes = saved.scenes.map((s) => (s.id === sceneId ? { ...s, imageFingerprint: fp } : s));
-      await saveProject({ ...saved, scenes });
+      saved = await updateProjectDocument(projectId, (latest) =>
+        replaceScenes(
+          latest,
+          latest.scenes.map((s) => (s.id === sceneId ? { ...s, imageFingerprint: fp } : s)),
+        ),
+      );
+      saved = await getProjectOrThrow(projectId);
     }
-    return { project: await getProjectOrThrow(projectId), asset, demo: source === 'demo' };
+
+    return { project: saved, asset, demo: source === 'demo' };
   } catch (error) {
-    const latest = await getProjectOrThrow(projectId).catch(() => generating);
-    await saveProject({
-      ...latest,
-      scenes: latest.scenes.map((s) =>
-        s.id === sceneId
-          ? {
-              ...s,
-              generationState: 'failed',
-              generationError:
-                error instanceof AppError
-                  ? error.message
-                  : `Scene ${scene.order} could not be generated. The image provider returned an error.`,
-            }
-          : s,
+    await updateProjectDocument(projectId, (latest) =>
+      replaceScenes(
+        latest,
+        latest.scenes.map((s) =>
+          s.id === sceneId && !s.currentAssetId
+            ? {
+                ...s,
+                generationState: 'failed',
+                generationError:
+                  error instanceof AppError
+                    ? error.message
+                    : `Scene ${scene.order} could not be generated. The image provider returned an error.`,
+              }
+            : s,
+        ),
       ),
-    });
+    ).catch(() => undefined);
+
     if (error instanceof AppError) throw error;
     throw new AppError(
       ERROR_CODES.IMAGE_FAILED,
       `Scene ${scene.order} could not be generated. The image provider returned an error.`,
       502,
+      error instanceof Error ? error.message : undefined,
     );
+  } finally {
+    releaseSceneGeneration(projectId, sceneId);
   }
 }
 
 export async function generateMissingImages(projectId: string) {
   const project = await getProjectOrThrow(projectId);
-  const missing = project.scenes.filter((s) => !s.approved && !s.currentAssetId && s.generationState !== 'generating');
+  const missing = project.scenes.filter((s) => !s.approved && !s.currentAssetId);
   const concurrency = Math.max(1, config.imageConcurrency);
   let cursor = 0;
   let latest = project;
@@ -200,7 +232,7 @@ export async function generateMissingImages(projectId: string) {
     }
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, missing.length) }, () => worker()));
-  return latest;
+  return getProjectOrThrow(projectId);
 }
 
 function referenceUrls(characters: CharacterDefinition[], ids: string[]) {

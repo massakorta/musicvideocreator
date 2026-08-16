@@ -6,10 +6,14 @@ export interface OpenAiConfig {
   apiKey: string;
   textModel: string;
   imageModel: string;
+  timeoutMs?: number;
 }
 
 export function createOpenAiClient(config: OpenAiConfig): OpenAI {
-  return new OpenAI({ apiKey: config.apiKey });
+  return new OpenAI({
+    apiKey: config.apiKey,
+    timeout: config.timeoutMs,
+  });
 }
 
 export async function completeStructured<T>(

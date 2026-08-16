@@ -9,6 +9,7 @@ import {
   pipelineProgressFromJob,
   PROJECT_STATUS_LABELS,
   reindexScenes,
+  type GenerationState,
   type MusicVideoProject,
   type ProjectStatus,
   type ProjectSummary,
@@ -69,6 +70,91 @@ export function applyScenePatch(scene: StoryboardScene, patch: ScenePatch): Stor
 
 export function replaceScenes(project: MusicVideoProject, scenes: StoryboardScene[]): MusicVideoProject {
   return touch(project, { scenes: reindexScenes(scenes) });
+}
+
+const GENERATION_RANK: Record<GenerationState, number> = {
+  pending: 0,
+  generating: 1,
+  failed: 2,
+  complete: 3,
+};
+
+/** Prefer the scene row that already has a finished still attached. */
+export function mergeSceneState(previous: StoryboardScene, incoming: StoryboardScene): StoryboardScene {
+  const previousComplete = Boolean(previous.currentAssetId) || previous.generationState === 'complete';
+  const incomingComplete = Boolean(incoming.currentAssetId) || incoming.generationState === 'complete';
+
+  if (previousComplete && !incomingComplete) {
+    return {
+      ...incoming,
+      currentAssetId: previous.currentAssetId ?? incoming.currentAssetId,
+      image: previous.image ?? incoming.image,
+      previousAssetIds:
+        previous.previousAssetIds.length >= incoming.previousAssetIds.length
+          ? previous.previousAssetIds
+          : incoming.previousAssetIds,
+      generationState: 'complete',
+      generationError: undefined,
+      imageFingerprint: previous.imageFingerprint ?? incoming.imageFingerprint,
+    };
+  }
+
+  if (
+    previous.currentAssetId &&
+    incoming.currentAssetId &&
+    previous.currentAssetId !== incoming.currentAssetId &&
+    GENERATION_RANK[incoming.generationState] >= GENERATION_RANK[previous.generationState]
+  ) {
+    return incoming;
+  }
+
+  if (previous.currentAssetId && !incoming.currentAssetId) {
+    return {
+      ...incoming,
+      currentAssetId: previous.currentAssetId,
+      image: previous.image,
+      previousAssetIds:
+        previous.previousAssetIds.length >= incoming.previousAssetIds.length
+          ? previous.previousAssetIds
+          : incoming.previousAssetIds,
+      generationState: previous.generationState === 'complete' ? 'complete' : incoming.generationState,
+      generationError: previous.generationState === 'complete' ? undefined : incoming.generationError,
+      imageFingerprint: previous.imageFingerprint ?? incoming.imageFingerprint,
+    };
+  }
+
+  if (
+    GENERATION_RANK[previous.generationState] > GENERATION_RANK[incoming.generationState] &&
+    incoming.generationState !== 'failed'
+  ) {
+    return {
+      ...incoming,
+      generationState: previous.generationState,
+      generationError: previous.generationError,
+      currentAssetId: previous.currentAssetId ?? incoming.currentAssetId,
+      image: previous.image ?? incoming.image,
+      previousAssetIds:
+        previous.previousAssetIds.length >= incoming.previousAssetIds.length
+          ? previous.previousAssetIds
+          : incoming.previousAssetIds,
+      imageFingerprint: previous.imageFingerprint ?? incoming.imageFingerprint,
+    };
+  }
+
+  return incoming;
+}
+
+/** Merge concurrent project writes so completed stills are never dropped. */
+export function mergeProjectDocuments(
+  current: MusicVideoProject,
+  incoming: MusicVideoProject,
+): MusicVideoProject {
+  const previousScenes = new Map(current.scenes.map((scene) => [scene.id, scene]));
+  const mergedScenes = incoming.scenes.map((scene) => {
+    const previous = previousScenes.get(scene.id);
+    return previous ? mergeSceneState(previous, scene) : scene;
+  });
+  return { ...incoming, scenes: mergedScenes };
 }
 
 export { PROJECT_STATUS_LABELS };

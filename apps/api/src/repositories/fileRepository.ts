@@ -1,7 +1,8 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { AiUsageLog, AssetRecord, PipelineJob, RenderJob } from '@music-video/shared';
+import type { AiUsageLog, AssetRecord, MusicVideoProject, PipelineJob, RenderJob } from '@music-video/shared';
 import { config } from '../config.js';
+import { deriveStatus, mergeProjectDocuments, nowIso } from '../services/projectUtils.js';
 import type { AppDatabase, Repositories } from './types.js';
 
 const dbPath = path.join(config.dataDir, 'store', 'db.json');
@@ -37,6 +38,14 @@ async function writeDb(mutator: (db: AppDatabase) => void | Promise<void>): Prom
   return run;
 }
 
+function finalizeProject(project: MusicVideoProject): MusicVideoProject {
+  project.status = deriveStatus(project);
+  project.updatedAt = nowIso();
+  project.thumbnailUrl =
+    project.scenes.find((scene) => scene.image?.publicUrl)?.image?.publicUrl ?? project.thumbnailUrl;
+  return project;
+}
+
 export function createFileRepositories(): Repositories {
   return {
     projects: {
@@ -57,6 +66,22 @@ export function createFileRepositories(): Repositories {
           db.projects[project.id] = project;
         });
         return project;
+      },
+      async updateDocument(id, mutator) {
+        let updated: MusicVideoProject | null = null;
+        await writeDb((db) => {
+          const current = db.projects[id];
+          if (!current) {
+            throw new Error(`Project ${id} not found`);
+          }
+          const next = finalizeProject(mutator(structuredClone(current)));
+          updated = mergeProjectDocuments(current, next);
+          db.projects[id] = updated;
+        });
+        if (!updated) {
+          throw new Error(`Project ${id} not found`);
+        }
+        return updated;
       },
       async delete(id) {
         await writeDb((db) => {

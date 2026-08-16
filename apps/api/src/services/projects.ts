@@ -18,6 +18,7 @@ import {
 import { getRepositories } from '../repositories/index.js';
 import { getObjectStorage } from '../storage/index.js';
 import { applyScenePatch, deriveStatus, newId, nowIso, replaceScenes, toSummary, touch } from './projectUtils.js';
+import { isSceneGenerationActive } from './sceneGenerationLock.js';
 
 export async function listProjects(): Promise<ProjectSummary[]> {
   const projects = await getRepositories().projects.list();
@@ -44,7 +45,15 @@ export async function getProjectOrThrow(id: string): Promise<MusicVideoProject> 
   if (!project) {
     throw new AppError(ERROR_CODES.NOT_FOUND, 'That project could not be found.', 404);
   }
-  return hydrateAssets(project);
+  const repaired = await repairProjectDocument(project);
+  return hydrateAssets(repaired);
+}
+
+export async function updateProjectDocument(
+  projectId: string,
+  mutator: (project: MusicVideoProject) => MusicVideoProject,
+): Promise<MusicVideoProject> {
+  return getRepositories().projects.updateDocument(projectId, mutator);
 }
 
 export async function createProject(input: unknown): Promise<MusicVideoProject> {
@@ -238,36 +247,39 @@ export async function attachAssetToScene(
   sceneId: string,
   asset: AssetRecord,
 ): Promise<MusicVideoProject> {
-  const generated: GeneratedAsset = {
-    id: asset.id,
-    projectId: asset.projectId,
-    type: asset.type,
-    source: asset.source,
-    storagePath: asset.storagePath,
-    publicUrl: asset.publicUrl,
-    mimeType: asset.mimeType,
-    width: asset.width,
-    height: asset.height,
-    durationSeconds: asset.durationSeconds,
-    fileSizeBytes: asset.fileSizeBytes,
-    metadata: asset.metadata,
-    createdAt: asset.createdAt,
-  };
-  const scenes = project.scenes.map((scene) => {
-    if (scene.id !== sceneId) return scene;
-    const previous = scene.currentAssetId
-      ? [...new Set([...scene.previousAssetIds, scene.currentAssetId])]
-      : scene.previousAssetIds;
-    return {
-      ...scene,
-      image: generated,
-      currentAssetId: asset.id,
-      previousAssetIds: previous,
-      generationState: 'complete' as const,
-      generationError: undefined,
+  const attached = await updateProjectDocument(project.id, (latest) => {
+    const generated: GeneratedAsset = {
+      id: asset.id,
+      projectId: asset.projectId,
+      type: asset.type,
+      source: asset.source,
+      storagePath: asset.storagePath,
+      publicUrl: asset.publicUrl,
+      mimeType: asset.mimeType,
+      width: asset.width,
+      height: asset.height,
+      durationSeconds: asset.durationSeconds,
+      fileSizeBytes: asset.fileSizeBytes,
+      metadata: asset.metadata,
+      createdAt: asset.createdAt,
     };
+    const scenes = latest.scenes.map((scene) => {
+      if (scene.id !== sceneId) return scene;
+      const previous = scene.currentAssetId
+        ? [...new Set([...scene.previousAssetIds, scene.currentAssetId])]
+        : scene.previousAssetIds;
+      return {
+        ...scene,
+        image: generated,
+        currentAssetId: asset.id,
+        previousAssetIds: previous,
+        generationState: 'complete' as const,
+        generationError: undefined,
+      };
+    });
+    return replaceScenes(latest, scenes);
   });
-  return saveProject(replaceScenes(project, scenes));
+  return hydrateAssets(attached);
 }
 
 export async function restoreSceneAsset(projectId: string, sceneId: string, assetId: string): Promise<MusicVideoProject> {
@@ -287,6 +299,70 @@ export function styleOrThrow(styleId: string | undefined) {
 }
 
 export { computeProjectHealth };
+
+async function repairProjectDocument(project: MusicVideoProject): Promise<MusicVideoProject> {
+  const assets = await getRepositories().assets.listByProject(project.id);
+  const latestSceneAssets = new Map<string, AssetRecord>();
+  for (const asset of assets) {
+    if (asset.type !== 'scene_image') continue;
+    const sceneId = typeof asset.metadata?.sceneId === 'string' ? asset.metadata.sceneId : undefined;
+    if (!sceneId) continue;
+    const existing = latestSceneAssets.get(sceneId);
+    if (!existing || asset.createdAt.localeCompare(existing.createdAt) > 0) {
+      latestSceneAssets.set(sceneId, asset);
+    }
+  }
+
+  let changed = false;
+  for (const scene of project.scenes) {
+    if (!scene.currentAssetId && latestSceneAssets.has(scene.id)) {
+      changed = true;
+      break;
+    }
+    if (
+      scene.generationState === 'generating' &&
+      !scene.currentAssetId &&
+      !isSceneGenerationActive(project.id, scene.id)
+    ) {
+      changed = true;
+      break;
+    }
+  }
+
+  if (!changed) return project;
+  return updateProjectDocument(project.id, (latest) => {
+    const repairedScenes = latest.scenes.map((scene) => {
+      let next = scene;
+
+      if (!next.currentAssetId) {
+        const asset = latestSceneAssets.get(scene.id);
+        if (asset) {
+          next = {
+            ...next,
+            currentAssetId: asset.id,
+            generationState: 'complete' as const,
+            generationError: undefined,
+          };
+        }
+      }
+
+      if (
+        next.generationState === 'generating' &&
+        !next.currentAssetId &&
+        !isSceneGenerationActive(project.id, scene.id)
+      ) {
+        next = {
+          ...next,
+          generationState: 'pending' as const,
+          generationError: undefined,
+        };
+      }
+
+      return next;
+    });
+    return replaceScenes(latest, repairedScenes);
+  });
+}
 
 async function hydrateAssets(project: MusicVideoProject): Promise<MusicVideoProject> {
   const assets = await getRepositories().assets.listByProject(project.id);

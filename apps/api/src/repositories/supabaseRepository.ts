@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { AiUsageLog, AssetRecord, MusicVideoProject, PipelineJob, RenderJob } from '@music-video/shared';
 import { config } from '../config.js';
+import { deriveStatus, mergeProjectDocuments, nowIso } from '../services/projectUtils.js';
 import type { Repositories } from './types.js';
 
 interface ProjectRow {
@@ -192,6 +193,14 @@ function pipelineJobToRow(job: PipelineJob) {
   };
 }
 
+function finalizeProject(project: MusicVideoProject): MusicVideoProject {
+  project.status = deriveStatus(project);
+  project.updatedAt = nowIso();
+  project.thumbnailUrl =
+    project.scenes.find((scene) => scene.image?.publicUrl)?.image?.publicUrl ?? project.thumbnailUrl;
+  return project;
+}
+
 export function createSupabaseRepositories(): Repositories {
   const client: SupabaseClient = createClient(config.supabaseUrl, config.supabaseServiceRoleKey, {
     auth: { persistSession: false },
@@ -221,6 +230,32 @@ export function createSupabaseRepositories(): Repositories {
         const { error } = await client.from('video_projects').upsert(projectToRow(project));
         if (error) throw error;
         return project;
+      },
+      async updateDocument(id, mutator) {
+        const maxAttempts = 8;
+        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+          const { data, error } = await client.from('video_projects').select('*').eq('id', id).maybeSingle();
+          if (error) throw error;
+          if (!data) {
+            throw new Error(`Project ${id} not found`);
+          }
+          const current = projectFromRow(data as ProjectRow);
+          const next = finalizeProject(mutator(structuredClone(current)));
+          const merged = mergeProjectDocuments(current, next);
+          const row = projectToRow(merged);
+          const { data: updated, error: updateError } = await client
+            .from('video_projects')
+            .update(row)
+            .eq('id', id)
+            .eq('updated_at', current.updatedAt)
+            .select('*')
+            .maybeSingle();
+          if (updateError) throw updateError;
+          if (updated) {
+            return projectFromRow(updated as ProjectRow);
+          }
+        }
+        throw new Error(`Project ${id} update conflict after ${maxAttempts} attempts`);
       },
       async delete(id) {
         await client.from('video_ai_usage_logs').delete().eq('project_id', id);

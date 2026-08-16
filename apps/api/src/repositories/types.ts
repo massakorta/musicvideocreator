@@ -14,6 +14,10 @@ export interface Repositories {
     get(id: string): Promise<MusicVideoProject | null>;
     getByShareId(shareId: string): Promise<MusicVideoProject | null>;
     save(project: MusicVideoProject): Promise<MusicVideoProject>;
+    updateDocument(
+      id: string,
+      mutator: (project: MusicVideoProject) => MusicVideoProject,
+    ): Promise<MusicVideoProject>;
     delete(id: string): Promise<void>;
   };
   assets: {
