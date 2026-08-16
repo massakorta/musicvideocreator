@@ -71,6 +71,10 @@ projects:
             runtime: static
             buildCommand: npm install --include=dev && npm run build -w @music-video/web
             staticPublishPath: apps/web/dist
+            routes:
+              - type: rewrite
+                source: /*
+                destination: /index.html
             envVars:
               - key: VITE_API_URL
                 value: https://music-video-api.onrender.com
