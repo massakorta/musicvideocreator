@@ -65,13 +65,13 @@ export async function generateCharacterReference(projectId: string, characterId:
   });
 
   const characters = project.visualBible.characters.map((c) =>
-    c.id === characterId ? { ...c, referenceAssetId: asset.id } : c,
+    c.id === characterId ? { ...c, referenceAssetId: asset.id, referenceUrl: asset.publicUrl } : c,
   );
-  const saved = await saveProject({
+  await saveProject({
     ...project,
     visualBible: { ...project.visualBible, characters },
   });
-  return { project: saved, asset, demo: source === 'demo' };
+  return { project: await getProjectOrThrow(projectId), asset, demo: source === 'demo' };
 }
 
 export async function approveCharacterReference(projectId: string, characterId: string, locked: boolean) {
