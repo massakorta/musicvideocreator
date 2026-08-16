@@ -35,6 +35,10 @@ const OFFTHREAD_CACHE_BYTES = 8 * 1024 * 1024;
 let cachedServeUrl: string | undefined;
 let lastRenderBlockedLogAt = 0;
 
+function effectiveRemotionConcurrency(): number {
+  return Math.min(Math.max(1, config.remotionConcurrency), os.availableParallelism());
+}
+
 function renderLog(
   job: RenderJob,
   project: MusicVideoProject,
@@ -150,7 +154,7 @@ async function renderJob(job: RenderJob): Promise<void> {
     export: `${exportPreset.width}x${exportPreset.height}@${exportPreset.fps}fps`,
     frames: durationInFrames,
     crf: EXPORT_CRF,
-    concurrency: Math.max(1, config.remotionConcurrency),
+    concurrency: effectiveRemotionConcurrency(),
   });
   logMemory(`render ${job.id} start`);
 
@@ -198,7 +202,7 @@ async function renderJob(job: RenderJob): Promise<void> {
       outputLocation: silentOutput,
       inputProps: { ...inputProps, includeAudio: false },
       timeoutInMilliseconds: 1000 * 60 * 30,
-      concurrency: Math.max(1, config.remotionConcurrency),
+      concurrency: effectiveRemotionConcurrency(),
       chromiumOptions: {
         enableMultiProcessOnLinux: false,
         gl: 'swangle',

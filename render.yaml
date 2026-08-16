@@ -73,7 +73,7 @@ projects:
               - key: IMAGE_GENERATION_CONCURRENCY
                 value: "1"
               - key: REMOTION_CONCURRENCY
-                value: "2"
+                value: "1"
               - key: SUPABASE_URL
                 fromService:
                   name: music-video-api

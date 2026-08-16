@@ -53,6 +53,23 @@ async function updateStage(job: PipelineJob, stage: PipelineStage, patch: Partia
   return patchPipelineJob(job, { stage, ...patch });
 }
 
+function characterIdsNeedingGeneration(
+  project: Awaited<ReturnType<typeof getProjectOrThrow>>,
+  stale: ReturnType<typeof computeStaleAssets>,
+): string[] {
+  const missing =
+    project.visualBible?.characters.filter((c) => !c.referenceAssetId).map((c) => c.id) ?? [];
+  return [...new Set([...missing, ...stale.staleCharacterIds])];
+}
+
+function sceneIdsNeedingGeneration(
+  project: Awaited<ReturnType<typeof getProjectOrThrow>>,
+  stale: ReturnType<typeof computeStaleAssets>,
+): string[] {
+  const missing = project.scenes.filter((s) => !s.currentAssetId && !s.image).map((s) => s.id);
+  return [...new Set([...missing, ...stale.staleSceneIds])];
+}
+
 export async function runPipelineJob(job: PipelineJob, options?: PipelineRunOptions): Promise<void> {
   let current = await patchPipelineJob(job, { status: 'running', startedAt: job.startedAt ?? new Date().toISOString() });
   const projectId = job.projectId;
@@ -92,59 +109,135 @@ export async function runPipelineJob(job: PipelineJob, options?: PipelineRunOpti
 
 async function runFullPipeline(job: PipelineJob, options?: PipelineRunOptions): Promise<void> {
   let current = job;
-  current = await updateStage(current, 'bible', { stageDetail: 'Writing the visual world…', progress: 2 });
-  const bibleResult = await generateProjectVisualBible(current.projectId);
-  let project = bibleResult.project;
-  if (project.visualBible) {
-    project = await saveProject({
-      ...project,
-      visualBibleApproved: true,
-      status: 'visual_bible',
+  let project = await getProjectOrThrow(current.projectId);
+  const skipBible = Boolean(project.visualBible && project.visualBibleApproved);
+  const skipStoryboard = project.scenes.length > 0;
+  let stale = computeStaleAssets(project);
+  let characterIdsToGenerate = characterIdsNeedingGeneration(project, stale);
+  let sceneIdsToGenerate = sceneIdsNeedingGeneration(project, stale);
+  const characters = project.visualBible?.characters ?? [];
+
+  const isResume =
+    skipBible ||
+    skipStoryboard ||
+    (characters.length > 0 && characterIdsToGenerate.length === 0) ||
+    (project.scenes.length > 0 && sceneIdsToGenerate.length === 0);
+  if (isResume) {
+    const skipped: string[] = [];
+    if (skipBible) skipped.push('bible');
+    if (skipStoryboard) skipped.push('storyboard');
+    console.log(
+      `[worker] resuming full pipeline job=${job.id} project=${job.projectId}` +
+        (skipped.length ? `, skipping ${skipped.join('/')}` : '') +
+        `, ${characterIdsToGenerate.length} characters and ${sceneIdsToGenerate.length} images to generate`,
+    );
+  }
+
+  if (!skipBible) {
+    current = await updateStage(current, 'bible', { stageDetail: 'Writing the visual world…', progress: 2 });
+    const bibleResult = await generateProjectVisualBible(current.projectId);
+    project = bibleResult.project;
+    if (project.visualBible) {
+      project = await saveProject({
+        ...project,
+        visualBibleApproved: true,
+        status: 'visual_bible',
+      });
+    }
+    current = await patchPipelineJob(current, { progress: 10, stageDetail: 'Visual bible ready' });
+  } else {
+    current = await patchPipelineJob(current, { progress: 10, stageDetail: 'Visual bible ready' });
+  }
+
+  project = await getProjectOrThrow(current.projectId);
+  stale = computeStaleAssets(project);
+  characterIdsToGenerate = characterIdsNeedingGeneration(project, stale);
+  const charactersAfterBible = project.visualBible?.characters ?? [];
+
+  if (characterIdsToGenerate.length > 0) {
+    current = await updateStage(current, 'characters', {
+      charactersTotal: characterIdsToGenerate.length,
+      charactersDone: 0,
+      stageDetail: 'Painting character references…',
+      progress: 12,
+    });
+    await generateCharacterBatch(
+      current,
+      characterIdsToGenerate,
+      async (done) => {
+        const characterId = characterIdsToGenerate[done - 1];
+        const character = characterId
+          ? charactersAfterBible.find((c) => c.id === characterId)
+          : undefined;
+        current = await patchPipelineJob(current, {
+          charactersDone: done,
+          stageDetail: character
+            ? `Character ${done} of ${characterIdsToGenerate.length}: ${character.name}`
+            : `Character ${done} of ${characterIdsToGenerate.length}`,
+        });
+      },
+    );
+    project = await getProjectOrThrow(current.projectId);
+  } else {
+    current = await patchPipelineJob(current, {
+      charactersTotal: charactersAfterBible.length,
+      charactersDone: charactersAfterBible.length,
+      progress: 28,
+      stageDetail: charactersAfterBible.length ? 'Character references ready' : 'No characters to paint',
     });
   }
-  current = await patchPipelineJob(current, { progress: 10, stageDetail: 'Visual bible ready' });
 
-  const characters = project.visualBible?.characters ?? [];
-  current = await updateStage(current, 'characters', {
-    charactersTotal: characters.length,
-    charactersDone: 0,
-    stageDetail: characters.length ? 'Painting character references…' : 'No characters to paint',
-    progress: 12,
-  });
-  await generateCharacterBatch(
-    current,
-    characters.map((c) => c.id),
-    async (done) => {
-      const character = characters[done - 1];
-      current = await patchPipelineJob(current, {
-        charactersDone: done,
-        stageDetail: character
-          ? `Character ${done} of ${characters.length}: ${character.name}`
-          : `Character ${done} of ${characters.length}`,
-      });
-    },
-  );
+  if (!skipStoryboard) {
+    current = await updateStage(current, 'storyboard', {
+      stageDetail: 'Listening to the song and lining up the lyrics…',
+      progress: 28,
+    });
+    const storyboardResult = await generateProjectStoryboard(current.projectId);
+    project = storyboardResult.project;
+    const sceneCount = project.scenes.length;
+    current = await patchPipelineJob(current, {
+      progress: 35,
+      imagesTotal: sceneCount,
+      imagesDone: 0,
+      stageDetail: `${sceneCount} scenes storyboarded`,
+    });
+  } else {
+    const sceneCount = project.scenes.length;
+    current = await patchPipelineJob(current, {
+      progress: 35,
+      imagesTotal: sceneCount,
+      imagesDone: project.scenes.filter((s) => s.currentAssetId || s.image).length,
+      stageDetail: `${sceneCount} scenes storyboarded`,
+    });
+  }
+
   project = await getProjectOrThrow(current.projectId);
+  stale = computeStaleAssets(project);
+  sceneIdsToGenerate = sceneIdsNeedingGeneration(project, stale);
 
-  current = await updateStage(current, 'storyboard', {
-    stageDetail: 'Listening to the song and lining up the lyrics…',
-    progress: 28,
-  });
-  const storyboardResult = await generateProjectStoryboard(current.projectId);
-  project = storyboardResult.project;
-  const sceneCount = project.scenes.length;
-  current = await patchPipelineJob(current, {
-    progress: 35,
-    imagesTotal: sceneCount,
-    imagesDone: 0,
-    stageDetail: `${sceneCount} scenes storyboarded`,
-  });
+  if (sceneIdsToGenerate.length > 0) {
+    current = await updateStage(current, 'images', {
+      imagesTotal: sceneIdsToGenerate.length,
+      imagesDone: 0,
+      stageDetail: 'Generating scene stills…',
+    });
+    await generateSceneBatch(current, sceneIdsToGenerate);
+  } else {
+    current = await patchPipelineJob(current, {
+      imagesTotal: project.scenes.length,
+      imagesDone: project.scenes.length,
+      stageDetail: 'Scene stills ready',
+    });
+  }
 
-  current = await updateStage(current, 'images', { stageDetail: 'Generating scene stills…' });
-  await generateSceneBatch(current, project.scenes.map((s) => s.id));
+  project = await getProjectOrThrow(current.projectId);
+  const health = computeProjectHealth(project);
+  if (!health.readyToRender) {
+    throw new Error(health.blockers[0] || 'Project is not ready to render.');
+  }
 
-    current = (await getRepositories().pipelineJobs.get(current.id)) ?? current;
-    current = await updateStage(current, 'render', { stageDetail: 'Rendering the music video…', progress: 86 });
+  current = (await getRepositories().pipelineJobs.get(current.id)) ?? current;
+  current = await updateStage(current, 'render', { stageDetail: 'Rendering the music video…', progress: 86 });
   const { job: renderJob } = await enqueueRender(current.projectId);
   current = await patchPipelineJob(current, { renderJobId: renderJob.id });
   await waitForRender(
