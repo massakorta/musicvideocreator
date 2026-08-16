@@ -369,4 +369,41 @@ export async function storeGeneratedFile(options: {
   return asset;
 }
 
+export async function storeGeneratedFileFromPath(options: {
+  projectId: string;
+  type: AssetRecord['type'];
+  source: AssetRecord['source'];
+  filename: string;
+  filePath: string;
+  mimeType: string;
+  width?: number;
+  height?: number;
+  durationSeconds?: number;
+  metadata?: Record<string, unknown>;
+}): Promise<AssetRecord> {
+  const stored = await getObjectStorage().putFromPath({
+    projectId: options.projectId,
+    filename: options.filename,
+    filePath: options.filePath,
+    mimeType: options.mimeType,
+  });
+  const asset: AssetRecord = {
+    id: newId(),
+    projectId: options.projectId,
+    type: options.type,
+    source: options.source,
+    storagePath: stored.storagePath,
+    publicUrl: stored.publicUrl,
+    mimeType: options.mimeType,
+    width: options.width,
+    height: options.height,
+    durationSeconds: options.durationSeconds,
+    fileSizeBytes: stored.bytes,
+    metadata: options.metadata,
+    createdAt: nowIso(),
+  };
+  await getRepositories().assets.save(asset);
+  return asset;
+}
+
 export type { RenderJob };

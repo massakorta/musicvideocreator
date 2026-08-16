@@ -48,15 +48,15 @@ projects:
           - type: worker
             name: music-video-worker
             runtime: node
-            plan: starter
+            plan: standard
             region: frankfurt
-            buildCommand: npm install --include=dev && npm run build -w @music-video/shared && npm run build -w @music-video/ai && npm run build -w @music-video/video && npm run build -w @music-video/worker
+            buildCommand: npm install --include=dev && npm run build -w @music-video/shared && npm run build -w @music-video/ai && npm run build -w @music-video/video && npm run bundle -w @music-video/video && npm run build -w @music-video/worker
             startCommand: npm run start -w @music-video/worker
             envVars:
               - key: NODE_ENV
                 value: production
               - key: NODE_OPTIONS
-                value: --max-old-space-size=460
+                value: --max-old-space-size=768
               - key: SESSION_SECRET
                 fromService:
                   name: music-video-api
@@ -71,7 +71,9 @@ projects:
               - key: OPENAI_IMAGE_SIZE
                 value: 1536x1024
               - key: IMAGE_GENERATION_CONCURRENCY
-                value: "3"
+                value: "1"
+              - key: REMOTION_CONCURRENCY
+                value: "1"
               - key: SUPABASE_URL
                 fromService:
                   name: music-video-api

@@ -52,6 +52,8 @@ export const config = {
   aiRateLimitPerMinute: envNumber('AI_RATE_LIMIT_PER_MINUTE', 80),
   workerPollMs: envNumber('WORKER_POLL_MS', 3000),
   workerId: env('WORKER_ID', `worker-${process.pid}`),
+  remotionConcurrency: envNumber('REMOTION_CONCURRENCY', 1),
+  remotionBundleDir: env('REMOTION_BUNDLE_DIR'),
 };
 
 export function openaiConfigured(): boolean {

@@ -1,16 +1,15 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { bundle } from '@remotion/bundler';
 import { renderMedia, selectComposition } from '@remotion/renderer';
 import { projectToComposition } from '@music-video/video';
 import type { MusicVideoProject, RenderJob } from '@music-video/shared';
 import { config, supabaseConfigured } from '../../api/src/config.js';
 import { getRepositories } from '../../api/src/repositories/index.js';
-import { getProjectOrThrow, saveProject, storeGeneratedFile } from '../../api/src/services/projects.js';
+import { getProjectOrThrow, saveProject, storeGeneratedFileFromPath } from '../../api/src/services/projects.js';
 import { getObjectStorage } from '../../api/src/storage/index.js';
 import { runPipelineJob, type PipelineRunOptions } from './pipelineRunner.js';
 import {
@@ -24,6 +23,49 @@ const execFileAsync = promisify(execFile);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const videoEntry = path.resolve(here, '../../../packages/video/src/entry.ts');
 const IDLE_HEARTBEAT_MS = 60_000;
+const OFFTHREAD_CACHE_BYTES = 8 * 1024 * 1024;
+
+let cachedServeUrl: string | undefined;
+
+function logMemory(label: string): void {
+  const { rss, heapUsed, heapTotal } = process.memoryUsage();
+  const mb = (bytes: number) => `${Math.round(bytes / 1024 / 1024)}MB`;
+  console.log(`[worker] mem ${label}: rss=${mb(rss)} heap=${mb(heapUsed)}/${mb(heapTotal)}`);
+}
+
+function prebuiltBundleDir(): string {
+  return config.remotionBundleDir || path.resolve(here, '../../../packages/video/dist/bundle');
+}
+
+async function getServeUrl(onProgress: (progress: number) => void): Promise<string> {
+  if (cachedServeUrl) return cachedServeUrl;
+  const prebuilt = prebuiltBundleDir();
+  try {
+    const { access } = await import('node:fs/promises');
+    await access(path.join(prebuilt, 'index.html'));
+    console.log('[worker] using prebuilt Remotion bundle', prebuilt);
+    cachedServeUrl = prebuilt;
+    return cachedServeUrl;
+  } catch {
+    console.log('[worker] no prebuilt Remotion bundle, bundling with webpack');
+  }
+  const { bundle } = await import('@remotion/bundler');
+  cachedServeUrl = await bundle({
+    entryPoint: videoEntry,
+    webpackOverride: (webpackConfig) => {
+      webpackConfig.resolve = webpackConfig.resolve ?? {};
+      webpackConfig.resolve.extensionAlias = {
+        ...webpackConfig.resolve.extensionAlias,
+        '.js': ['.ts', '.tsx', '.js', '.jsx'],
+      };
+      return webpackConfig;
+    },
+    onProgress: (progress) => {
+      onProgress(Math.min(20, 8 + Math.round(progress * 12)));
+    },
+  });
+  return cachedServeUrl;
+}
 
 function assertJobStore(): void {
   if (supabaseConfigured()) {
@@ -67,82 +109,83 @@ async function patchRenderJob(job: RenderJob, patch: Partial<RenderJob>): Promis
 async function renderJob(job: RenderJob): Promise<void> {
   let current = await patchRenderJob(job, { status: 'preparing', progress: 2 });
   const project = await getProjectOrThrow(job.projectId);
-  const tmp = await mkdir(path.join(os.tmpdir(), `mv-render-${job.id}`), { recursive: true });
-  const workdir = tmp ?? path.join(os.tmpdir(), `mv-render-${job.id}`);
+  const workdir = path.join(os.tmpdir(), `mv-render-${job.id}`);
+  await mkdir(workdir, { recursive: true });
+  logMemory(`render ${job.id} start`);
 
-  const compositionProject = projectToComposition(project);
-  const inputProps = { project: compositionProject };
+  try {
+    const compositionProject = projectToComposition(project);
+    const inputProps = { project: compositionProject };
 
-  current = await patchRenderJob(current, { status: 'rendering', progress: 8 });
-  const reportProgress = (progress: number) => {
-    current = { ...current, progress };
-    void patchRenderJob(current, { progress });
-  };
-  const bundled = await bundle({
-    entryPoint: videoEntry,
-    webpackOverride: (webpackConfig) => {
-      webpackConfig.resolve = webpackConfig.resolve ?? {};
-      webpackConfig.resolve.extensionAlias = {
-        ...webpackConfig.resolve.extensionAlias,
-        '.js': ['.ts', '.tsx', '.js', '.jsx'],
-      };
-      return webpackConfig;
-    },
-    onProgress: (progress) => {
-      reportProgress(Math.min(20, 8 + Math.round(progress * 12)));
-    },
-  });
-  const composition = await selectComposition({
-    serveUrl: bundled,
-    id: 'MusicVideo',
-    inputProps,
-  });
-  const silentOutput = path.join(workdir, 'silent.mp4');
-  await renderMedia({
-    composition,
-    serveUrl: bundled,
-    codec: 'h264',
-    outputLocation: silentOutput,
-    inputProps: { ...inputProps, includeAudio: false },
-    timeoutInMilliseconds: 1000 * 60 * 30,
-    onProgress: ({ progress }) => {
-      reportProgress(20 + Math.round(progress * 68));
-    },
-  });
-  const output = await muxOriginalAudio(project, workdir, silentOutput);
-  reportProgress(90);
+    current = await patchRenderJob(current, { status: 'rendering', progress: 8 });
+    const reportProgress = (progress: number) => {
+      current = { ...current, progress };
+      void patchRenderJob(current, { progress });
+    };
+    const serveUrl = await getServeUrl(reportProgress);
+    reportProgress(20);
+    const composition = await selectComposition({
+      serveUrl,
+      id: 'MusicVideo',
+      inputProps,
+    });
+    const silentOutput = path.join(workdir, 'silent.mp4');
+    await renderMedia({
+      composition,
+      serveUrl,
+      codec: 'h264',
+      outputLocation: silentOutput,
+      inputProps: { ...inputProps, includeAudio: false },
+      timeoutInMilliseconds: 1000 * 60 * 30,
+      concurrency: Math.max(1, config.remotionConcurrency),
+      chromiumOptions: {
+        enableMultiProcessOnLinux: false,
+        gl: 'swangle',
+      },
+      disallowParallelEncoding: true,
+      offthreadVideoCacheSizeInBytes: OFFTHREAD_CACHE_BYTES,
+      onProgress: ({ progress }) => {
+        reportProgress(20 + Math.round(progress * 68));
+      },
+    });
+    logMemory(`render ${job.id} encoded`);
+    const output = await muxOriginalAudio(project, workdir, silentOutput);
+    reportProgress(90);
 
-  current = await patchRenderJob(current, { status: 'uploading', progress: 92 });
-  const { readFile, stat } = await import('node:fs/promises');
-  const bytes = await readFile(output);
-  const info = await stat(output);
-  const asset = await storeGeneratedFile({
-    projectId: project.id,
-    type: 'final_video',
-    source: 'upload',
-    filename: 'music-video.mp4',
-    body: bytes,
-    mimeType: 'video/mp4',
-    durationSeconds: project.durationSeconds,
-  });
-  await patchRenderJob(current, {
-    status: 'complete',
-    progress: 100,
-    completedAt: new Date().toISOString(),
-    outputUrl: asset.publicUrl,
-    outputAssetId: asset.id,
-    fileSizeBytes: info.size,
-  });
-  const { renderCompositionFingerprint } = await import('@music-video/shared');
-  const { ensureShareId } = await import('../../api/src/services/pipeline.js');
-  await saveProject({
-    ...project,
-    status: 'complete',
-    lastError: undefined,
-    renderFingerprint: renderCompositionFingerprint(project),
-    lastRenderJobId: job.id,
-  });
-  await ensureShareId(project.id);
+    current = await patchRenderJob(current, { status: 'uploading', progress: 92 });
+    const { stat } = await import('node:fs/promises');
+    const info = await stat(output);
+    const asset = await storeGeneratedFileFromPath({
+      projectId: project.id,
+      type: 'final_video',
+      source: 'upload',
+      filename: 'music-video.mp4',
+      filePath: output,
+      mimeType: 'video/mp4',
+      durationSeconds: project.durationSeconds,
+    });
+    await patchRenderJob(current, {
+      status: 'complete',
+      progress: 100,
+      completedAt: new Date().toISOString(),
+      outputUrl: asset.publicUrl,
+      outputAssetId: asset.id,
+      fileSizeBytes: info.size,
+    });
+    const { renderCompositionFingerprint } = await import('@music-video/shared');
+    const { ensureShareId } = await import('../../api/src/services/pipeline.js');
+    await saveProject({
+      ...project,
+      status: 'complete',
+      lastError: undefined,
+      renderFingerprint: renderCompositionFingerprint(project),
+      lastRenderJobId: job.id,
+    });
+    await ensureShareId(project.id);
+  } finally {
+    await rm(workdir, { recursive: true, force: true }).catch(() => undefined);
+    logMemory(`render ${job.id} done`);
+  }
 }
 
 async function failRender(job: RenderJob, error: unknown): Promise<void> {
@@ -228,6 +271,7 @@ async function renderLoop(): Promise<void> {
 function start(): void {
   assertJobStore();
   healthCheck();
+  logMemory('boot');
   console.log(`Worker ${config.workerId} polling every ${config.workerPollMs}ms`);
   void recoverInterruptedJobs().finally(() => {
     Promise.all([pipelineLoop(), renderLoop()]).catch((error) => {

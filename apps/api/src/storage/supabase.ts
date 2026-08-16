@@ -1,3 +1,5 @@
+import { createReadStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { config } from '../config.js';
 import type { ObjectStorage, StoredFile } from './types.js';
@@ -33,6 +35,31 @@ export class SupabaseObjectStorage implements ObjectStorage {
       storagePath,
       publicUrl: data.publicUrl,
       bytes: options.body.byteLength,
+    };
+  }
+
+  async putFromPath(options: {
+    projectId: string;
+    filename: string;
+    filePath: string;
+    mimeType: string;
+  }): Promise<StoredFile> {
+    const filename = `${Date.now()}-${options.filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    const storagePath = `${options.projectId}/${filename}`;
+    const info = await stat(options.filePath);
+    const { error } = await this.client.storage.from(this.bucket).upload(storagePath, createReadStream(options.filePath), {
+      contentType: options.mimeType,
+      upsert: false,
+      duplex: 'half',
+    });
+    if (error) {
+      throw new Error(`Storage upload failed: ${error.message}`);
+    }
+    const { data } = this.client.storage.from(this.bucket).getPublicUrl(storagePath);
+    return {
+      storagePath,
+      publicUrl: data.publicUrl,
+      bytes: info.size,
     };
   }
 

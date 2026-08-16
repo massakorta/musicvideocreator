@@ -12,11 +12,13 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit",
+    "bundle": "node ./scripts/bundle.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "studio": "npx remotion studio src/entry.ts"
   },
   "dependencies": {
     "@music-video/shared": "*",
+    "@remotion/bundler": "^4.0.241",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "remotion": "^4.0.241"

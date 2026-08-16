@@ -1,4 +1,4 @@
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { config } from '../config.js';
 import type { ObjectStorage, StoredFile } from './types.js';
@@ -29,6 +29,29 @@ export class LocalObjectStorage implements ObjectStorage {
       storagePath,
       publicUrl: `${config.apiUrl}/api/files/${encodeURIComponent(storagePath)}`,
       bytes: options.body.byteLength,
+    };
+  }
+
+  async putFromPath(options: {
+    projectId: string;
+    filename: string;
+    filePath: string;
+    mimeType: string;
+  }): Promise<StoredFile> {
+    const dir = path.join(this.root, safeSegment(options.projectId));
+    await mkdir(dir, { recursive: true });
+    const filename = `${Date.now()}-${safeSegment(options.filename)}`;
+    const storagePath = path.join(options.projectId, filename);
+    const abs = path.join(this.root, storagePath);
+    if (!abs.startsWith(this.root)) {
+      throw new Error('Invalid storage path.');
+    }
+    await copyFile(options.filePath, abs);
+    const info = await stat(abs);
+    return {
+      storagePath,
+      publicUrl: `${config.apiUrl}/api/files/${encodeURIComponent(storagePath)}`,
+      bytes: info.size,
     };
   }
 
