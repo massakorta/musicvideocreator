@@ -1,6 +1,7 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { mkdir, stat, writeFile } from 'node:fs/promises';
+import http from 'node:http';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { projectToComposition, type CompositionProject } from '@music-video/video';
 import type { MusicVideoProject } from '@music-video/shared';
 import { getRepositories } from '../../api/src/repositories/index.js';
@@ -14,6 +15,19 @@ function extensionFromUrl(url: string): string {
     // ignore malformed URLs
   }
   return '.jpg';
+}
+
+function mimeForExtension(ext: string): string {
+  switch (ext.toLowerCase()) {
+    case '.png':
+      return 'image/png';
+    case '.webp':
+      return 'image/webp';
+    case '.gif':
+      return 'image/gif';
+    default:
+      return 'image/jpeg';
+  }
 }
 
 async function loadSceneImageBody(
@@ -40,12 +54,64 @@ async function loadSceneImageBody(
   }
 }
 
+/** Serves prefetched stills over HTTP — headless Chromium blocks file:// image URLs. */
+export async function startStillsServer(
+  stillsDir: string,
+): Promise<{ baseUrl: string; close: () => Promise<void> }> {
+  await mkdir(stillsDir, { recursive: true });
+  const server = http.createServer((req, res) => {
+    void (async () => {
+      const name = path.basename(decodeURIComponent(String(req.url ?? '/')).replace(/^\//, ''));
+      if (!name || name.includes('..')) {
+        res.statusCode = 400;
+        res.end();
+        return;
+      }
+      const filePath = path.join(stillsDir, name);
+      if (!filePath.startsWith(stillsDir)) {
+        res.statusCode = 403;
+        res.end();
+        return;
+      }
+      try {
+        const info = await stat(filePath);
+        if (!info.isFile()) throw new Error('missing');
+        res.setHeader('Content-Type', mimeForExtension(path.extname(filePath)));
+        res.setHeader('Cache-Control', 'no-store');
+        createReadStream(filePath).pipe(res);
+      } catch {
+        res.statusCode = 404;
+        res.end();
+      }
+    })();
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => resolve());
+  });
+  const address = server.address();
+  const port = typeof address === 'object' && address ? address.port : 0;
+  if (!port) {
+    server.close();
+    throw new Error('Could not start stills server.');
+  }
+
+  return {
+    baseUrl: `http://127.0.0.1:${port}`,
+    close: () =>
+      new Promise((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      }),
+  };
+}
+
 export async function prefetchCompositionStills(
   project: MusicVideoProject,
-  workdir: string,
+  stillsDir: string,
+  assetsBaseUrl: string,
 ): Promise<{ composition: CompositionProject; prefetched: number; total: number }> {
-  const imagesDir = path.join(workdir, 'stills');
-  await mkdir(imagesDir, { recursive: true });
+  await mkdir(stillsDir, { recursive: true });
   const base = projectToComposition(project);
   let prefetched = 0;
   const scenes = await Promise.all(
@@ -53,10 +119,11 @@ export async function prefetchCompositionStills(
       const body = await loadSceneImageBody(project, scene.id, scene.imageUrl);
       if (!body) return scene;
       const ext = extensionFromUrl(scene.imageUrl);
-      const dest = path.join(imagesDir, `${scene.id}${ext}`);
+      const filename = `${scene.id}${ext}`;
+      const dest = path.join(stillsDir, filename);
       await writeFile(dest, body);
       prefetched += 1;
-      return { ...scene, imageUrl: pathToFileURL(dest).href };
+      return { ...scene, imageUrl: `${assetsBaseUrl}/${filename}` };
     }),
   );
   return { composition: { ...base, scenes }, prefetched, total: base.scenes.length };

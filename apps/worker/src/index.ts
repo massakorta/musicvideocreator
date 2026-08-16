@@ -25,7 +25,7 @@ import {
   setPipelineHeavy,
   setPipelineWaitingForRender,
 } from './heavyWork.js';
-import { createRenderStallGuard, prefetchCompositionStills } from './renderHelpers.js';
+import { createRenderStallGuard, prefetchCompositionStills, startStillsServer } from './renderHelpers.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -161,132 +161,139 @@ async function renderJob(job: RenderJob): Promise<void> {
   logMemory(`render ${job.id} start`);
 
   try {
-    const { composition: compositionProject, prefetched, total } = await prefetchCompositionStills(
-      project,
-      workdir,
-    );
-    renderLog(job, project, 'prefetched stills', { prefetched, total });
-    const inputProps = { project: compositionProject };
-
-    current = await patchRenderJob(current, { status: 'rendering', progress: 8 });
-    renderLog(job, project, 'preparing Remotion bundle');
-    let lastLoggedProgress = -1;
-    const reportProgress = (progress: number, stage: string) => {
-      current = { ...current, progress };
-      void patchRenderJob(current, { progress });
-      const bucket = Math.floor(progress / 10) * 10;
-      if (bucket > lastLoggedProgress) {
-        lastLoggedProgress = bucket;
-        renderLog(job, project, stage, { progress: `${progress}%` });
-      }
-    };
-    const serveUrl = await getServeUrl((progress) => reportProgress(progress, 'bundling'));
-    reportProgress(20, 'bundle ready');
-    const composition = await selectComposition({
-      serveUrl,
-      id: 'MusicVideo',
-      inputProps,
-    });
-    const exportComposition = {
-      ...composition,
-      width: exportPreset.width,
-      height: exportPreset.height,
-      fps: exportPreset.fps,
-      durationInFrames,
-    };
-    renderLog(job, project, 'rendering frames', {
-      frames: durationInFrames,
-      export: `${exportPreset.width}x${exportPreset.height}@${exportPreset.fps}fps`,
-    });
-    lastLoggedProgress = 20;
-    const silentOutput = path.join(workdir, 'silent.mp4');
-    const { cancelSignal, cancel } = makeCancelSignal();
-    let firstProgressLogged = false;
-    let stalled = false;
-    const stallGuard = createRenderStallGuard({
-      stallMs: RENDER_STALL_TIMEOUT_MS,
-      onStall: () => {
-        stalled = true;
-        cancel();
-      },
-    });
+    const stillsDir = path.join(workdir, 'stills');
+    const stillsServer = await startStillsServer(stillsDir);
     try {
-      await renderMedia({
-        composition: exportComposition,
+      const { composition: compositionProject, prefetched, total } = await prefetchCompositionStills(
+        project,
+        stillsDir,
+        stillsServer.baseUrl,
+      );
+      renderLog(job, project, 'prefetched stills', { prefetched, total, assetsUrl: stillsServer.baseUrl });
+      const inputProps = { project: compositionProject };
+
+      current = await patchRenderJob(current, { status: 'rendering', progress: 8 });
+      renderLog(job, project, 'preparing Remotion bundle');
+      let lastLoggedProgress = -1;
+      const reportProgress = (progress: number, stage: string) => {
+        current = { ...current, progress };
+        void patchRenderJob(current, { progress });
+        const bucket = Math.floor(progress / 10) * 10;
+        if (bucket > lastLoggedProgress) {
+          lastLoggedProgress = bucket;
+          renderLog(job, project, stage, { progress: `${progress}%` });
+        }
+      };
+      const serveUrl = await getServeUrl((progress) => reportProgress(progress, 'bundling'));
+      reportProgress(20, 'bundle ready');
+      const composition = await selectComposition({
         serveUrl,
-        codec: 'h264',
-        crf: EXPORT_CRF,
-        x264Preset: 'ultrafast',
-        outputLocation: silentOutput,
-        inputProps: { ...inputProps, includeAudio: false },
-        timeoutInMilliseconds: estimateRenderTimeoutMs(durationInFrames),
-        concurrency: effectiveRemotionConcurrency(),
-        chromiumOptions: {
-          enableMultiProcessOnLinux: false,
-          gl: 'swangle',
-        },
-        disallowParallelEncoding: true,
-        offthreadVideoCacheSizeInBytes: OFFTHREAD_CACHE_BYTES,
-        cancelSignal,
-        onProgress: ({ progress }) => {
-          stallGuard.touch();
-          if (!firstProgressLogged && progress > 0) {
-            firstProgressLogged = true;
-            renderLog(job, project, 'first frame encoded', {
-              progress: `${Math.round(progress * 100)}%`,
-            });
-          }
-          reportProgress(20 + Math.round(progress * 68), 'rendering');
+        id: 'MusicVideo',
+        inputProps,
+      });
+      const exportComposition = {
+        ...composition,
+        width: exportPreset.width,
+        height: exportPreset.height,
+        fps: exportPreset.fps,
+        durationInFrames,
+      };
+      renderLog(job, project, 'rendering frames', {
+        frames: durationInFrames,
+        export: `${exportPreset.width}x${exportPreset.height}@${exportPreset.fps}fps`,
+      });
+      lastLoggedProgress = 20;
+      const silentOutput = path.join(workdir, 'silent.mp4');
+      const { cancelSignal, cancel } = makeCancelSignal();
+      let firstProgressLogged = false;
+      let stalled = false;
+      const stallGuard = createRenderStallGuard({
+        stallMs: RENDER_STALL_TIMEOUT_MS,
+        onStall: () => {
+          stalled = true;
+          cancel();
         },
       });
-    } catch (error) {
-      if (stalled) {
-        throw new Error('Render stalled while encoding frames.');
+      try {
+        await renderMedia({
+          composition: exportComposition,
+          serveUrl,
+          codec: 'h264',
+          crf: EXPORT_CRF,
+          x264Preset: 'ultrafast',
+          outputLocation: silentOutput,
+          inputProps: { ...inputProps, includeAudio: false },
+          timeoutInMilliseconds: estimateRenderTimeoutMs(durationInFrames),
+          concurrency: effectiveRemotionConcurrency(),
+          chromiumOptions: {
+            enableMultiProcessOnLinux: false,
+            gl: 'swangle',
+          },
+          disallowParallelEncoding: true,
+          offthreadVideoCacheSizeInBytes: OFFTHREAD_CACHE_BYTES,
+          cancelSignal,
+          onProgress: ({ progress }) => {
+            stallGuard.touch();
+            if (!firstProgressLogged && progress > 0) {
+              firstProgressLogged = true;
+              renderLog(job, project, 'first frame encoded', {
+                progress: `${Math.round(progress * 100)}%`,
+              });
+            }
+            reportProgress(20 + Math.round(progress * 68), 'rendering');
+          },
+        });
+      } catch (error) {
+        if (stalled) {
+          throw new Error('Render stalled while encoding frames.');
+        }
+        throw error;
+      } finally {
+        stallGuard.stop();
       }
-      throw error;
-    } finally {
-      stallGuard.stop();
-    }
-    logMemory(`render ${job.id} encoded`);
-    renderLog(job, project, 'muxing original audio');
-    const output = await muxOriginalAudio(project, workdir, silentOutput);
-    reportProgress(90, 'audio muxed');
+      logMemory(`render ${job.id} encoded`);
+      renderLog(job, project, 'muxing original audio');
+      const output = await muxOriginalAudio(project, workdir, silentOutput);
+      reportProgress(90, 'audio muxed');
 
-    current = await patchRenderJob(current, { status: 'uploading', progress: 92 });
-    renderLog(job, project, 'uploading finished MP4');
-    const { stat } = await import('node:fs/promises');
-    const info = await stat(output);
-    const asset = await storeGeneratedFileFromPath({
-      projectId: project.id,
-      type: 'final_video',
-      source: 'upload',
-      filename: 'music-video.mp4',
-      filePath: output,
-      mimeType: 'video/mp4',
-      durationSeconds: project.durationSeconds,
-    });
-    await patchRenderJob(current, {
-      status: 'complete',
-      progress: 100,
-      completedAt: new Date().toISOString(),
-      outputUrl: asset.publicUrl,
-      outputAssetId: asset.id,
-      fileSizeBytes: info.size,
-    });
-    renderLog(job, project, 'complete', {
-      sizeMb: `${(info.size / (1024 * 1024)).toFixed(1)}MB`,
-      outputUrl: asset.publicUrl,
-    });
-    const { renderCompositionFingerprint } = await import('@music-video/shared');
-    const { ensureShareId } = await import('../../api/src/services/pipeline.js');
-    await saveProject({
-      ...project,
-      status: 'complete',
-      lastError: undefined,
-      renderFingerprint: renderCompositionFingerprint(project),
-      lastRenderJobId: job.id,
-    });
-    await ensureShareId(project.id);
+      current = await patchRenderJob(current, { status: 'uploading', progress: 92 });
+      renderLog(job, project, 'uploading finished MP4');
+      const { stat } = await import('node:fs/promises');
+      const info = await stat(output);
+      const asset = await storeGeneratedFileFromPath({
+        projectId: project.id,
+        type: 'final_video',
+        source: 'upload',
+        filename: 'music-video.mp4',
+        filePath: output,
+        mimeType: 'video/mp4',
+        durationSeconds: project.durationSeconds,
+      });
+      await patchRenderJob(current, {
+        status: 'complete',
+        progress: 100,
+        completedAt: new Date().toISOString(),
+        outputUrl: asset.publicUrl,
+        outputAssetId: asset.id,
+        fileSizeBytes: info.size,
+      });
+      renderLog(job, project, 'complete', {
+        sizeMb: `${(info.size / (1024 * 1024)).toFixed(1)}MB`,
+        outputUrl: asset.publicUrl,
+      });
+      const { renderCompositionFingerprint } = await import('@music-video/shared');
+      const { ensureShareId } = await import('../../api/src/services/pipeline.js');
+      await saveProject({
+        ...project,
+        status: 'complete',
+        lastError: undefined,
+        renderFingerprint: renderCompositionFingerprint(project),
+        lastRenderJobId: job.id,
+      });
+      await ensureShareId(project.id);
+    } finally {
+      await stillsServer.close().catch(() => undefined);
+    }
   } finally {
     await rm(workdir, { recursive: true, force: true }).catch(() => undefined);
     logMemory(`render ${job.id} done`);
