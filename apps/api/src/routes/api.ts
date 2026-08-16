@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
 import {
   clientDurationBodySchema,
@@ -152,6 +152,7 @@ apiRouter.post(
       },
       durationSeconds: duration ?? project.durationSeconds,
       songTitle: project.songTitle || filename.replace(/\.[^.]+$/, ''),
+      lyricAlignment: undefined,
     });
     res.json({ project: saved, asset, durationDetected: Boolean(duration) });
   }),
@@ -384,8 +385,64 @@ apiRouter.get(
     }
     const file = await storage.get(storagePath);
     if (!file) throw new AppError(ERROR_CODES.NOT_FOUND, 'File not found.', 404);
-    res.setHeader('Content-Type', file.mimeType);
-    res.setHeader('Cache-Control', 'public, max-age=3600');
-    res.send(file.body);
+    sendStoredFile(req, res, file);
   }),
 );
+
+apiRouter.head(
+  '/files/*',
+  asyncHandler(async (req, res) => {
+    const storage = getObjectStorage();
+    const storagePath = decodeURIComponent(String(req.params[0] ?? ''));
+    if (storage instanceof LocalObjectStorage && !storage.resolve(storagePath)) {
+      throw new AppError(ERROR_CODES.NOT_FOUND, 'File not found.', 404);
+    }
+    const file = await storage.get(storagePath);
+    if (!file) throw new AppError(ERROR_CODES.NOT_FOUND, 'File not found.', 404);
+    sendStoredFile(req, res, file, true);
+  }),
+);
+
+function sendStoredFile(
+  req: Request,
+  res: Response,
+  file: { body: Buffer; mimeType: string },
+  headOnly = false,
+): void {
+  const total = file.body.byteLength;
+  res.setHeader('Content-Type', file.mimeType);
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.setHeader('Accept-Ranges', 'bytes');
+
+  const range = req.headers.range;
+  if (!range) {
+    res.setHeader('Content-Length', total);
+    if (headOnly) {
+      res.status(200).end();
+      return;
+    }
+    res.send(file.body);
+    return;
+  }
+
+  const match = /bytes=(\d*)-(\d*)/.exec(range);
+  if (!match) {
+    res.status(416).setHeader('Content-Range', `bytes */${total}`).end();
+    return;
+  }
+  const start = match[1] ? Number(match[1]) : 0;
+  const end = match[2] ? Number(match[2]) : total - 1;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start >= total) {
+    res.status(416).setHeader('Content-Range', `bytes */${total}`).end();
+    return;
+  }
+  const safeEnd = Math.min(end, total - 1);
+  res.status(206);
+  res.setHeader('Content-Range', `bytes ${start}-${safeEnd}/${total}`);
+  res.setHeader('Content-Length', safeEnd - start + 1);
+  if (headOnly) {
+    res.end();
+    return;
+  }
+  res.send(file.body.subarray(start, safeEnd + 1));
+}

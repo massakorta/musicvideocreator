@@ -1,9 +1,10 @@
 import {
-  parseLyricSections,
+  estimateLyricAlignment,
   reindexScenes,
+  sceneSlotsFromAlignment,
   selectMotion,
   selectTransition,
-  suggestedSceneCount,
+  type LyricAlignment,
   type MotionPresetId,
   type StoryboardScene,
   type VisualBible,
@@ -120,73 +121,55 @@ export function demoStoryboard(
   bible: VisualBible,
   lyrics: string,
   style: VisualStylePreset,
+  alignment?: LyricAlignment,
 ): StoryboardScene[] {
-  const { target } = suggestedSceneCount(durationSeconds);
-  const sections = parseLyricSections(lyrics);
-  const beats =
-    sections.length > 0
-      ? sections
-      : [{ label: 'Song', lines: lyrics.split('\n').filter(Boolean) }];
-  const weights = beats.map((b) => Math.max(1, b.lines.join(' ').length));
-  const totalWeight = weights.reduce((a, b) => a + b, 0) || 1;
+  const resolved = alignment ?? estimateLyricAlignment(lyrics, durationSeconds);
+  const slots = sceneSlotsFromAlignment(resolved, durationSeconds);
   const scenes: StoryboardScene[] = [];
   const motions: MotionPresetId[] = [];
-  let t = 0;
-  let remaining = target;
   const lead = bible.characters[0]?.id;
   const captain = bible.characters[1]?.id;
   const galley = bible.environments[0]?.id;
   const deck = bible.environments[1]?.id;
 
-  beats.forEach((beat, beatIndex) => {
-    const share = weights[beatIndex]! / totalWeight;
-    const count = Math.max(1, Math.round(target * share));
-    const sectionDuration = durationSeconds * share;
-    const songSection = classifySection(beat.label);
-    for (let i = 0; i < count && remaining > 0; i += 1) {
-      const start = t + (sectionDuration * i) / count;
-      const end = t + (sectionDuration * (i + 1)) / count;
-      const shotCycle = ['wide', 'medium', 'close-up', 'extreme-wide', 'close-up'] as const;
-      const shotType = shotCycle[scenes.length % shotCycle.length]!;
-      const usingDeck = songSection === 'chorus' || songSection === 'outro' || songSection === 'bridge';
-      const motion = selectMotion({
-        shotType,
-        songSection,
-        previousMotions: motions,
-        visualComedy: i % 2 === 0 ? 'frozen slapstick beat' : undefined,
-      });
-      motions.push(motion);
-      const nextSection = i === count - 1 ? classifySection(beats[beatIndex + 1]?.label ?? songSection) : songSection;
-      const excerpt = beat.lines.filter((l) => l.trim()).slice(0, 2).join(' ');
-      scenes.push({
-        id: randomUUID(),
-        order: scenes.length + 1,
-        startTime: start,
-        endTime: end,
-        duration: end - start,
-        songSection,
-        lyricsExcerpt: excerpt || undefined,
-        title: `${beat.label} — beat ${i + 1}`,
-        description: frozenMoment(bible, songSection, i, usingDeck),
-        action: 'A single held pose, props frozen in mid-air if needed.',
-        characters: [lead, songSection === 'chorus' || i === 0 ? captain : undefined].filter(Boolean) as string[],
-        environmentId: usingDeck ? deck : galley,
-        shotType,
-        cameraIntent: shotType.includes('close') ? 'Hold the face, slow push' : 'Establish the world, gentle drift',
-        visualComedy: style.id.includes('cartoon') ? 'The disaster is already happening; nobody has noticed yet.' : undefined,
-        imagePrompt: frozenMoment(bible, songSection, i, usingDeck),
-        suggestedMotion: motion,
-        motion,
-        transitionIn: selectTransition(songSection),
-        transitionOut: selectTransition(songSection, nextSection),
-        mediaType: 'image',
-        previousAssetIds: [],
-        generationState: 'pending',
-        approved: false,
-      });
-      remaining -= 1;
-    }
-    t += sectionDuration;
+  slots.forEach((slot, index) => {
+    const shotCycle = ['wide', 'medium', 'close-up', 'extreme-wide', 'close-up'] as const;
+    const shotType = shotCycle[index % shotCycle.length]!;
+    const usingDeck = slot.songSection === 'chorus' || slot.songSection === 'outro' || slot.songSection === 'bridge';
+    const motion = selectMotion({
+      shotType,
+      songSection: slot.songSection,
+      previousMotions: motions,
+      visualComedy: index % 2 === 0 ? 'frozen slapstick beat' : undefined,
+    });
+    motions.push(motion);
+    const nextSection = slots[index + 1]?.songSection;
+    scenes.push({
+      id: randomUUID(),
+      order: index + 1,
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+      duration: slot.endTime - slot.startTime,
+      songSection: slot.songSection,
+      lyricsExcerpt: slot.lyricsExcerpt,
+      title: slot.title,
+      description: frozenMoment(bible, slot.songSection, index, usingDeck),
+      action: 'A single held pose, props frozen in mid-air if needed.',
+      characters: [lead, slot.songSection === 'chorus' || index === 0 ? captain : undefined].filter(Boolean) as string[],
+      environmentId: usingDeck ? deck : galley,
+      shotType,
+      cameraIntent: shotType.includes('close') ? 'Hold the face, slow push' : 'Establish the world, gentle drift',
+      visualComedy: style.id.includes('cartoon') ? 'The disaster is already happening; nobody has noticed yet.' : undefined,
+      imagePrompt: frozenMoment(bible, slot.songSection, index, usingDeck),
+      suggestedMotion: motion,
+      motion,
+      transitionIn: selectTransition(slot.songSection),
+      transitionOut: selectTransition(slot.songSection, nextSection),
+      mediaType: 'image',
+      previousAssetIds: [],
+      generationState: 'pending',
+      approved: false,
+    });
   });
 
   return reindexScenes(scenes);
@@ -204,18 +187,6 @@ function frozenMoment(bible: VisualBible, section: string, i: number, deck: bool
     `${lead} offering an apology to the herring, both perfectly still, lantern bloom.`,
   ];
   return moments[(i + section.length) % moments.length]!;
-}
-
-function classifySection(label: string): StoryboardScene['songSection'] {
-  const v = label.toLowerCase();
-  if (v.includes('intro')) return 'intro';
-  if (v.includes('pre') && v.includes('chorus')) return 'prechorus';
-  if (v.includes('chorus') || v.includes('refräng')) return 'chorus';
-  if (v.includes('bridge') || v.includes('brygga')) return 'bridge';
-  if (v.includes('outro') || v.includes('end')) return 'outro';
-  if (v.includes('instrumental') || v.includes('solo')) return 'instrumental';
-  if (v.includes('verse') || v.includes('vers')) return 'verse';
-  return 'other';
 }
 
 function inferNames(title: string, lyrics: string): string[] {

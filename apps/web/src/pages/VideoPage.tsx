@@ -1,17 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Player, type PlayerRef } from '@remotion/player';
-import { MusicVideoComposition, compositionDurationFrames, projectToComposition } from '@music-video/video';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { compositionDurationFrames, projectToComposition } from '@music-video/video';
 import { getVideoPreset } from '@music-video/shared';
 import { Link, useNavigate } from 'react-router-dom';
 import { useProject } from '../hooks/useProject';
 import { api, ApiClientError } from '../lib/api';
 import { HealthPanel } from '../components/HealthPanel';
 import { SceneEditor } from '../components/SceneEditor';
+import { SyncedPreview, type SyncedPreviewHandle } from '../components/SyncedPreview';
 import { formatClock } from '../lib/time';
 
 export function VideoPage() {
   const { project, health, stale, reload } = useProject();
-  const player = useRef<PlayerRef>(null);
+  const preview = useRef<SyncedPreviewHandle>(null);
   const [frame, setFrame] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -24,14 +24,10 @@ export function VideoPage() {
   const durationInFrames = compositionDurationFrames(composition);
   const selected = project.scenes.find((s) => s.id === selectedId);
   const currentSeconds = frame / preset.fps;
-
-  useEffect(() => {
-    const instance = player.current;
-    if (!instance) return;
-    const onUpdate = ({ detail }: { detail: { frame: number } }) => setFrame(detail.frame);
-    instance.addEventListener('frameupdate', onUpdate);
-    return () => instance.removeEventListener('frameupdate', onUpdate);
-  }, [composition.scenes.length, composition.durationSeconds]);
+  const currentScene = project.scenes.find(
+    (scene) => currentSeconds >= scene.startTime && currentSeconds < scene.endTime,
+  ) ?? project.scenes.at(-1);
+  const onFrame = useCallback((next: number) => setFrame(next), []);
 
   return (
     <div className="page editor-layout">
@@ -55,22 +51,17 @@ export function VideoPage() {
             )}
           </div>
         ) : null}
-        <div className="preview-stage">
+        <div>
           {composition.scenes.length > 0 ? (
-            <Player
-              ref={player}
-              component={MusicVideoComposition}
-              inputProps={{ project: composition }}
+            <SyncedPreview
+              ref={preview}
+              composition={composition}
               durationInFrames={durationInFrames}
               fps={preset.fps}
-              compositionWidth={preset.width}
-              compositionHeight={preset.height}
-              style={{ width: '100%', height: '100%' }}
-              controls
-              autoPlay={false}
-              clickToPlay
-              doubleClickToFullscreen
-              acknowledgeRemotionLicense
+              width={preset.width}
+              height={preset.height}
+              audioUrl={project.audio?.url}
+              onFrame={onFrame}
             />
           ) : (
             <div className="drop">
@@ -80,19 +71,22 @@ export function VideoPage() {
             </div>
           )}
         </div>
-        <div className="row" style={{ margin: '10px 0' }}>
+        <div className="row" style={{ margin: '10px 0', justifyContent: 'space-between' }}>
           <span className="mono">
             {formatClock(currentSeconds)} / {formatClock(project.durationSeconds)}
           </span>
+          {currentScene?.lyricsExcerpt ? (
+            <span className="muted">“{currentScene.lyricsExcerpt}”</span>
+          ) : null}
         </div>
         <Timeline
           duration={project.durationSeconds}
           current={currentSeconds}
-          onSeek={(seconds) => player.current?.seekTo(Math.round(seconds * preset.fps))}
+          onSeek={(seconds) => preview.current?.seekToSeconds(seconds)}
           onSelect={(id) => {
             setSelectedId(id);
             const scene = project.scenes.find((s) => s.id === id);
-            if (scene) player.current?.seekTo(Math.round(scene.startTime * preset.fps));
+            if (scene) preview.current?.seekToSeconds(scene.startTime);
           }}
         />
         <div className="row" style={{ marginTop: 16, flexWrap: 'wrap' }}>

@@ -118,6 +118,28 @@ export const storyboardSceneSchema = z.object({
   imageFingerprint: z.string().optional(),
 });
 
+export const timedWordSchema = z.object({
+  start: z.number(),
+  end: z.number(),
+  word: z.string(),
+});
+
+export const timedLyricLineSchema = z.object({
+  startTime: z.number(),
+  endTime: z.number(),
+  text: z.string(),
+  section: z.enum(SONG_SECTIONS),
+});
+
+export const lyricAlignmentSchema = z.object({
+  audioAssetId: z.string().optional(),
+  source: z.enum(['whisper', 'estimated']),
+  language: z.string().optional(),
+  words: z.array(timedWordSchema),
+  lines: z.array(timedLyricLineSchema),
+  createdAt: z.string(),
+});
+
 export const audioInfoSchema = z.object({
   url: z.string(),
   filename: z.string(),
@@ -135,6 +157,7 @@ export const projectSchema = z.object({
   audio: audioInfoSchema.optional(),
   durationSeconds: z.number().nonnegative(),
   lyrics: z.string(),
+  lyricAlignment: lyricAlignmentSchema.optional(),
   visualBible: visualBibleSchema.optional(),
   visualBibleApproved: z.boolean(),
   scenes: z.array(storyboardSceneSchema),
@@ -147,7 +170,7 @@ export const projectSchema = z.object({
 });
 
 export const createProjectBodySchema = z.object({
-  name: z.string().min(1).max(120),
+  name: z.string().min(1).max(120).optional(),
   songTitle: z.string().max(160).optional(),
   lyrics: z.string().max(20000).optional(),
 });

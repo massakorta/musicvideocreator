@@ -1,6 +1,7 @@
 import type { StoryboardScene } from '../storyboard.js';
 import type { CharacterDefinition, VisualBible } from '../visualBible.js';
 import type { MusicVideoProject, ProjectHealth } from '../project.js';
+import { roundTime } from '../lyrics.js';
 
 export interface TimelineIssue {
   type: 'gap' | 'overlap' | 'negative_duration' | 'out_of_range' | 'order';
@@ -105,10 +106,6 @@ export function reindexScenes(scenes: StoryboardScene[]): StoryboardScene[] {
     }));
 }
 
-export function roundTime(value: number): number {
-  return Math.round(value * 1000) / 1000;
-}
-
 export function coveragePercent(scenes: StoryboardScene[], durationSeconds: number): number {
   if (durationSeconds <= 0) return 0;
   const sorted = [...scenes].sort((a, b) => a.startTime - b.startTime);
@@ -169,29 +166,3 @@ export function computeProjectHealth(project: MusicVideoProject): ProjectHealth 
   };
 }
 
-export function parseLyricSections(lyrics: string): Array<{ label: string; lines: string[] }> {
-  const lines = lyrics.replace(/\r\n/g, '\n').split('\n');
-  const sections: Array<{ label: string; lines: string[] }> = [];
-  let current = { label: 'other', lines: [] as string[] };
-  const header = /^\s*\[([^\]]+)\]\s*$/;
-
-  for (const line of lines) {
-    const match = line.match(header);
-    if (match) {
-      if (current.lines.length > 0 || sections.length === 0) {
-        if (current.lines.length > 0 || current.label !== 'other') sections.push(current);
-      }
-      current = { label: match[1]!.trim(), lines: [] };
-    } else {
-      current.lines.push(line);
-    }
-  }
-  sections.push(current);
-  return sections.filter((s) => s.lines.some((l) => l.trim().length > 0) || /\w/.test(s.label));
-}
-
-export function suggestedSceneCount(durationSeconds: number): { min: number; max: number; target: number } {
-  const minutes = durationSeconds / 60;
-  const target = Math.round(Math.min(50, Math.max(20, 8 + minutes * 8)));
-  return { min: Math.max(12, target - 8), max: Math.min(50, target + 8), target };
-}

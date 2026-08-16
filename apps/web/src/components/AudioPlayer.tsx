@@ -23,7 +23,7 @@ export function AudioPlayer({ src, duration }: { src?: string; duration: number 
 
   return (
     <div className="card audio-bar">
-      <audio ref={ref} src={src} />
+      <audio ref={ref} src={src} preload="auto" playsInline />
       <button
         className="btn"
         onClick={() => {

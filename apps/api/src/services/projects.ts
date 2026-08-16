@@ -52,8 +52,8 @@ export async function createProject(input: unknown): Promise<MusicVideoProject> 
   const timestamp = nowIso();
   const project: MusicVideoProject = {
     id: newId(),
-    name: body.name,
-    songTitle: body.songTitle?.trim() || body.name,
+    name: body.name?.trim() || body.songTitle?.trim() || 'Untitled film',
+    songTitle: body.songTitle?.trim() || body.name?.trim() || 'Untitled song',
     status: 'setup',
     durationSeconds: 0,
     lyrics: body.lyrics ?? '',
@@ -134,6 +134,9 @@ export async function duplicateProject(id: string): Promise<MusicVideoProject> {
     createdAt: timestamp,
     updatedAt: timestamp,
     audio: source.audio ? { ...source.audio, assetId: remap(source.audio.assetId) } : undefined,
+    lyricAlignment: source.lyricAlignment
+      ? { ...source.lyricAlignment, audioAssetId: remap(source.lyricAlignment.audioAssetId) }
+      : undefined,
     visualBible: source.visualBible
       ? {
           ...structuredClone(source.visualBible),

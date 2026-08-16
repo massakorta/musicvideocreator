@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { unlink, writeFile } from 'node:fs/promises';
+import { readFile, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -84,6 +84,33 @@ async function ffprobeDuration(buffer: Buffer): Promise<number | undefined> {
     return undefined;
   } finally {
     await unlink(tmp).catch(() => undefined);
+  }
+}
+
+export async function prepareAudioForTranscription(
+  buffer: Buffer,
+  filename: string,
+): Promise<{ buffer: Buffer; filename: string }> {
+  const maxBytes = 24 * 1024 * 1024;
+  if (buffer.byteLength <= maxBytes) {
+    return { buffer, filename: filename || 'song.mp3' };
+  }
+  const input = path.join(tmpdir(), `mv-whisper-in-${randomUUID()}`);
+  const output = path.join(tmpdir(), `mv-whisper-out-${randomUUID()}.mp3`);
+  try {
+    await writeFile(input, buffer);
+    await execFileAsync(
+      'ffmpeg',
+      ['-y', '-i', input, '-ac', '1', '-ar', '16000', '-b:a', '64k', output],
+      { timeout: 60000 },
+    );
+    const compressed = await readFile(output);
+    return { buffer: compressed, filename: 'song-16k.mp3' };
+  } catch {
+    return { buffer: buffer.subarray(0, maxBytes), filename: filename || 'song.mp3' };
+  } finally {
+    await unlink(input).catch(() => undefined);
+    await unlink(output).catch(() => undefined);
   }
 }
 

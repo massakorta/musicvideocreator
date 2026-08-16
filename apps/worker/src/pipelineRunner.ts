@@ -112,7 +112,10 @@ async function runFullPipeline(job: PipelineJob): Promise<void> {
   );
   project = await getProjectOrThrow(current.projectId);
 
-  current = await updateStage(current, 'storyboard', { stageDetail: 'Cutting the storyboard…', progress: 28 });
+  current = await updateStage(current, 'storyboard', {
+    stageDetail: 'Listening to the song and lining up the lyrics…',
+    progress: 28,
+  });
   const storyboardResult = await generateProjectStoryboard(current.projectId);
   project = storyboardResult.project;
   const sceneCount = project.scenes.length;

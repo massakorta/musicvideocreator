@@ -3,6 +3,7 @@ import { AppError, ERROR_CODES, visualBibleSchema, type AiUsageLog, type VisualB
 import { config, openaiConfigured } from '../config.js';
 import { getRepositories } from '../repositories/index.js';
 import { demoStoryboard, demoVisualBible } from './demo.js';
+import { ensureLyricAlignment } from './lyricSync.js';
 import { getProjectOrThrow, saveProject, styleOrThrow } from './projects.js';
 import { newId, nowIso, touch } from './projectUtils.js';
 
@@ -84,9 +85,10 @@ export async function generateProjectStoryboard(projectId: string) {
   const style = styleOrThrow(project.styleId);
   const log = startLog('storyboard', projectId, config.openaiTextModel);
   try {
+    const alignment = await ensureLyricAlignment(project);
     if (requireOpenAiOrDemo() === 'demo') {
-      const scenes = demoStoryboard(project.durationSeconds, project.visualBible, project.lyrics, style);
-      const saved = await saveProject(touch(project, { scenes, status: 'storyboard' }));
+      const scenes = demoStoryboard(project.durationSeconds, project.visualBible, project.lyrics, style, alignment);
+      const saved = await saveProject(touch(project, { scenes, status: 'storyboard', lyricAlignment: alignment }));
       await finishLog(log, 'success');
       return { project: saved, demo: true };
     }
@@ -103,8 +105,9 @@ export async function generateProjectStoryboard(projectId: string) {
       durationSeconds: project.durationSeconds,
       style,
       bible: project.visualBible,
+      alignment,
     });
-    const saved = await saveProject(touch(project, { scenes, status: 'storyboard' }));
+    const saved = await saveProject(touch(project, { scenes, status: 'storyboard', lyricAlignment: alignment }));
     await finishLog(log, 'success', usage);
     return { project: saved, demo: false };
   } catch (error) {

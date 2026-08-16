@@ -37,6 +37,13 @@ export function StoryboardPage() {
     <div className="page editor-layout">
       <div>
         <AudioPlayer src={project.audio?.url} duration={project.durationSeconds} />
+        {project.lyricAlignment ? (
+          <p className="faint">
+            {project.lyricAlignment.source === 'whisper'
+              ? 'Scenes are locked to the MP3 vocal track.'
+              : 'Scenes follow the lyric structure. Generate again after the song is uploaded for a tighter lock to the MP3.'}
+          </p>
+        ) : null}
         {missingRefs.length > 0 ? (
           <div className="banner warning">
             Character reference missing: {missingRefs.map((c) => c.name).join(', ')}. You can still generate images.
@@ -46,10 +53,10 @@ export function StoryboardPage() {
         {busy ? (
           <WaitCard
             title="Cutting the storyboard"
-            expectedSeconds={Math.max(40, Math.round(project.durationSeconds * 0.35))}
+            expectedSeconds={Math.max(55, Math.round(project.durationSeconds * 0.45))}
             stages={[
-              'Mapping verses, choruses, and turns…',
-              'Timing frozen moments to the song…',
+              'Listening to the MP3 and lining up the lyrics…',
+              'Cutting scenes to the sung lines…',
               'Writing the stills and camera moves…',
               'Still directing — this is the long beat.',
             ]}

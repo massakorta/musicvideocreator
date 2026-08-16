@@ -6,6 +6,8 @@ export * from './motion.js';
 export * from './styles.js';
 export * from './visualBible.js';
 export * from './storyboard.js';
+export * from './lyrics.js';
+export * from './lyricAlignment.js';
 export * from './project.js';
 export * from './errors.js';
 export * from './validation/storyboard.js';

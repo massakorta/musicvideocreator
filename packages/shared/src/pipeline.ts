@@ -132,7 +132,7 @@ export function estimatePipelineSeconds(
       : (stale?.staleCharacterIds.length ?? 0);
   const concurrency = 6;
   const bible = kind === 'full' ? 25 : 0;
-  const storyboard = kind === 'full' ? Math.max(40, Math.round(duration * 0.35)) : 0;
+  const storyboard = kind === 'full' ? Math.max(55, Math.round(duration * 0.45)) : 0;
   const chars = Math.ceil(Math.max(charCount, 1) / concurrency) * 10;
   const images = Math.ceil(Math.max(sceneCount, 1) / concurrency) * 8;
   const render = kind === 'full' || stale?.videoStale ? Math.max(90, Math.round(duration * 4)) : 0;

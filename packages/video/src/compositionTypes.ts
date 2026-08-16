@@ -20,6 +20,7 @@ export interface CompositionProject {
 
 export interface MusicVideoCompositionProps {
   project: CompositionProject;
+  includeAudio?: boolean;
 }
 
 export const TRANSITION_FRAMES: Record<TransitionPresetId, number> = {

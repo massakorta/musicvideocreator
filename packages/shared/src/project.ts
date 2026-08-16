@@ -9,6 +9,7 @@ import type {
   ProjectStatus,
   RenderJobStatus,
 } from './status.js';
+import type { LyricAlignment } from './lyricAlignment.js';
 import type { StoryboardScene } from './storyboard.js';
 import type { VideoFormatId } from './videoConfig.js';
 import type { VisualBible } from './visualBible.js';
@@ -30,6 +31,7 @@ export interface MusicVideoProject {
   audio?: AudioInfo;
   durationSeconds: number;
   lyrics: string;
+  lyricAlignment?: LyricAlignment;
   visualBible?: VisualBible;
   visualBibleApproved: boolean;
   scenes: StoryboardScene[];

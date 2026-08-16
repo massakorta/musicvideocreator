@@ -6,7 +6,10 @@ import { TRANSITION_FRAMES } from './compositionTypes.js';
 import { motionStyle } from './motionStyle.js';
 import { transitionStyleForFrame } from './transitions.js';
 
-export const MusicVideoComposition: React.FC<MusicVideoCompositionProps> = ({ project }) => {
+export const MusicVideoComposition: React.FC<MusicVideoCompositionProps> = ({
+  project,
+  includeAudio = false,
+}) => {
   const { fps } = useVideoConfig();
 
   return (
@@ -27,7 +30,7 @@ export const MusicVideoComposition: React.FC<MusicVideoCompositionProps> = ({ pr
           </Sequence>
         );
       })}
-      {project.audioUrl ? <Audio src={project.audioUrl} /> : null}
+      {includeAudio && project.audioUrl ? <Audio src={project.audioUrl} /> : null}
     </AbsoluteFill>
   );
 };

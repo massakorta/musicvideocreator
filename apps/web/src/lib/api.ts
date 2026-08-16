@@ -69,7 +69,7 @@ export const api = {
   access: (code: string) => request('/api/auth/access', { method: 'POST', body: JSON.stringify({ code }) }),
   logout: () => request('/api/auth/logout', { method: 'POST' }),
   projects: () => request<{ projects: import('@music-video/shared').ProjectSummary[] }>('/api/projects'),
-  createProject: (body: { name: string; songTitle?: string; lyrics?: string }) =>
+  createProject: (body: { name?: string; songTitle?: string; lyrics?: string }) =>
     request<{ project: import('@music-video/shared').MusicVideoProject }>('/api/projects', {
       method: 'POST',
       body: JSON.stringify(body),

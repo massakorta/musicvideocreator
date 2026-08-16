@@ -24,6 +24,11 @@ export function formatRelative(iso: string): string {
   return `${days}d ago`;
 }
 
+export function titleFromFilename(filename: string): string {
+  const stem = filename.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return stem || 'Untitled song';
+}
+
 export function readAudioDurationInBrowser(file: File): Promise<number | undefined> {
   return new Promise((resolve) => {
     const audio = document.createElement('audio');

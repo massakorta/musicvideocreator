@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useProject } from '../hooks/useProject';
 import { api, ApiClientError } from '../lib/api';
 import { useDebouncedCallback } from '../hooks/useDebouncedCallback';
-import { readAudioDurationInBrowser } from '../lib/time';
+import { formatClockShort, readAudioDurationInBrowser, titleFromFilename } from '../lib/time';
 import { WaitCard } from '../components/WaitCard';
 
 export function SetupPage() {
@@ -43,6 +43,11 @@ export function SetupPage() {
         await api.setDuration(project.id, browserDuration);
         await reload();
       }
+      if (!name.trim() || name === 'Untitled film') {
+        const nextName = titleFromFilename(file.name);
+        setName(nextName);
+        autosave({ name: nextName });
+      }
       setMessage(`Uploaded ${file.name}`);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : 'Audio upload failed.');
@@ -56,20 +61,10 @@ export function SetupPage() {
   return (
     <div className="page">
       <p className="hero-copy">
-        Drop the finished song and paste lyrics. Keep labels like [Chorus] — they tell the storyboard where the pictures should turn.
+        The song is the clock. Paste lyrics with labels like [Chorus] so the pictures turn with the track.
       </p>
-      <div className="field">
-        <label>Project name</label>
-        <input
-          value={name}
-          onChange={(e) => {
-            setName(e.target.value);
-            autosave({ name: e.target.value });
-          }}
-        />
-      </div>
       <div
-        className={`drop ${dragOver ? 'dragover' : ''}`}
+        className={`intake-well ${dragOver ? 'dragover' : ''} ${project.audio ? 'ready' : ''}`}
         onDragOver={(e) => {
           e.preventDefault();
           setDragOver(true);
@@ -82,9 +77,17 @@ export function SetupPage() {
           if (file) void onFile(file);
         }}
       >
-        <p>{project.audio ? 'Replace the song' : 'Drop MP3, WAV, or M4A here'}</p>
+        <div className={`intake-disc ${project.audio ? 'ready' : ''}`} aria-hidden="true" />
+        <div>
+          <strong>{project.audio ? 'Master loaded' : 'The song'}</strong>
+          <p className="muted">
+            {project.audio
+              ? `${project.audio.filename} · ${formatClockShort(project.durationSeconds)}`
+              : 'Drop an MP3, WAV, or M4A here.'}
+          </p>
+        </div>
         <label className="btn">
-          Choose audio file
+          {project.audio ? 'Replace song' : 'Choose audio file'}
           <input
             hidden
             type="file"
@@ -96,11 +99,6 @@ export function SetupPage() {
             }}
           />
         </label>
-        {project.audio ? (
-          <p className="muted">
-            {project.audio.filename} · {project.durationSeconds.toFixed(1)}s
-          </p>
-        ) : null}
         {busy ? (
           <WaitCard
             title="Uploading the song"
@@ -120,11 +118,19 @@ export function SetupPage() {
           placeholder={'[Intro]\n…\n[Verse 1]\n…'}
         />
       </div>
+      <div className="field">
+        <label>Film title</label>
+        <input
+          value={name}
+          onChange={(e) => {
+            setName(e.target.value);
+            autosave({ name: e.target.value });
+          }}
+        />
+      </div>
       {message ? <div className="banner success">{message}</div> : null}
       {error ? <div className="banner error">{error}</div> : null}
-      {!canContinue ? (
-        <p className="faint">Add a song and lyrics to unlock the next step.</p>
-      ) : null}
+      {!canContinue ? <p className="faint">Add a song and lyrics to unlock the next step.</p> : null}
       <button
         className="btn btn-primary"
         disabled={!canContinue}

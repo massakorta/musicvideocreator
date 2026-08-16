@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { StoryboardScene } from '../storyboard.js';
 import type { MusicVideoProject } from '../project.js';
+import { parseLyricSections, suggestedSceneCount } from '../lyrics.js';
 import {
   computeProjectHealth,
   coveragePercent,
-  parseLyricSections,
   reindexScenes,
-  suggestedSceneCount,
   validateSceneTiming,
 } from './storyboard.js';
 
