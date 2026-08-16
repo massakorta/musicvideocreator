@@ -45,7 +45,12 @@ export function setSessionCookie(res: Response, token: string): void {
 }
 
 export function clearSessionCookie(res: Response): void {
-  res.clearCookie(COOKIE, { path: '/' });
+  res.clearCookie(COOKIE, {
+    path: '/',
+    httpOnly: true,
+    sameSite: config.isProduction && !config.appUrl.startsWith(config.apiUrl) ? 'none' : 'lax',
+    secure: config.isProduction,
+  });
 }
 
 export function requireSession(req: Request, _res: Response, next: NextFunction): void {

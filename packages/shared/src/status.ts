@@ -49,6 +49,13 @@ export const EDITOR_STEP_LABELS: Record<EditorStep, string> = {
 export const GENERATION_STATES = ['pending', 'generating', 'complete', 'failed'] as const;
 export type GenerationState = (typeof GENERATION_STATES)[number];
 
+export const GENERATION_STATE_LABELS: Record<GenerationState, string> = {
+  pending: 'Waiting',
+  generating: 'Generating',
+  complete: 'Ready',
+  failed: 'Failed',
+};
+
 export const RENDER_JOB_STATUSES = [
   'queued',
   'preparing',
@@ -58,6 +65,15 @@ export const RENDER_JOB_STATUSES = [
   'failed',
 ] as const;
 export type RenderJobStatus = (typeof RENDER_JOB_STATUSES)[number];
+
+export const RENDER_JOB_STATUS_LABELS: Record<RenderJobStatus, string> = {
+  queued: 'In queue',
+  preparing: 'Preparing the cut',
+  rendering: 'Rendering frames',
+  uploading: 'Uploading the video',
+  complete: 'Ready',
+  failed: 'Failed',
+};
 
 export const ASSET_TYPES = [
   'audio',

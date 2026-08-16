@@ -16,14 +16,30 @@ export class ApiClientError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    credentials: 'include',
-    ...init,
-    headers: {
-      ...(init?.body instanceof FormData ? {} : jsonHeaders),
-      ...init?.headers,
-    },
-  });
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 10 * 60 * 1000);
+  const onAbort = () => controller.abort();
+  init?.signal?.addEventListener('abort', onAbort);
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      credentials: 'include',
+      ...init,
+      signal: controller.signal,
+      headers: {
+        ...(init?.body instanceof FormData ? {} : jsonHeaders),
+        ...init?.headers,
+      },
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new ApiClientError('TIMEOUT', `${PRODUCT_NAME} took too long to respond. Try again.`, 408);
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+    init?.signal?.removeEventListener('abort', onAbort);
+  }
   if (response.status === 204) return undefined as T;
   const data = (await response.json().catch(() => ({}))) as {
     code?: string;

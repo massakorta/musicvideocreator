@@ -1,5 +1,5 @@
 import type { MotionPresetId } from './motion.js';
-import type { AssetSource, AssetType, ProjectStatus, RenderJobStatus } from './status.js';
+import type { AssetSource, AssetType, EditorStep, ProjectStatus, RenderJobStatus } from './status.js';
 import type { StoryboardScene } from './storyboard.js';
 import type { VideoFormatId } from './videoConfig.js';
 import type { VisualBible } from './visualBible.js';
@@ -41,6 +41,7 @@ export interface ProjectSummary {
   status: ProjectStatus;
   updatedAt: string;
   progress: number;
+  nextStep: EditorStep;
 }
 
 export interface RenderJob {

@@ -35,6 +35,10 @@ async function renderJob(job: RenderJob): Promise<void> {
   const inputProps = { project: compositionProject };
 
   current = await patchJob(current, { status: 'rendering', progress: 8 });
+  const reportProgress = (progress: number) => {
+    current = { ...current, progress };
+    void patchJob(current, { progress });
+  };
   const bundled = await bundle({
     entryPoint: videoEntry,
     webpackOverride: (webpackConfig) => {
@@ -46,7 +50,7 @@ async function renderJob(job: RenderJob): Promise<void> {
       return webpackConfig;
     },
     onProgress: (progress) => {
-      void patchJob(current, { progress: Math.min(20, 8 + Math.round(progress * 12)) });
+      reportProgress(Math.min(20, 8 + Math.round(progress * 12)));
     },
   });
   const composition = await selectComposition({
@@ -63,7 +67,7 @@ async function renderJob(job: RenderJob): Promise<void> {
     inputProps,
     timeoutInMilliseconds: 1000 * 60 * 30,
     onProgress: ({ progress }) => {
-      void patchJob(current, { progress: 20 + Math.round(progress * 70) });
+      reportProgress(20 + Math.round(progress * 70));
     },
   });
 

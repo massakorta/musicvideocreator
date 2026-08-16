@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import {
+  completedEditorStepCount,
   computeProjectHealth,
+  EDITOR_STEPS,
+  nextEditorStep,
   PROJECT_STATUS_LABELS,
   reindexScenes,
   type MusicVideoProject,
@@ -23,7 +26,7 @@ export function touch(project: MusicVideoProject, patch: Partial<MusicVideoProje
 }
 
 export function deriveStatus(project: MusicVideoProject): ProjectStatus {
-  if (project.status === 'rendering') return 'rendering';
+  if (project.status === 'rendering' && !project.lastError) return 'rendering';
   if (project.status === 'error' && project.lastError) return 'error';
   if (!project.audio || !project.lyrics.trim() || !project.styleId) return 'setup';
   if (!project.visualBible || !project.visualBibleApproved) return 'visual_bible';
@@ -38,16 +41,7 @@ export function deriveStatus(project: MusicVideoProject): ProjectStatus {
 }
 
 export function toSummary(project: MusicVideoProject): ProjectSummary {
-  const health = computeProjectHealth(project);
-  const steps = [
-    Boolean(project.audio && project.lyrics.trim()),
-    Boolean(project.styleId),
-    Boolean(project.visualBibleApproved),
-    project.scenes.length > 0,
-    health.imagesGenerated > 0 && health.imagesGenerated === health.imagesTotal,
-    health.readyToRender || project.status === 'complete',
-  ];
-  const completed = steps.filter(Boolean).length;
+  const completed = completedEditorStepCount(project);
   return {
     id: project.id,
     name: project.name,
@@ -56,7 +50,8 @@ export function toSummary(project: MusicVideoProject): ProjectSummary {
     durationSeconds: project.durationSeconds,
     status: project.status,
     updatedAt: project.updatedAt,
-    progress: Math.round((completed / steps.length) * 100),
+    progress: Math.round((completed / EDITOR_STEPS.length) * 100),
+    nextStep: nextEditorStep(project),
   };
 }
 

@@ -21,24 +21,31 @@ export function SceneEditor({
   const { project } = useProject();
   const [draft, setDraft] = useState(scene);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function save() {
     setBusy(true);
-    await api.patchScene(project.id, scene.id, {
-      title: draft.title,
-      startTime: Number(draft.startTime),
-      endTime: Number(draft.endTime),
-      lyricsExcerpt: draft.lyricsExcerpt,
-      description: draft.description,
-      imagePrompt: draft.imagePrompt,
-      motion: draft.motion,
-      transitionIn: draft.transitionIn,
-      transitionOut: draft.transitionOut,
-      characters: draft.characters,
-      environmentId: draft.environmentId,
-    });
-    await onSaved();
-    setBusy(false);
+    setError(null);
+    try {
+      await api.patchScene(project.id, scene.id, {
+        title: draft.title,
+        startTime: Number(draft.startTime),
+        endTime: Number(draft.endTime),
+        lyricsExcerpt: draft.lyricsExcerpt,
+        description: draft.description,
+        imagePrompt: draft.imagePrompt,
+        motion: draft.motion,
+        transitionIn: draft.transitionIn,
+        transitionOut: draft.transitionOut,
+        characters: draft.characters,
+        environmentId: draft.environmentId,
+      });
+      await onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save this scene.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -131,15 +138,25 @@ export function SceneEditor({
           ))}
         </select>
       </div>
+      {error ? <div className="banner error">{error}</div> : null}
       <div className="row">
         <button className="btn btn-primary" disabled={busy} onClick={() => void save()}>
-          Save
+          {busy ? 'Saving…' : 'Save'}
         </button>
         <button
           className="btn"
+          disabled={busy}
           onClick={async () => {
-            await api.generateSceneImage(project.id, scene.id);
-            await onSaved();
+            setBusy(true);
+            setError(null);
+            try {
+              await api.generateSceneImage(project.id, scene.id);
+              await onSaved();
+            } catch (err) {
+              setError(err instanceof Error ? err.message : 'Could not regenerate this still.');
+            } finally {
+              setBusy(false);
+            }
           }}
         >
           Regenerate Image

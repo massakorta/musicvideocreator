@@ -12,6 +12,13 @@ export async function enqueueRender(projectId: string): Promise<{ project: Await
       missingImages: health.missingImages,
     });
   }
+  const existing = await getRepositories().renderJobs.listByProject(projectId);
+  const active = existing.find((job) =>
+    job.status === 'queued' || job.status === 'preparing' || job.status === 'rendering' || job.status === 'uploading',
+  );
+  if (active) {
+    return { project, job: active };
+  }
   const job: RenderJob = {
     id: newId(),
     projectId,

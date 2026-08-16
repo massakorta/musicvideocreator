@@ -264,6 +264,9 @@ apiRouter.post(
     if (!req.file.mimetype.startsWith('image/')) {
       throw new AppError(ERROR_CODES.VALIDATION, 'Upload a PNG, JPEG, or WebP image.', 400);
     }
+    if (req.file.size > 12 * 1024 * 1024) {
+      throw new AppError(ERROR_CODES.VALIDATION, 'Keep replacement images under 12 MB.', 400);
+    }
     const project = await getProjectOrThrow(param(req, 'id'));
     const asset = await storeGeneratedFile({
       projectId: project.id,
@@ -282,7 +285,10 @@ apiRouter.post(
 apiRouter.post(
   '/projects/:id/scenes/:sceneId/image/restore',
   asyncHandler(async (req, res) => {
-    const assetId = String(req.body?.assetId ?? '');
+    const assetId = String(req.body?.assetId ?? '').trim();
+    if (!assetId) {
+      throw new AppError(ERROR_CODES.VALIDATION, 'Choose an image version to restore.', 400);
+    }
     const project = await restoreSceneAsset(param(req, 'id'), param(req, 'sceneId'), assetId);
     res.json({ project });
   }),

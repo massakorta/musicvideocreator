@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import type { RenderJob } from '@music-video/shared';
-import { api } from '../lib/api';
+import { RENDER_JOB_STATUS_LABELS, type RenderJob } from '@music-video/shared';
+import { api, ApiClientError } from '../lib/api';
 import { useProject } from '../hooks/useProject';
 import { formatClockShort } from '../lib/time';
 
@@ -9,40 +9,87 @@ export function ResultPage() {
   const { jobId } = useParams();
   const { project } = useProject();
   const [job, setJob] = useState<RenderJob | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!jobId) return;
+    if (!jobId) {
+      setError('That render link is missing a job id.');
+      return;
+    }
+    let cancelled = false;
     let timer: number | undefined;
     async function poll() {
-      const data = await api.job(jobId!);
-      setJob(data.job);
-      if (data.job.status !== 'complete' && data.job.status !== 'failed') {
-        timer = window.setTimeout(() => void poll(), 2500);
+      try {
+        const data = await api.job(jobId!);
+        if (cancelled) return;
+        setJob(data.job);
+        setError(null);
+        if (data.job.status !== 'complete' && data.job.status !== 'failed') {
+          timer = window.setTimeout(() => void poll(), 2500);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof ApiClientError ? err.message : 'Could not load this render.');
+        timer = window.setTimeout(() => void poll(), 4000);
       }
     }
     void poll();
-    return () => window.clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, [jobId]);
 
-  if (!job) return <div className="page">Loading render…</div>;
+  async function renderAgain() {
+    setRetrying(true);
+    setError(null);
+    try {
+      const data = await api.render(project.id);
+      navigate(`/projects/${project.id}/result/${data.job.id}`);
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : 'Could not start another render.');
+    } finally {
+      setRetrying(false);
+    }
+  }
 
-  if (job.status === 'failed') {
+  if (!job && !error) return <div className="page">Loading render…</div>;
+
+  if (error && !job) {
     return (
       <div className="page">
-        <div className="banner error">{job.error || 'The render failed.'}</div>
-        <button className="btn" onClick={() => navigate(`/projects/${project.id}/video`)}>
+        <div className="banner error">{error}</div>
+        <Link className="btn" to={`/projects/${project.id}/video`}>
           Back to Editor
-        </button>
+        </Link>
       </div>
     );
   }
 
-  if (job.status !== 'complete') {
+  if (job?.status === 'failed') {
+    return (
+      <div className="page">
+        <div className="banner error">{job.error || 'The render failed.'}</div>
+        <div className="row">
+          <button className="btn btn-primary" disabled={retrying} onClick={() => void renderAgain()}>
+            {retrying ? 'Queueing…' : 'Retry render'}
+          </button>
+          <button className="btn" onClick={() => navigate(`/projects/${project.id}/video`)}>
+            Back to Editor
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (job && job.status !== 'complete') {
     return (
       <div className="page" style={{ maxWidth: 640 }}>
         <h1>Rendering video</h1>
-        <p className="muted">{job.status}</p>
+        <p className="muted">{RENDER_JOB_STATUS_LABELS[job.status]}</p>
+        {error ? <div className="banner warning">{error} Retrying…</div> : null}
         <div className="progress" style={{ height: 10 }}>
           <span style={{ width: `${job.progress}%` }} />
         </div>
@@ -54,15 +101,17 @@ export function ResultPage() {
   return (
     <div className="page" style={{ maxWidth: 900 }}>
       <h1>Your Music Video Is Ready</h1>
-      {job.outputUrl ? (
+      {job?.outputUrl ? (
         <video src={job.outputUrl} controls style={{ width: '100%', borderRadius: 16, margin: '16px 0' }} />
-      ) : null}
+      ) : (
+        <div className="banner warning">The render finished, but the video file is not available yet. Try rendering again.</div>
+      )}
       <p className="muted">
         1920 × 1080 · {formatClockShort(project.durationSeconds)}
-        {job.fileSizeBytes ? ` · ${(job.fileSizeBytes / (1024 * 1024)).toFixed(1)} MB` : ''}
+        {job?.fileSizeBytes ? ` · ${(job.fileSizeBytes / (1024 * 1024)).toFixed(1)} MB` : ''}
       </p>
       <div className="row">
-        {job.outputUrl ? (
+        {job?.outputUrl ? (
           <a className="btn btn-primary" href={job.outputUrl} download="music-video.mp4">
             Download MP4
           </a>
@@ -70,14 +119,8 @@ export function ResultPage() {
         <Link className="btn" to={`/projects/${project.id}/video`}>
           Back to Editor
         </Link>
-        <button
-          className="btn"
-          onClick={async () => {
-            const data = await api.render(project.id);
-            navigate(`/projects/${project.id}/result/${data.job.id}`);
-          }}
-        >
-          Render Again
+        <button className="btn" disabled={retrying} onClick={() => void renderAgain()}>
+          {retrying ? 'Queueing…' : 'Render Again'}
         </button>
       </div>
     </div>

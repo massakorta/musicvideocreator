@@ -26,9 +26,9 @@ export function HealthPanel({ health }: { health: ProjectHealth }) {
             <div key={b}>{b}</div>
           ))}
         </div>
-      ) : (
-        <div className="banner">This cut is ready to render.</div>
-      )}
+      ) : health.readyToRender ? (
+        <div className="banner success">This cut is ready to render.</div>
+      ) : null}
     </aside>
   );
 }

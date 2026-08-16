@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   EDITOR_STEP_LABELS,
   EDITOR_STEPS,
+  completedEditorStepCount,
   computeProjectHealth,
+  isEditorStepComplete,
+  nextEditorStep,
   validateSceneTiming,
   type MusicVideoProject,
   type ProjectHealth,
@@ -22,41 +25,39 @@ export function ProjectLayout() {
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
 
-  async function reload() {
+  const reload = useCallback(async () => {
     if (!id) return;
     const data = await api.project(id);
     setProjectState(data.project);
     setHealth(data.health);
     setTimingIssues(data.timingIssues);
-  }
+  }, [id]);
 
   useEffect(() => {
     reload().catch((err) => setError(err instanceof Error ? err.message : 'Could not load project.'));
-  }, [id]);
-
-  const completedSteps = useMemo(() => {
-    if (!project || !health) return 0;
-    return [
-      Boolean(project.audio && project.lyrics.trim()),
-      Boolean(project.styleId),
-      Boolean(project.visualBibleApproved),
-      project.scenes.length > 0,
-      health.imagesGenerated > 0,
-      health.readyToRender || project.status === 'complete',
-    ].filter(Boolean).length;
-  }, [project, health]);
+  }, [id, reload]);
 
   if (error) {
     return (
       <div className="page">
         <div className="banner error">{error}</div>
-        <Link to="/">Back to projects</Link>
+        <Link className="btn" to="/">
+          Back to projects
+        </Link>
       </div>
     );
   }
   if (!project || !health) {
-    return <div className="page">Opening project…</div>;
+    return (
+      <div className="page">
+        <div className="skeleton" style={{ height: 48, marginBottom: 16 }} />
+        <div className="skeleton" style={{ height: 240 }} />
+      </div>
+    );
   }
+
+  const completed = completedEditorStepCount(project);
+  const nextStep = nextEditorStep(project);
 
   const value = {
     project,
@@ -64,6 +65,7 @@ export function ProjectLayout() {
     timingIssues,
     saveState,
     reload,
+    markSave: setSaveState,
     setProject(next: MusicVideoProject, nextHealth?: ProjectHealth, issues?: TimelineIssue[]) {
       setProjectState(next);
       setHealth(nextHealth ?? computeProjectHealth(next));
@@ -80,21 +82,31 @@ export function ProjectLayout() {
             ← Projects
           </Link>
           <span className="save-dot">
-            {saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? 'Saved' : `${completedSteps} / 6 completed`}
+            {saveState === 'saving'
+              ? 'Saving…'
+              : saveState === 'error'
+                ? 'Save failed'
+                : saveState === 'saved'
+                  ? 'Saved'
+                  : `${completed} / ${EDITOR_STEPS.length} completed`}
           </span>
         </div>
         <h1>{project.name}</h1>
       </div>
-      <nav className="stepper">
-        {EDITOR_STEPS.map((step) => (
-          <button
-            key={step}
-            className={`step ${location.pathname.includes(`/${step}`) ? 'active' : ''}`}
-            onClick={() => navigate(`/projects/${project.id}/${step}`)}
-          >
-            {EDITOR_STEP_LABELS[step]}
-          </button>
-        ))}
+      <nav className="stepper" aria-label="Editor steps">
+        {EDITOR_STEPS.map((step) => {
+          const done = isEditorStepComplete(project, step);
+          const active = location.pathname.includes(`/${step}`);
+          return (
+            <button
+              key={step}
+              className={`step ${active ? 'active' : ''} ${done ? 'done' : ''} ${step === nextStep && !active ? 'next' : ''}`}
+              onClick={() => navigate(`/projects/${project.id}/${step}`)}
+            >
+              {EDITOR_STEP_LABELS[step]}
+            </button>
+          );
+        })}
       </nav>
       <Outlet />
     </ProjectContext.Provider>

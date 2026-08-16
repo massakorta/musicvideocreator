@@ -5,11 +5,14 @@ import { api, ApiClientError } from '../lib/api';
 import { formatClockShort, formatRelative } from '../lib/time';
 import { useSession } from '../hooks/useProject';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { EmptyState } from '../components/EmptyState';
 
-export function DashboardPage() {
+export function DashboardPage({ onLogout }: { onLogout: () => void }) {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ProjectSummary | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const navigate = useNavigate();
   const session = useSession();
 
@@ -17,8 +20,11 @@ export function DashboardPage() {
     try {
       const data = await api.projects();
       setProjects(data.projects);
+      setError(null);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : 'Could not load projects.');
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -33,28 +39,55 @@ export function DashboardPage() {
           <small>Studio</small>
           <strong>{PRODUCT_NAME}</strong>
         </div>
-        <Link className="btn btn-primary" to="/projects/new">
-          + Create Music Video
-        </Link>
+        <div className="row">
+          {session.accessRequired ? (
+            <button
+              className="btn btn-ghost"
+              onClick={async () => {
+                await api.logout().catch(() => undefined);
+                onLogout();
+                navigate('/access');
+              }}
+            >
+              Sign out
+            </button>
+          ) : null}
+          <Link className="btn btn-primary" to="/projects/new">
+            + Create Music Video
+          </Link>
+        </div>
       </header>
       <div className="page">
         {session.demoMode ? (
           <div className="banner warning">
-            OpenAI is not configured. You can still walk the full editor with demo generation. Add
-            OPENAI_API_KEY to enable live visual bibles and images.
+            Live image generation is off. You can still walk the full editor with demo stills.
           </div>
         ) : null}
         {error ? <div className="banner error">{error}</div> : null}
-        {projects.length === 0 ? (
-          <div className="drop">
-            No projects yet. Create a music video to start the director’s desk.
+        {loading ? (
+          <div className="grid-cards">
+            <div className="skeleton" style={{ height: 280 }} />
+            <div className="skeleton" style={{ height: 280 }} />
+            <div className="skeleton" style={{ height: 280 }} />
           </div>
+        ) : projects.length === 0 ? (
+          <EmptyState
+            title="No films on the desk yet"
+            body="Upload a song, pick a look, and the studio storyboards the cut for you."
+            action={
+              <Link className="btn btn-primary" to="/projects/new">
+                Create your first music video
+              </Link>
+            }
+          />
         ) : (
           <div className="grid-cards">
             {projects.map((project) => (
               <article className="card" key={project.id}>
                 <div
                   className="card-media"
+                  role="img"
+                  aria-label={project.name}
                   style={{
                     backgroundImage: project.thumbnailUrl ? `url(${project.thumbnailUrl})` : undefined,
                     backgroundSize: 'cover',
@@ -68,22 +101,34 @@ export function DashboardPage() {
                     <span className="pill">{PROJECT_STATUS_LABELS[project.status]}</span>
                     <span className="mono faint">{formatClockShort(project.durationSeconds)}</span>
                   </div>
-                  <div className="progress" aria-label="progress">
+                  <div className="progress" aria-label={`${project.progress}% complete`} role="progressbar" aria-valuenow={project.progress} aria-valuemin={0} aria-valuemax={100}>
                     <span style={{ width: `${project.progress}%` }} />
                   </div>
                   <div className="faint">Updated {formatRelative(project.updatedAt)}</div>
                   <div className="row" style={{ marginTop: 14 }}>
-                    <button className="btn btn-primary" onClick={() => navigate(`/projects/${project.id}/setup`)}>
-                      Open
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => navigate(`/projects/${project.id}/${project.nextStep || 'setup'}`)}
+                    >
+                      {project.status === 'complete' ? 'Watch' : 'Continue'}
                     </button>
                     <button
                       className="btn"
+                      disabled={busyId === project.id}
                       onClick={async () => {
-                        const copy = await api.duplicateProject(project.id);
-                        navigate(`/projects/${copy.project.id}/setup`);
+                        setBusyId(project.id);
+                        setError(null);
+                        try {
+                          const copy = await api.duplicateProject(project.id);
+                          navigate(`/projects/${copy.project.id}/${copy.project.status === 'ready_to_render' ? 'video' : 'setup'}`);
+                        } catch (err) {
+                          setError(err instanceof ApiClientError ? err.message : 'Could not duplicate that project.');
+                        } finally {
+                          setBusyId(null);
+                        }
                       }}
                     >
-                      Duplicate
+                      {busyId === project.id ? 'Copying…' : 'Duplicate'}
                     </button>
                     <button className="btn btn-danger" onClick={() => setPendingDelete(project)}>
                       Delete
@@ -102,9 +147,14 @@ export function DashboardPage() {
           confirmLabel="Delete project"
           onCancel={() => setPendingDelete(null)}
           onConfirm={async () => {
-            await api.deleteProject(pendingDelete.id);
-            setPendingDelete(null);
-            await load();
+            try {
+              await api.deleteProject(pendingDelete.id);
+              setPendingDelete(null);
+              await load();
+            } catch (err) {
+              setError(err instanceof ApiClientError ? err.message : 'Could not delete that project.');
+              setPendingDelete(null);
+            }
           }}
         />
       ) : null}

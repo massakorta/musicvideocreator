@@ -67,24 +67,80 @@ export async function deleteProject(id: string): Promise<void> {
 
 export async function duplicateProject(id: string): Promise<MusicVideoProject> {
   const source = await getProjectOrThrow(id);
+  const newProjectId = newId();
   const timestamp = nowIso();
+  const storage = getObjectStorage();
+  const assets = await getRepositories().assets.listByProject(id);
+  const idMap = new Map<string, string>();
+
+  for (const asset of assets) {
+    const newAssetId = newId();
+    idMap.set(asset.id, newAssetId);
+    let storagePath = asset.storagePath;
+    let publicUrl = asset.publicUrl;
+    let fileSizeBytes = asset.fileSizeBytes;
+    try {
+      const file = await storage.get(asset.storagePath);
+      if (file) {
+        const extension = asset.storagePath.split('.').pop() || 'bin';
+        const stored = await storage.put({
+          projectId: newProjectId,
+          filename: `${newAssetId}.${extension}`,
+          body: file.body,
+          mimeType: file.mimeType || asset.mimeType,
+        });
+        storagePath = stored.storagePath;
+        publicUrl = stored.publicUrl;
+        fileSizeBytes = stored.bytes;
+      }
+    } catch {
+      // Keep the original public URL if the bytes cannot be copied.
+    }
+    await getRepositories().assets.save({
+      ...asset,
+      id: newAssetId,
+      projectId: newProjectId,
+      storagePath,
+      publicUrl,
+      fileSizeBytes,
+      createdAt: timestamp,
+    });
+  }
+
+  const remap = (assetId?: string) => (assetId ? (idMap.get(assetId) ?? assetId) : assetId);
   const copy: MusicVideoProject = {
     ...structuredClone(source),
-    id: newId(),
+    id: newProjectId,
     name: `${source.name} copy`,
-    status: deriveStatus(source) === 'complete' ? 'ready_to_render' : source.status,
+    status: source.status === 'complete' || source.status === 'rendering' ? 'ready_to_render' : source.status,
     createdAt: timestamp,
     updatedAt: timestamp,
+    audio: source.audio ? { ...source.audio, assetId: remap(source.audio.assetId) } : undefined,
+    visualBible: source.visualBible
+      ? {
+          ...structuredClone(source.visualBible),
+          characters: source.visualBible.characters.map((character) => ({
+            ...character,
+            referenceAssetId: remap(character.referenceAssetId),
+          })),
+        }
+      : undefined,
+    scenes: source.scenes.map((scene) => ({
+      ...structuredClone(scene),
+      currentAssetId: remap(scene.currentAssetId),
+      previousAssetIds: scene.previousAssetIds.map((assetId) => remap(assetId) ?? assetId),
+    })),
   };
-  return getRepositories().projects.save(copy);
+  copy.status = deriveStatus(copy);
+  await getRepositories().projects.save(copy);
+  return getProjectOrThrow(newProjectId);
 }
 
 export async function saveProject(project: MusicVideoProject): Promise<MusicVideoProject> {
   project.status = deriveStatus(project);
   project.updatedAt = nowIso();
-  if (project.scenes[0]?.image?.publicUrl) {
-    project.thumbnailUrl = project.scenes.find((s) => s.image?.publicUrl)?.image?.publicUrl;
-  }
+  project.thumbnailUrl =
+    project.scenes.find((scene) => scene.image?.publicUrl)?.image?.publicUrl ?? project.thumbnailUrl;
   return getRepositories().projects.save(project);
 }
 
@@ -98,7 +154,9 @@ export async function addScene(projectId: string, afterSceneId?: string): Promis
   const project = await getProjectOrThrow(projectId);
   const after = afterSceneId ? project.scenes.find((s) => s.id === afterSceneId) : project.scenes.at(-1);
   const start = after?.endTime ?? 0;
-  const end = Math.min(project.durationSeconds || start + 3, start + 3);
+  const remaining = (project.durationSeconds || start + 3) - start;
+  const length = remaining > 0.4 ? Math.min(3, remaining) : 3;
+  const end = start + length;
   const scene = {
     id: newId(),
     order: (after?.order ?? 0) + 1,

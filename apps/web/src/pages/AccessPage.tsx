@@ -1,13 +1,21 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { PRODUCT_NAME, PRODUCT_TAGLINE } from '@music-video/shared';
 import { api, ApiClientError } from '../lib/api';
+import { useSession } from '../hooks/useProject';
 
 export function AccessPage({ onAuthed }: { onAuthed: () => void }) {
+  const session = useSession();
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = (location.state as { from?: string } | null)?.from || '/';
+
+  if (!session.accessRequired || session.authenticated) {
+    return <Navigate to="/" replace />;
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -16,7 +24,7 @@ export function AccessPage({ onAuthed }: { onAuthed: () => void }) {
     try {
       await api.access(code);
       onAuthed();
-      navigate('/');
+      navigate(from.startsWith('/') ? from : '/', { replace: true });
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : 'Could not verify that code.');
     } finally {
@@ -41,6 +49,7 @@ export function AccessPage({ onAuthed }: { onAuthed: () => void }) {
             value={code}
             onChange={(e) => setCode(e.target.value)}
             placeholder="Enter the beta code"
+            autoComplete="current-password"
           />
         </div>
         {error ? <div className="banner error">{error}</div> : null}

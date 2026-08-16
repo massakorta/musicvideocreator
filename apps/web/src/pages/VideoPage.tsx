@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Player, type PlayerRef } from '@remotion/player';
 import { MusicVideoComposition, compositionDurationFrames, projectToComposition } from '@music-video/video';
 import { getVideoPreset } from '@music-video/shared';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useProject } from '../hooks/useProject';
 import { api, ApiClientError } from '../lib/api';
 import { HealthPanel } from '../components/HealthPanel';
@@ -29,7 +29,7 @@ export function VideoPage() {
     const onUpdate = ({ detail }: { detail: { frame: number } }) => setFrame(detail.frame);
     instance.addEventListener('frameupdate', onUpdate);
     return () => instance.removeEventListener('frameupdate', onUpdate);
-  }, [composition.scenes.length]);
+  }, [composition.scenes.length, composition.durationSeconds]);
 
   return (
     <div className="page editor-layout">
@@ -40,7 +40,8 @@ export function VideoPage() {
             <strong>Cannot render yet</strong>
             {health.missingImages.length > 0 ? (
               <div>
-                {health.missingImages.length} scenes are missing images:
+                {health.missingImages.length} scenes are missing images.{' '}
+                <Link to={`/projects/${project.id}/images`}>Generate them</Link>
                 <ul className="list">
                   {health.missingImages.slice(0, 8).map((title) => (
                     <li key={title}>{title}</li>
@@ -70,7 +71,11 @@ export function VideoPage() {
               acknowledgeRemotionLicense
             />
           ) : (
-            <div className="drop">Generate images to preview the cut.</div>
+            <div className="drop">
+              {project.scenes.length === 0
+                ? 'Generate a storyboard, then stills, to preview the cut.'
+                : 'Generate scene stills to preview the Ken Burns cut.'}
+            </div>
           )}
         </div>
         <div className="row" style={{ margin: '10px 0' }}>
@@ -113,6 +118,7 @@ export function VideoPage() {
         <HealthPanel health={health} />
         {selected ? (
           <SceneEditor
+            key={selected.id}
             scene={selected}
             onClose={() => setSelectedId(null)}
             onSaved={async () => {
@@ -162,7 +168,7 @@ function Timeline({
               onSelect(scene.id);
             }}
           >
-            {scene.order}
+            {scene.title || scene.order}
           </button>
         ))}
       </div>

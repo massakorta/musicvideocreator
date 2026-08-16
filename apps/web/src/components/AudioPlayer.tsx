@@ -10,8 +10,13 @@ export function AudioPlayer({ src, duration }: { src?: string; duration: number 
     const el = ref.current;
     if (!el) return;
     const onTime = () => setCurrent(el.currentTime);
+    const onEnded = () => setPlaying(false);
     el.addEventListener('timeupdate', onTime);
-    return () => el.removeEventListener('timeupdate', onTime);
+    el.addEventListener('ended', onEnded);
+    return () => {
+      el.removeEventListener('timeupdate', onTime);
+      el.removeEventListener('ended', onEnded);
+    };
   }, [src]);
 
   if (!src) return <div className="banner">Upload a song to hear it against the storyboard.</div>;

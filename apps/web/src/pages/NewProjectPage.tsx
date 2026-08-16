@@ -29,7 +29,7 @@ export function NewProjectPage() {
         ← Projects
       </Link>
       <h1 style={{ fontSize: 40, margin: '12px 0' }}>New music video</h1>
-      <p className="hero-copy">Name the film. You’ll upload the song and lyrics next.</p>
+      <p className="hero-copy">Name the film. You’ll drop the song and lyrics on the next screen.</p>
       <form onSubmit={submit}>
         <div className="field">
           <label htmlFor="name">Project name</label>
@@ -39,6 +39,7 @@ export function NewProjectPage() {
             onChange={(e) => setName(e.target.value)}
             placeholder="Jens – Havets sämsta kock"
             required
+            autoFocus
           />
         </div>
         <div className="field">
@@ -47,7 +48,7 @@ export function NewProjectPage() {
             id="song"
             value={songTitle}
             onChange={(e) => setSongTitle(e.target.value)}
-            placeholder="Same as the project, or the track title"
+            placeholder="Optional — defaults to the project name"
           />
         </div>
         {error ? <div className="banner error">{error}</div> : null}

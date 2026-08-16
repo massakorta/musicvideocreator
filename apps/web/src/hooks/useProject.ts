@@ -22,6 +22,7 @@ export interface ProjectContextValue {
   saveState: 'idle' | 'saving' | 'saved' | 'error';
   reload: () => Promise<void>;
   setProject: (project: MusicVideoProject, health?: ProjectHealth, issues?: TimelineIssue[]) => void;
+  markSave: (state: 'idle' | 'saving' | 'saved' | 'error') => void;
 }
 
 export const ProjectContext = createContext<ProjectContextValue | null>(null);

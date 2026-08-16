@@ -311,6 +311,11 @@ h3 {
   color: var(--success);
 }
 
+.step.next {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
 .project-header {
   padding: 18px 32px 0;
 }
@@ -493,12 +498,49 @@ h3 {
   background: rgba(224, 164, 90, 0.1);
 }
 
+.banner.success {
+  background: rgba(125, 190, 116, 0.12);
+  border-color: rgba(125, 190, 116, 0.35);
+}
+
 .drop {
   border: 1px dashed var(--line-strong);
   border-radius: 16px;
   padding: 28px;
   text-align: center;
   color: var(--text-dim);
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+}
+
+.drop.dragover {
+  border-color: var(--accent);
+  background: rgba(228, 184, 74, 0.08);
+}
+
+.empty-state {
+  border: 1px dashed var(--line-strong);
+  border-radius: 16px;
+  padding: 36px 24px;
+  text-align: center;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  background: rgba(28, 25, 22, 0.6);
+}
+
+.empty-state h2 {
+  font-size: 28px;
+}
+
+.boot-screen {
+  max-width: 520px;
+  margin: 16vh auto;
+}
+
+.style-card.selected {
+  border-color: var(--accent);
 }
 
 .modal-backdrop {

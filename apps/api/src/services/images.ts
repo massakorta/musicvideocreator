@@ -135,12 +135,14 @@ export async function generateSceneImage(projectId: string, sceneId: string) {
       height: 1080,
       metadata: { sceneId },
     });
-    const saved = await attachAssetToScene(generating, sceneId, asset);
+    const latest = await getProjectOrThrow(projectId);
+    const saved = await attachAssetToScene(latest, sceneId, asset);
     return { project: saved, asset, demo: source === 'demo' };
   } catch (error) {
+    const latest = await getProjectOrThrow(projectId).catch(() => generating);
     await saveProject({
-      ...generating,
-      scenes: generating.scenes.map((s) =>
+      ...latest,
+      scenes: latest.scenes.map((s) =>
         s.id === sceneId
           ? {
               ...s,
@@ -184,8 +186,8 @@ export async function generateMissingImages(projectId: string) {
 
 function referenceUrls(characters: CharacterDefinition[], ids: string[]) {
   return characters
-    .filter((c) => ids.includes(c.id) && c.lockedReferenceImage && c.referenceAssetId)
-    .map((c) => ({ characterId: c.id, url: c.referenceAssetId ?? '' }));
+    .filter((c) => ids.includes(c.id) && c.lockedReferenceImage && c.referenceUrl)
+    .map((c) => ({ characterId: c.id, url: c.referenceUrl ?? '' }));
 }
 
 function formatTimecode(seconds: number): string {
