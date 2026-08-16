@@ -208,6 +208,15 @@ export const api = {
           height: number;
           audioUrl?: string;
         };
+        lyrics?: {
+          text: string;
+          lines: Array<{
+            startTime: number;
+            endTime: number;
+            text: string;
+            section: string;
+          }>;
+        };
       };
     }>(`/api/public/watch/${shareId}`),
   render: (id: string) =>

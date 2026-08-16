@@ -4,6 +4,7 @@ import {
   computeProjectHealth,
   getVideoPreset,
   renderCompositionFingerprint,
+  type MusicVideoProject,
 } from '@music-video/shared';
 import { compositionDurationFrames, projectToComposition } from '@music-video/video/composition';
 import { config } from '../config.js';
@@ -22,6 +23,18 @@ export interface PublicWatchPreview {
   audioUrl?: string;
 }
 
+export interface PublicWatchLyricLine {
+  startTime: number;
+  endTime: number;
+  text: string;
+  section: string;
+}
+
+export interface PublicWatchLyrics {
+  text: string;
+  lines: PublicWatchLyricLine[];
+}
+
 export interface PublicWatchPayload {
   title: string;
   songTitle: string;
@@ -30,6 +43,41 @@ export interface PublicWatchPayload {
   mode: 'preview' | 'video';
   videoUrl?: string;
   preview?: PublicWatchPreview;
+  lyrics?: PublicWatchLyrics;
+}
+
+function publicLyricsFromProject(project: MusicVideoProject): PublicWatchLyrics | undefined {
+  const text = project.lyrics.trim();
+  if (project.lyricAlignment?.lines.length) {
+    return {
+      text,
+      lines: project.lyricAlignment.lines.map((line) => ({
+        startTime: line.startTime,
+        endTime: line.endTime,
+        text: line.text,
+        section: line.section,
+      })),
+    };
+  }
+
+  const sceneLines = project.scenes
+    .filter((scene) => scene.lyricsExcerpt?.trim())
+    .map((scene) => ({
+      startTime: scene.startTime,
+      endTime: scene.endTime,
+      text: scene.lyricsExcerpt!.trim(),
+      section: scene.songSection,
+    }));
+
+  if (sceneLines.length) {
+    return { text, lines: sceneLines };
+  }
+
+  if (text.length) {
+    return { text, lines: [] };
+  }
+
+  return undefined;
 }
 
 export async function assertShareable(projectId: string): Promise<void> {
@@ -75,6 +123,7 @@ export async function getPublicWatch(shareId: string): Promise<PublicWatchPayloa
       shareId,
       mode: 'video',
       videoUrl,
+      lyrics: publicLyricsFromProject(hydrated),
     };
   }
 
@@ -95,6 +144,7 @@ export async function getPublicWatch(shareId: string): Promise<PublicWatchPayloa
       height: preset.height,
       audioUrl: hydrated.audio?.url,
     },
+    lyrics: publicLyricsFromProject(hydrated),
   };
 }
 
