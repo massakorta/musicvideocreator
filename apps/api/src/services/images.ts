@@ -1,4 +1,4 @@
-import { AppError, ERROR_CODES, type CharacterDefinition } from '@music-video/shared';
+import { AppError, ERROR_CODES, resolveProjectImageQualityId, type CharacterDefinition } from '@music-video/shared';
 import { characterReferenceFingerprint, sceneImageFingerprint } from '@music-video/shared';
 import { config } from '../config.js';
 import { placeholderSvg } from './demo.js';
@@ -27,7 +27,7 @@ export async function generateCharacterReference(projectId: string, characterId:
     throw new AppError(ERROR_CODES.CONFLICT, 'This character reference is locked. Unlock it before regenerating.', 409);
   }
   const style = styleOrThrow(project.styleId);
-  const provider = createImageProvider();
+  const provider = createImageProvider(resolveProjectImageQualityId(project));
   let body: Buffer;
   let mimeType = 'image/svg+xml';
   let source: 'ai' | 'demo' = 'demo';
@@ -134,7 +134,7 @@ export async function generateSceneImage(projectId: string, sceneId: string) {
       ),
     );
 
-    const provider = createImageProvider();
+    const provider = createImageProvider(resolveProjectImageQualityId(project));
     let body: Buffer;
     let mimeType = 'image/svg+xml';
     let source: 'ai' | 'demo' = 'demo';

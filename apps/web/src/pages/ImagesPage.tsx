@@ -6,6 +6,7 @@ import { api, ApiClientError } from '../lib/api';
 import { formatClockShort } from '../lib/time';
 import { HealthPanel } from '../components/HealthPanel';
 import { EmptyState } from '../components/EmptyState';
+import { ImageQualityPicker, imageQualitySecondsPerStill } from '../components/ImageQualityPicker';
 import { SceneEditor } from '../components/SceneEditor';
 import { CardWaitOverlay, WaitCard } from '../components/WaitCard';
 import { mergeProjectFromServer, scenesMissingImages } from '../lib/mergeProject';
@@ -33,6 +34,8 @@ export function ImagesPage() {
     (s) => s.generationState === 'generating' && !s.currentAssetId && !s.image,
   ).length;
   const completeCount = project.scenes.filter((s) => s.currentAssetId || s.image).length;
+  const perStillSeconds = imageQualitySecondsPerStill(project);
+  const generationBusy = busy || generatingCount > 0 || Boolean(singleTitle);
 
   function applyProjectUpdate(incoming: typeof project) {
     const merged = mergeProjectFromServer(projectRef.current, incoming);
@@ -121,8 +124,11 @@ export function ImagesPage() {
             total={busy ? batch.total : singleTitle ? undefined : project.scenes.length}
             expectedSeconds={
               singleTitle && !busy
-                ? 10
-                : Math.max(10, (busy ? batch.total - batch.done : project.scenes.length - completeCount) * 8)
+                ? perStillSeconds
+                : Math.max(
+                    perStillSeconds,
+                    (busy ? batch.total - batch.done : project.scenes.length - completeCount) * perStillSeconds,
+                  )
             }
             detail={
               batch.title
@@ -136,6 +142,12 @@ export function ImagesPage() {
             stages={['Each still takes a few seconds. Keep this tab open.']}
           />
         ) : null}
+        <ImageQualityPicker
+          project={project}
+          setProject={setProject}
+          disabled={generationBusy}
+          variant="compact"
+        />
         <div className="row" style={{ marginBottom: 14, flexWrap: 'wrap' }}>
           <button
             className="btn btn-primary"

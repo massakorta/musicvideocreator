@@ -1,4 +1,5 @@
 import type { MusicVideoProject, StaleAssets } from './project.js';
+import { getImageQuality, resolveProjectImageQualityId } from './imageQuality.js';
 import type { CharacterDefinition } from './visualBible.js';
 import type { StoryboardScene } from './storyboard.js';
 
@@ -131,10 +132,11 @@ export function estimatePipelineSeconds(
       ? (project.visualBible?.characters.length ?? 2)
       : (stale?.staleCharacterIds.length ?? 0);
   const concurrency = 6;
+  const perStill = getImageQuality(resolveProjectImageQualityId(project)).expectedSecondsPerStill;
   const bible = kind === 'full' ? 25 : 0;
   const storyboard = kind === 'full' ? Math.max(55, Math.round(duration * 0.45)) : 0;
-  const chars = Math.ceil(Math.max(charCount, 1) / concurrency) * 10;
-  const images = Math.ceil(Math.max(sceneCount, 1) / concurrency) * 8;
+  const chars = Math.ceil(Math.max(charCount, 1) / concurrency) * perStill;
+  const images = Math.ceil(Math.max(sceneCount, 1) / concurrency) * perStill;
   const render = kind === 'full' || stale?.videoStale ? Math.max(90, Math.round(duration * 4)) : 0;
   return bible + storyboard + chars + images + render;
 }

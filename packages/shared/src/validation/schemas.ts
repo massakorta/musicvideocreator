@@ -1,7 +1,13 @@
 import { z } from 'zod';
 import { MOTION_PRESETS, TRANSITION_PRESETS } from '../motion.js';
 import { ASSET_SOURCES, ASSET_TYPES, MEDIA_TYPES, PROJECT_STATUSES, SHOT_TYPES, SONG_SECTIONS } from '../status.js';
+import { IMAGE_QUALITY_PRESETS } from '../imageQuality.js';
 import { VIDEO_PRESETS } from '../videoConfig.js';
+
+const imageQualityIds = IMAGE_QUALITY_PRESETS.map((p) => p.id) as [
+  (typeof IMAGE_QUALITY_PRESETS)[number]['id'],
+  ...(typeof IMAGE_QUALITY_PRESETS)[number]['id'][],
+];
 
 export const hexColorSchema = z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
 
@@ -154,6 +160,7 @@ export const projectSchema = z.object({
   songTitle: z.string(),
   status: z.enum(PROJECT_STATUSES),
   styleId: z.string().optional(),
+  imageQualityId: z.enum(imageQualityIds).optional(),
   audio: audioInfoSchema.optional(),
   durationSeconds: z.number().nonnegative(),
   lyrics: z.string(),
@@ -180,6 +187,7 @@ export const patchProjectBodySchema = z.object({
   songTitle: z.string().max(160).optional(),
   lyrics: z.string().max(20000).optional(),
   styleId: z.string().optional(),
+  imageQualityId: z.enum(imageQualityIds).optional(),
   status: z.enum(PROJECT_STATUSES).optional(),
   captionsEnabled: z.boolean().optional(),
   formatId: z.enum(Object.keys(VIDEO_PRESETS) as [keyof typeof VIDEO_PRESETS, ...Array<keyof typeof VIDEO_PRESETS>]).optional(),

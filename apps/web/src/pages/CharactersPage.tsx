@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useProject } from '../hooks/useProject';
 import { api, ApiClientError } from '../lib/api';
 import { EmptyState } from '../components/EmptyState';
+import { ImageQualityPicker, imageQualitySecondsPerStill } from '../components/ImageQualityPicker';
 import { CardWaitOverlay, WaitCard } from '../components/WaitCard';
 
 export function CharactersPage() {
@@ -12,6 +13,8 @@ export function CharactersPage() {
   const [progress, setProgress] = useState({ current: 0, total: 0, name: '' });
   const navigate = useNavigate();
   const characters = project.visualBible?.characters ?? [];
+  const perStillSeconds = imageQualitySecondsPerStill(project);
+  const generationBusy = Boolean(busyId);
 
   if (!project.visualBibleApproved) {
     return (
@@ -74,7 +77,7 @@ export function CharactersPage() {
       {busyId && busyId !== 'all' ? (
         <WaitCard
           title="Drawing a character sheet"
-          expectedSeconds={35}
+          expectedSeconds={perStillSeconds}
           detail={`Painting ${characters.find((character) => character.id === busyId)?.name ?? 'this character'}…`}
           stages={['Full-body reference, same face and costume every time…']}
         />
@@ -96,11 +99,17 @@ export function CharactersPage() {
               title="Drawing character sheets"
               current={progress.current}
               total={progress.total}
-              expectedSeconds={Math.max(30, progress.total * 28)}
+              expectedSeconds={Math.max(perStillSeconds, progress.total * perStillSeconds)}
               detail={progress.name ? `Painting ${progress.name}…` : 'Preparing character sheets…'}
               stages={['Painting full-body references…']}
             />
           ) : null}
+          <ImageQualityPicker
+            project={project}
+            setProject={setProject}
+            disabled={generationBusy}
+            variant="compact"
+          />
           <div className="row" style={{ marginBottom: 16 }}>
             <button className="btn btn-primary" disabled={Boolean(busyId)} onClick={() => void generateAll()}>
               {busyId === 'all' ? 'Generating sheets…' : 'Generate all character sheets'}

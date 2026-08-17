@@ -1,5 +1,5 @@
 import { createOpenAiClient, generateStoryboard, generateVisualBible, isOpenAiConfigured, OpenAiImageProvider } from '@music-video/ai';
-import { AppError, ERROR_CODES, visualBibleSchema, type AiUsageLog, type VisualBible } from '@music-video/shared';
+import { AppError, ERROR_CODES, getImageQuality, visualBibleSchema, type AiUsageLog, type ImageQualityId, type VisualBible } from '@music-video/shared';
 import { config, openaiConfigured } from '../config.js';
 import { getRepositories } from '../repositories/index.js';
 import { demoStoryboard, demoVisualBible } from './demo.js';
@@ -121,17 +121,18 @@ export async function generateProjectStoryboard(projectId: string) {
   }
 }
 
-export function createImageProvider(): OpenAiImageProvider | null {
+export function createImageProvider(imageQualityId?: ImageQualityId): OpenAiImageProvider | null {
   if (!openaiConfigured()) return null;
+  const preset = getImageQuality(imageQualityId);
   const client = createOpenAiClient({
     apiKey: config.openaiApiKey,
     textModel: config.openaiTextModel,
-    imageModel: config.openaiImageModel,
+    imageModel: preset.model,
     timeoutMs: 90_000,
   });
-  return new OpenAiImageProvider(client, config.openaiImageModel, {
+  return new OpenAiImageProvider(client, preset.model, {
     defaultSize: config.openaiImageSize,
-    quality: config.openaiImageQuality,
+    quality: preset.quality,
     outputFormat: 'jpeg',
     requestTimeoutMs: 90_000,
   });

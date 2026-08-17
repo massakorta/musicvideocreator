@@ -895,6 +895,45 @@ h3 {
   border-color: var(--accent);
 }
 
+.image-quality-section {
+  margin-top: 28px;
+}
+
+.image-quality-compact-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-faint);
+  margin-bottom: 8px;
+}
+
+.image-quality-segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.image-quality-segment {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.image-quality-segment.selected {
+  border-color: var(--accent);
+  background: rgba(228, 184, 74, 0.12);
+  color: var(--accent);
+}
+
+.image-quality-segment:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .wait-card {
   position: sticky;
   top: 12px;

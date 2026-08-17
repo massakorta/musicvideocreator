@@ -12,6 +12,7 @@ import type {
 import type { LyricAlignment } from './lyricAlignment.js';
 import type { StoryboardScene } from './storyboard.js';
 import type { VideoFormatId } from './videoConfig.js';
+import type { ImageQualityId } from './imageQuality.js';
 import type { VisualBible } from './visualBible.js';
 
 export interface AudioInfo {
@@ -28,6 +29,7 @@ export interface MusicVideoProject {
   songTitle: string;
   status: ProjectStatus;
   styleId?: string;
+  imageQualityId?: ImageQualityId;
   audio?: AudioInfo;
   durationSeconds: number;
   lyrics: string;
