@@ -161,6 +161,7 @@ export const projectSchema = z.object({
   status: z.enum(PROJECT_STATUSES),
   styleId: z.string().optional(),
   imageQualityId: z.enum(imageQualityIds).optional(),
+  generatedImageQualityId: z.enum(imageQualityIds).optional(),
   audio: audioInfoSchema.optional(),
   durationSeconds: z.number().nonnegative(),
   lyrics: z.string(),

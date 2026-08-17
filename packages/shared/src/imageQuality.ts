@@ -66,3 +66,21 @@ export function getImageQuality(id: string | undefined): ImageQualityPreset {
 export function resolveProjectImageQualityId(project: { imageQualityId?: ImageQualityId }): ImageQualityId {
   return project.imageQualityId ?? DEFAULT_IMAGE_QUALITY_ID;
 }
+
+export function effectiveGeneratedImageQualityId(project: {
+  generatedImageQualityId?: ImageQualityId;
+}): ImageQualityId {
+  return project.generatedImageQualityId ?? DEFAULT_IMAGE_QUALITY_ID;
+}
+
+export function imagesNeedQualityRegenerate(project: {
+  imageQualityId?: ImageQualityId;
+  generatedImageQualityId?: ImageQualityId;
+  scenes: Array<{ currentAssetId?: string; image?: unknown }>;
+}): boolean {
+  const hasImages = project.scenes.some((scene) => Boolean(scene.currentAssetId || scene.image));
+  if (!hasImages) return false;
+  return (
+    resolveProjectImageQualityId(project) !== effectiveGeneratedImageQualityId(project)
+  );
+}

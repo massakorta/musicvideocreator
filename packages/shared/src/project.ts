@@ -30,6 +30,7 @@ export interface MusicVideoProject {
   status: ProjectStatus;
   styleId?: string;
   imageQualityId?: ImageQualityId;
+  generatedImageQualityId?: ImageQualityId;
   audio?: AudioInfo;
   durationSeconds: number;
   lyrics: string;

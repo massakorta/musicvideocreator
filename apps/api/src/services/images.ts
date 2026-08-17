@@ -15,7 +15,7 @@ import {
   releaseSceneGeneration,
   tryAcquireSceneGeneration,
 } from './sceneGenerationLock.js';
-import { replaceScenes } from './projectUtils.js';
+import { replaceScenes, touch } from './projectUtils.js';
 
 export async function generateCharacterReference(projectId: string, characterId: string, force = false) {
   const project = await getProjectOrThrow(projectId);
@@ -104,14 +104,14 @@ export async function approveCharacterReference(projectId: string, characterId: 
   return saveProject({ ...project, visualBible: { ...project.visualBible, characters } });
 }
 
-export async function generateSceneImage(projectId: string, sceneId: string) {
+export async function generateSceneImage(projectId: string, sceneId: string, force = false) {
   const project = await getProjectOrThrow(projectId);
   const scene = project.scenes.find((s) => s.id === sceneId);
   if (!scene) throw new AppError(ERROR_CODES.NOT_FOUND, 'That scene could not be found.', 404);
   if (!project.visualBible) {
     throw new AppError(ERROR_CODES.VALIDATION, 'Approve a visual bible first.', 400);
   }
-  if (scene.currentAssetId) {
+  if (scene.currentAssetId && !force) {
     return { project, asset: scene.image, demo: scene.image?.source === 'demo' };
   }
   if (!tryAcquireSceneGeneration(projectId, sceneId)) {
@@ -182,6 +182,10 @@ export async function generateSceneImage(projectId: string, sceneId: string) {
       );
       saved = await getProjectOrThrow(projectId);
     }
+
+    saved = await saveProject(
+      touch(saved, { generatedImageQualityId: resolveProjectImageQualityId(saved) }),
+    );
 
     return { project: saved, asset, demo: source === 'demo' };
   } catch (error) {

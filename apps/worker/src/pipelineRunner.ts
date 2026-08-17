@@ -400,7 +400,7 @@ async function generateSceneBatch(job: PipelineJob, sceneIds: string[]): Promise
       const sceneId = sceneIds[index];
       if (!sceneId) return;
       try {
-        await generateSceneImage(job.projectId, sceneId);
+        await generateSceneImage(job.projectId, sceneId, true);
         const project = await getProjectOrThrow(job.projectId);
         const scene = project.scenes.find((s) => s.id === sceneId);
         if (scene) {

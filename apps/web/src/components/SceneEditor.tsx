@@ -150,7 +150,7 @@ export function SceneEditor({
             setBusy(true);
             setError(null);
             try {
-              await api.generateSceneImage(project.id, scene.id);
+              await api.generateSceneImage(project.id, scene.id, true);
               await onSaved();
             } catch (err) {
               setError(err instanceof Error ? err.message : 'Could not regenerate this still.');

@@ -156,10 +156,10 @@ export const api = {
       `/api/projects/${id}/scenes/${sceneId}/duplicate`,
       { method: 'POST' },
     ),
-  generateSceneImage: (id: string, sceneId: string) =>
+  generateSceneImage: (id: string, sceneId: string, force = false) =>
     request<{ project: import('@music-video/shared').MusicVideoProject; demo: boolean }>(
       `/api/projects/${id}/scenes/${sceneId}/image`,
-      { method: 'POST' },
+      { method: 'POST', body: JSON.stringify({ force }) },
     ),
   uploadSceneImage: (id: string, sceneId: string, file: File) => {
     const body = new FormData();

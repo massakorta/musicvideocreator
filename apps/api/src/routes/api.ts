@@ -311,7 +311,8 @@ apiRouter.post(
 apiRouter.post(
   '/projects/:id/scenes/:sceneId/image',
   asyncHandler(async (req, res) => {
-    const result = await generateSceneImage(param(req, 'id'), param(req, 'sceneId'));
+    const force = req.body?.force === true;
+    const result = await generateSceneImage(param(req, 'id'), param(req, 'sceneId'), force);
     res.json(result);
   }),
 );
