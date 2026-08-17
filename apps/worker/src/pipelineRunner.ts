@@ -1,7 +1,14 @@
 import {
-  characterReferenceFingerprint,
   computeProjectHealth,
-  sceneImageFingerprint,
+  computeStaleAssets,
+  errorText,
+  isRetryableProviderError,
+  MAX_STAGE_ATTEMPTS,
+  nextPipelineRequeueMarker,
+  pipelineRequeueCount,
+  providerRetryDelayMs,
+  shouldRequeuePipeline,
+  withRetries,
   type PipelineJob,
   type PipelineStage,
 } from '@music-video/shared';
@@ -18,7 +25,6 @@ import {
 } from '../../api/src/services/images.js';
 import { patchPipelineJob, ensureShareId } from '../../api/src/services/pipeline.js';
 import { getProjectOrThrow, saveProject } from '../../api/src/services/projects.js';
-import { computeStaleAssets } from '@music-video/shared';
 
 export interface PipelineRunOptions {}
 
@@ -43,7 +49,7 @@ function sceneIdsNeedingGeneration(
   return [...new Set([...missing, ...stale.staleSceneIds])];
 }
 
-export async function runPipelineJob(job: PipelineJob, options?: PipelineRunOptions): Promise<void> {
+export async function runPipelineJob(job: PipelineJob, options?: PipelineRunOptions): Promise<'complete' | 'requeued'> {
   let current = await patchPipelineJob(job, { status: 'running', startedAt: job.startedAt ?? new Date().toISOString() });
   const projectId = job.projectId;
 
@@ -54,20 +60,36 @@ export async function runPipelineJob(job: PipelineJob, options?: PipelineRunOpti
       await runStalePipeline(current, options);
     }
     const finished = await getRepositories().pipelineJobs.get(job.id);
-    if (!finished) return;
+    if (!finished) return 'complete';
     current = finished;
     await patchPipelineJob(current, {
       status: 'complete',
       progress: 100,
       completedAt: new Date().toISOString(),
       stageDetail: 'Done',
+      error: undefined,
     });
     const project = await getProjectOrThrow(projectId);
     await saveProject({ ...project, status: 'complete', lastError: undefined });
     await ensureShareId(projectId);
+    return 'complete';
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Pipeline failed.';
+    const message = errorText(error);
     current = (await getRepositories().pipelineJobs.get(job.id)) ?? current;
+    const requeues = pipelineRequeueCount(current.error);
+    if (shouldRequeuePipeline(error, requeues)) {
+      const marker = nextPipelineRequeueMarker(current.error);
+      console.warn(`[worker] requeuing pipeline ${job.id} (${marker}) after: ${message}`);
+      await patchPipelineJob(current, {
+        status: 'queued',
+        claimedBy: undefined,
+        startedAt: undefined,
+        completedAt: undefined,
+        error: marker,
+        stageDetail: 'Retrying after a temporary error…',
+      });
+      return 'requeued';
+    }
     await patchPipelineJob(current, {
       status: 'failed',
       error: message,
@@ -107,7 +129,7 @@ async function runFullPipeline(job: PipelineJob, options?: PipelineRunOptions): 
 
   if (!skipBible) {
     current = await updateStage(current, 'bible', { stageDetail: 'Writing the visual world…', progress: 2 });
-    const bibleResult = await generateProjectVisualBible(current.projectId);
+    const bibleResult = await runStage('visual bible', () => generateProjectVisualBible(current.projectId));
     project = bibleResult.project;
     if (project.visualBible) {
       project = await saveProject({
@@ -164,7 +186,7 @@ async function runFullPipeline(job: PipelineJob, options?: PipelineRunOptions): 
       stageDetail: 'Listening to the song and lining up the lyrics…',
       progress: 28,
     });
-    const storyboardResult = await generateProjectStoryboard(current.projectId);
+    const storyboardResult = await runStage('storyboard', () => generateProjectStoryboard(current.projectId));
     project = storyboardResult.project;
     const sceneCount = project.scenes.length;
     current = await patchPipelineJob(current, {
@@ -256,6 +278,17 @@ async function runStalePipeline(job: PipelineJob, _options?: PipelineRunOptions)
   await patchPipelineJob(current, { progress: 100, stageDetail: 'Ready to share' });
 }
 
+async function runStage<T>(label: string, operation: () => Promise<T>): Promise<T> {
+  return withRetries(operation, {
+    attempts: MAX_STAGE_ATTEMPTS,
+    retryIf: isRetryableProviderError,
+    delayMs: (attempt) => providerRetryDelayMs(attempt),
+    onRetry: (error, attempt) => {
+      console.warn(`[worker] ${label} failed (attempt ${attempt + 1}/${MAX_STAGE_ATTEMPTS}): ${errorText(error)}`);
+    },
+  });
+}
+
 async function generateCharacterBatch(
   job: PipelineJob,
   characterIds: string[],
@@ -263,75 +296,86 @@ async function generateCharacterBatch(
 ): Promise<void> {
   if (characterIds.length === 0) return;
   const concurrency = Math.max(1, config.imageConcurrency);
-  let cursor = 0;
-  let done = 0;
+  let remaining = [...characterIds];
+  let done = characterIds.length - remaining.length;
 
-  async function worker() {
-    while (cursor < characterIds.length) {
-      const index = cursor;
-      cursor += 1;
-      const characterId = characterIds[index];
-      if (!characterId) return;
-      await generateCharacterReference(job.projectId, characterId, true);
-      let project = await getProjectOrThrow(job.projectId);
-      await approveCharacterReference(job.projectId, characterId, true);
-      project = await getProjectOrThrow(job.projectId);
-      const updatedChar = project.visualBible?.characters.find((c) => c.id === characterId);
-      if (updatedChar && project.visualBible) {
-        const fp = characterReferenceFingerprint(
-          updatedChar,
-          project.styleId,
-          project.visualBible.masterPrompt,
-          project.visualBible.overallStyle,
-        );
-        const charactersNext = project.visualBible.characters.map((c) =>
-          c.id === characterId ? { ...c, referenceFingerprint: fp } : c,
-        );
-        await saveProject({ ...project, visualBible: { ...project.visualBible, characters: charactersNext } });
+  for (let pass = 0; pass < MAX_STAGE_ATTEMPTS && remaining.length > 0; pass += 1) {
+    const failed: string[] = [];
+    let cursor = 0;
+    const passIds = remaining;
+
+    async function worker() {
+      while (cursor < passIds.length) {
+        const index = cursor;
+        cursor += 1;
+        const characterId = passIds[index];
+        if (!characterId) return;
+        try {
+          await generateCharacterReference(job.projectId, characterId, true);
+          await approveCharacterReference(job.projectId, characterId, true);
+          done += 1;
+          if (onProgress) await onProgress(done);
+        } catch (error) {
+          console.warn(
+            `[worker] character ${characterId} failed (pass ${pass + 1}/${MAX_STAGE_ATTEMPTS}): ${errorText(error)}`,
+          );
+          failed.push(characterId);
+        }
       }
-      done += 1;
-      if (onProgress) await onProgress(done);
+    }
+
+    await Promise.all(Array.from({ length: Math.min(concurrency, passIds.length) }, () => worker()));
+    remaining = failed;
+    if (remaining.length > 0 && pass < MAX_STAGE_ATTEMPTS - 1) {
+      await new Promise((resolve) => setTimeout(resolve, providerRetryDelayMs(pass)));
     }
   }
 
-  await Promise.all(Array.from({ length: Math.min(concurrency, characterIds.length) }, () => worker()));
+  if (remaining.length > 0) {
+    console.warn(
+      `[worker] continuing pipeline ${job.id} without ${remaining.length} character reference${remaining.length === 1 ? '' : 's'}`,
+    );
+  }
 }
 
 async function generateSceneBatch(job: PipelineJob, sceneIds: string[]): Promise<void> {
   const concurrency = Math.max(1, config.imageConcurrency);
-  let cursor = 0;
+  let remaining = [...sceneIds];
   let done = 0;
-  let failures = 0;
 
-  async function worker() {
-    while (cursor < sceneIds.length) {
-      const index = cursor;
-      cursor += 1;
-      const sceneId = sceneIds[index];
-      if (!sceneId) return;
-      try {
-        await generateSceneImage(job.projectId, sceneId, true);
-        const project = await getProjectOrThrow(job.projectId);
-        const scene = project.scenes.find((s) => s.id === sceneId);
-        if (scene) {
-          const fp = sceneImageFingerprint(scene, project);
-          const scenes = project.scenes.map((s) => (s.id === sceneId ? { ...s, imageFingerprint: fp } : s));
-          await saveProject({ ...project, scenes });
+  for (let pass = 0; pass < MAX_STAGE_ATTEMPTS && remaining.length > 0; pass += 1) {
+    const failed: string[] = [];
+    let cursor = 0;
+    const passIds = remaining;
+
+    async function worker() {
+      while (cursor < passIds.length) {
+        const index = cursor;
+        cursor += 1;
+        const sceneId = passIds[index];
+        if (!sceneId) return;
+        try {
+          await generateSceneImage(job.projectId, sceneId, true);
+          done += 1;
+          await patchPipelineJob(job, {
+            imagesDone: done,
+            stageDetail: `Scene still ${done} of ${sceneIds.length}`,
+          });
+        } catch (error) {
+          console.warn(`[worker] scene ${sceneId} failed (pass ${pass + 1}/${MAX_STAGE_ATTEMPTS}): ${errorText(error)}`);
+          failed.push(sceneId);
         }
-      } catch {
-        failures += 1;
       }
-      done += 1;
-      await patchPipelineJob(job, {
-        imagesDone: done,
-        stageDetail: `Scene still ${done} of ${sceneIds.length}`,
-      });
+    }
+
+    await Promise.all(Array.from({ length: Math.min(concurrency, passIds.length) }, () => worker()));
+    remaining = failed;
+    if (remaining.length > 0 && pass < MAX_STAGE_ATTEMPTS - 1) {
+      await new Promise((resolve) => setTimeout(resolve, providerRetryDelayMs(pass)));
     }
   }
 
-  await Promise.all(Array.from({ length: Math.min(concurrency, sceneIds.length) }, () => worker()));
-
-  if (failures > Math.max(1, Math.floor(sceneIds.length * 0.5))) {
-    throw new Error(`${failures} scene images failed. Open the editor to retry those scenes.`);
+  if (remaining.length > Math.max(1, Math.floor(sceneIds.length * 0.5))) {
+    throw new Error(`${remaining.length} scene images failed. The worker will retry the job.`);
   }
 }

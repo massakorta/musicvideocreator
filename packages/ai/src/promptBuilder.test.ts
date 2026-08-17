@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { StoryboardScene, VisualBible, VisualStylePreset } from '@music-video/shared';
-import { buildSceneImagePrompt } from './promptBuilder.js';
+import { buildCharacterReferencePrompt, buildSceneImagePrompt } from './promptBuilder.js';
 
 const style: VisualStylePreset = {
   id: 'cartoon-slapstick',
@@ -93,5 +93,16 @@ describe('buildSceneImagePrompt', () => {
     expect(prompt).toContain('wide');
     expect(prompt).toContain('Ken Burns');
     expect(negativePrompt).toContain('photorealism');
+  });
+});
+
+describe('buildCharacterReferencePrompt', () => {
+  it('asks for a family-friendly adult character sheet', () => {
+    const prompt = buildCharacterReferencePrompt(bible.characters[0]!, bible, style);
+    expect(prompt).toContain('Jens');
+    expect(prompt).toContain('striped apron');
+    expect(prompt).toContain('adult');
+    expect(prompt).toContain('Family-friendly');
+    expect(prompt).not.toMatch(/\bchild\b/i);
   });
 });

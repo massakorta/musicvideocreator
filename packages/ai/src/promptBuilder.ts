@@ -82,16 +82,25 @@ export function buildCharacterReferencePrompt(
   return [
     bible.masterPrompt,
     style.promptInstructions,
-    'Character reference sheet, single character, full body, standing in a neutral three-quarter pose, clear readable face, costume fully visible, plain or softly lit backdrop, 16:9.',
+    'Character reference sheet, single clearly adult character, full body, standing in a neutral three-quarter pose, clear readable face, costume fully visible, plain or softly lit backdrop, 16:9.',
     characterContinuityBlock(character),
     `Personality readable in posture: ${character.personality}.`,
-    'No other characters. No text. No labels. No turnaround grid unless it stays one cohesive image.',
+    'Family-friendly illustrated cartoon. No other characters. No text. No labels. No turnaround grid unless it stays one cohesive image.',
   ].join('\n');
+}
+
+function characterAgeLine(character: CharacterDefinition): string {
+  const age = character.ageAppearance?.trim();
+  if (age && !/child|kid|teen|infant|baby|toddler|minor|underage|young boy|young girl/i.test(age)) {
+    return `Age appearance: ${age}.`;
+  }
+  return 'Clearly an adult character.';
 }
 
 export function characterContinuityBlock(character: CharacterDefinition): string {
   return [
     `Character ${character.name} (${character.role}): ${character.promptDescription}`,
+    characterAgeLine(character),
     `Body: ${character.bodyType}. Face: ${character.face}. Hair: ${character.hair}. Clothing: ${character.clothing}.`,
     `Must keep: ${character.importantContinuityFeatures.join(', ')}.`,
     'Same character design, same clothing, same proportions, same face.',

@@ -11,6 +11,7 @@ Return a Visual Bible as structured JSON.
 Rules:
 - Invent original characters and locations inspired by the lyrics. Do not copy existing copyrighted characters.
 - Keep character counts small and memorable (2-5 major characters).
+- All characters must be clearly adult. Do not invent children, babies, teens, or underage characters.
 - Clothing and faces must be specific enough to reuse across dozens of stills.
 - Continuity rules should be concrete (same coat, same scar, same kitchen tiles).
 - Negative rules should prevent style drift, extra characters, text, and photorealism when the style is illustrated.

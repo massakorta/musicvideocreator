@@ -1,5 +1,13 @@
 import type { CharacterDefinition, GeneratedAsset, VisualBible, VisualStylePreset } from '@music-video/shared';
 import type { StoryboardScene } from '@music-video/shared';
+import {
+  isContentPolicyError,
+  isRetryableProviderError,
+  MAX_IMAGE_ATTEMPTS,
+  providerRetryDelayMs,
+  sanitizeImagePromptForSafety,
+  sleep,
+} from '@music-video/shared';
 import type OpenAI from 'openai';
 import { buildCharacterReferencePrompt, buildSceneImagePrompt } from './promptBuilder.js';
 
@@ -49,15 +57,17 @@ export interface OpenAiImageProviderOptions {
   quality?: string;
   outputFormat?: ImageOutputFormat;
   requestTimeoutMs?: number;
+  retryDelayMs?: (attempt: number) => number;
 }
 
-const DEFAULT_IMAGE_TIMEOUT_MS = 90_000;
+const DEFAULT_IMAGE_TIMEOUT_MS = 180_000;
 
 export class OpenAiImageProvider implements ImageGenerationProvider {
   private readonly defaultSize: ImageSize;
   private readonly quality: string;
   private readonly outputFormat: ImageOutputFormat;
   private readonly requestTimeoutMs: number;
+  private readonly retryDelayMs: (attempt: number) => number;
 
   constructor(
     private readonly client: OpenAI,
@@ -68,6 +78,7 @@ export class OpenAiImageProvider implements ImageGenerationProvider {
     this.quality = options.quality ?? 'low';
     this.outputFormat = options.outputFormat ?? 'jpeg';
     this.requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_IMAGE_TIMEOUT_MS;
+    this.retryDelayMs = options.retryDelayMs ?? ((attempt) => providerRetryDelayMs(attempt));
   }
 
   async generateSceneImage(request: SceneImageGenerationRequest): Promise<GeneratedImageBytes> {
@@ -102,6 +113,16 @@ export class OpenAiImageProvider implements ImageGenerationProvider {
     try {
       return await this.requestImageWithRetry(fullPrompt, size);
     } catch (error) {
+      if (isContentPolicyError(error)) {
+        const safer = sanitizeImagePromptForSafety(fullPrompt);
+        if (safer !== fullPrompt) {
+          try {
+            return await this.requestImageWithRetry(safer, size);
+          } catch (saferError) {
+            throw new Error(humanizeImageError(saferError));
+          }
+        }
+      }
       const message = error instanceof Error ? error.message : String(error);
       if (/gpt-image-1|model.*not found|does not exist/i.test(message) && !this.model.includes('dall-e-3')) {
         const fallback = new OpenAiImageProvider(this.client, 'dall-e-3', {
@@ -120,8 +141,8 @@ export class OpenAiImageProvider implements ImageGenerationProvider {
     try {
       return await this.requestImage(fullPrompt, size);
     } catch (error) {
-      if (attempt < 1 && isRetryableImageError(error)) {
-        await sleep(1200);
+      if (attempt < MAX_IMAGE_ATTEMPTS - 1 && isRetryableProviderError(error)) {
+        await sleep(this.retryDelayMs(attempt));
         return this.requestImageWithRetry(fullPrompt, size, attempt + 1);
       }
       throw error;
@@ -209,20 +230,6 @@ function humanizeImageError(error: unknown): string {
     return 'OpenAI rejected the API key.';
   }
   return message;
-}
-
-function isRetryableImageError(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false;
-  const record = error as { message?: string; status?: number; error?: { message?: string } };
-  const message = record.error?.message ?? record.message ?? String(error);
-  if (/timed out|timeout|ETIMEDOUT|AbortError|ECONNRESET|fetch failed/i.test(message)) return true;
-  const status = record.status;
-  if (typeof status === 'number' && (status === 429 || status >= 500)) return true;
-  return false;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function referenceHint(refs?: Array<{ characterId: string; url: string }>): string {

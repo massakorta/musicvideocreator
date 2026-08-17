@@ -9,6 +9,7 @@ import {
   pipelineProgressFromJob,
   PROJECT_STATUS_LABELS,
   reindexScenes,
+  type CharacterDefinition,
   type GenerationState,
   type MusicVideoProject,
   type ProjectStatus,
@@ -143,7 +144,21 @@ export function mergeSceneState(previous: StoryboardScene, incoming: StoryboardS
   return incoming;
 }
 
-/** Merge concurrent project writes so completed stills are never dropped. */
+/** Prefer the character row that already has a finished reference sheet attached. */
+export function mergeCharacterState(previous: CharacterDefinition, incoming: CharacterDefinition): CharacterDefinition {
+  if (previous.referenceAssetId && !incoming.referenceAssetId) {
+    return {
+      ...incoming,
+      referenceAssetId: previous.referenceAssetId,
+      referenceUrl: previous.referenceUrl ?? incoming.referenceUrl,
+      referenceFingerprint: previous.referenceFingerprint ?? incoming.referenceFingerprint,
+      lockedReferenceImage: previous.lockedReferenceImage || incoming.lockedReferenceImage,
+    };
+  }
+  return incoming;
+}
+
+/** Merge concurrent project writes so completed stills and character refs are never dropped. */
 export function mergeProjectDocuments(
   current: MusicVideoProject,
   incoming: MusicVideoProject,
@@ -153,7 +168,20 @@ export function mergeProjectDocuments(
     const previous = previousScenes.get(scene.id);
     return previous ? mergeSceneState(previous, scene) : scene;
   });
-  return { ...incoming, scenes: mergedScenes };
+
+  const previousCharacters = new Map(current.visualBible?.characters.map((character) => [character.id, character]) ?? []);
+  const incomingBible = incoming.visualBible ?? current.visualBible;
+  const visualBible = incomingBible
+    ? {
+        ...incomingBible,
+        characters: incomingBible.characters.map((character) => {
+          const previous = previousCharacters.get(character.id);
+          return previous ? mergeCharacterState(previous, character) : character;
+        }),
+      }
+    : incoming.visualBible;
+
+  return { ...incoming, scenes: mergedScenes, visualBible };
 }
 
 export { PROJECT_STATUS_LABELS };

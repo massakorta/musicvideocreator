@@ -128,13 +128,13 @@ export function createImageProvider(imageQualityId?: ImageQualityId): OpenAiImag
     apiKey: config.openaiApiKey,
     textModel: config.openaiTextModel,
     imageModel: preset.model,
-    timeoutMs: 90_000,
+    timeoutMs: 180_000,
   });
   return new OpenAiImageProvider(client, preset.model, {
     defaultSize: config.openaiImageSize,
     quality: preset.quality,
     outputFormat: 'jpeg',
-    requestTimeoutMs: 90_000,
+    requestTimeoutMs: 180_000,
   });
 }
 

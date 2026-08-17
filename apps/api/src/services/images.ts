@@ -1,5 +1,5 @@
 import { AppError, ERROR_CODES, resolveProjectImageQualityId, type CharacterDefinition } from '@music-video/shared';
-import { characterReferenceFingerprint, sceneImageFingerprint } from '@music-video/shared';
+import { characterReferenceFingerprint, errorText, sceneImageFingerprint } from '@music-video/shared';
 import { config } from '../config.js';
 import { placeholderSvg } from './demo.js';
 import { createImageProvider, requireOpenAiOrDemo } from './aiService.js';
@@ -45,7 +45,7 @@ export async function generateCharacterReference(projectId: string, characterId:
     } catch (error) {
       throw new AppError(
         ERROR_CODES.IMAGE_FAILED,
-        `The character reference for ${character.name} could not be generated.`,
+        `The character reference for ${character.name} could not be generated. ${errorText(error)}`,
         502,
         error instanceof Error ? error.message : undefined,
       );
@@ -71,37 +71,41 @@ export async function generateCharacterReference(projectId: string, characterId:
     metadata: { characterId },
   });
 
-  const characters = project.visualBible.characters.map((c) =>
-    c.id === characterId
-      ? {
-          ...c,
-          referenceAssetId: asset.id,
-          referenceUrl: asset.publicUrl,
-          referenceFingerprint: characterReferenceFingerprint(
-            { ...c, referenceAssetId: asset.id },
-            project.styleId,
-            project.visualBible!.masterPrompt,
-            project.visualBible!.overallStyle,
-          ),
-        }
-      : c,
-  );
-  await saveProject({
-    ...project,
-    visualBible: { ...project.visualBible, characters },
+  await updateProjectDocument(projectId, (latest) => {
+    if (!latest.visualBible) return latest;
+    const characters = latest.visualBible.characters.map((c) =>
+      c.id === characterId
+        ? {
+            ...c,
+            referenceAssetId: asset.id,
+            referenceUrl: asset.publicUrl,
+            referenceFingerprint: characterReferenceFingerprint(
+              { ...c, referenceAssetId: asset.id },
+              latest.styleId,
+              latest.visualBible!.masterPrompt,
+              latest.visualBible!.overallStyle,
+            ),
+          }
+        : c,
+    );
+    return {
+      ...latest,
+      visualBible: { ...latest.visualBible, characters },
+    };
   });
   return { project: await getProjectOrThrow(projectId), asset, demo: source === 'demo' };
 }
 
 export async function approveCharacterReference(projectId: string, characterId: string, locked: boolean) {
-  const project = await getProjectOrThrow(projectId);
-  if (!project.visualBible) {
-    throw new AppError(ERROR_CODES.VALIDATION, 'Generate a visual bible first.', 400);
-  }
-  const characters = project.visualBible.characters.map((c) =>
-    c.id === characterId ? { ...c, lockedReferenceImage: locked } : c,
-  );
-  return saveProject({ ...project, visualBible: { ...project.visualBible, characters } });
+  return updateProjectDocument(projectId, (latest) => {
+    if (!latest.visualBible) {
+      throw new AppError(ERROR_CODES.VALIDATION, 'Generate a visual bible first.', 400);
+    }
+    const characters = latest.visualBible.characters.map((c) =>
+      c.id === characterId ? { ...c, lockedReferenceImage: locked } : c,
+    );
+    return { ...latest, visualBible: { ...latest.visualBible, characters } };
+  });
 }
 
 export async function generateSceneImage(projectId: string, sceneId: string, force = false) {

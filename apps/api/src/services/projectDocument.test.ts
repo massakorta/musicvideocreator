@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { StoryboardScene } from '@music-video/shared';
-import { mergeProjectDocuments, mergeSceneState } from './projectUtils.js';
+import type { CharacterDefinition, StoryboardScene, VisualBible } from '@music-video/shared';
+import { mergeCharacterState, mergeProjectDocuments, mergeSceneState } from './projectUtils.js';
 
 function scene(overrides: Partial<StoryboardScene> & Pick<StoryboardScene, 'id'>): StoryboardScene {
   return {
@@ -63,5 +63,75 @@ describe('mergeSceneState', () => {
 
     expect(merged.scenes.find((s) => s.id === 'a')?.currentAssetId).toBe('asset-a');
     expect(merged.scenes.find((s) => s.id === 'b')?.currentAssetId).toBe('asset-b');
+  });
+});
+
+function character(overrides: Partial<CharacterDefinition> & Pick<CharacterDefinition, 'id'>): CharacterDefinition {
+  return {
+    name: overrides.id,
+    role: 'lead',
+    bodyType: 'average',
+    face: 'round',
+    hair: 'short',
+    clothing: 'coat',
+    colors: ['#000'],
+    personality: 'calm',
+    expressions: ['smile'],
+    importantContinuityFeatures: ['coat'],
+    promptDescription: 'an adult in a coat',
+    lockedReferenceImage: false,
+    ...overrides,
+  };
+}
+
+function bible(characters: CharacterDefinition[]): VisualBible {
+  return {
+    projectTitle: 'Test',
+    overallStyle: {
+      visualMedium: 'cartoon',
+      mood: 'funny',
+      renderingStyle: '2d',
+      cameraLanguage: 'wide',
+      animationLanguage: 'still',
+    },
+    characters,
+    environments: [],
+    colorPalette: [],
+    recurringProps: [],
+    continuityRules: ['same coat'],
+    negativeRules: ['no text'],
+    masterPrompt: 'A cartoon world for testing character merge.',
+  };
+}
+
+describe('mergeCharacterState', () => {
+  it('keeps a finished reference when a stale write drops it', () => {
+    const previous = character({ id: 'jens', referenceAssetId: 'ref-a', referenceUrl: '/a.png', lockedReferenceImage: true });
+    const incoming = character({ id: 'jens' });
+    const merged = mergeCharacterState(previous, incoming);
+    expect(merged.referenceAssetId).toBe('ref-a');
+    expect(merged.lockedReferenceImage).toBe(true);
+  });
+
+  it('preserves both character sheets when two finish concurrently', () => {
+    const merged = mergeProjectDocuments(
+      {
+        scenes: [],
+        visualBible: bible([
+          character({ id: 'jens', referenceAssetId: 'ref-jens', lockedReferenceImage: true }),
+          character({ id: 'cook' }),
+        ]),
+      } as never,
+      {
+        scenes: [],
+        visualBible: bible([
+          character({ id: 'jens' }),
+          character({ id: 'cook', referenceAssetId: 'ref-cook', lockedReferenceImage: true }),
+        ]),
+      } as never,
+    );
+
+    expect(merged.visualBible?.characters.find((c) => c.id === 'jens')?.referenceAssetId).toBe('ref-jens');
+    expect(merged.visualBible?.characters.find((c) => c.id === 'cook')?.referenceAssetId).toBe('ref-cook');
   });
 });

@@ -20,7 +20,7 @@ describe('framesToSeconds', () => {
 });
 
 describe('getExportPreset', () => {
-  it('returns 720p24 for the default landscape format', () => {
-    expect(getExportPreset('16x9')).toEqual({ width: 1280, height: 720, fps: 24 });
+  it('returns the fast landscape export preset', () => {
+    expect(getExportPreset('16x9')).toEqual({ width: 854, height: 480, fps: 15 });
   });
 });

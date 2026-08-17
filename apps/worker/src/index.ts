@@ -6,6 +6,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { makeCancelSignal, renderMedia, selectComposition } from '@remotion/renderer';
 import {
+  errorText,
   EXPORT_AUDIO_BITRATE,
   EXPORT_CRF,
   estimateRenderTimeoutMs,
@@ -317,7 +318,7 @@ async function failRender(job: RenderJob, error: unknown): Promise<void> {
 }
 
 async function failPipeline(jobId: string, error: unknown): Promise<void> {
-  const message = error instanceof Error ? error.message : 'Pipeline failed.';
+  const message = errorText(error);
   console.error('[worker] pipeline', jobId, message);
 }
 
@@ -331,8 +332,12 @@ async function pipelineLoop(): Promise<void> {
         console.log(`Claimed pipeline job ${pipelineJob.id} (${pipelineJob.kind})`);
         setPipelineHeavy(true);
         try {
-          await runPipelineJob(pipelineJob);
-          console.log(`Finished pipeline job ${pipelineJob.id}`);
+          const result = await runPipelineJob(pipelineJob);
+          if (result === 'requeued') {
+            console.log(`Requeued pipeline job ${pipelineJob.id}`);
+          } else {
+            console.log(`Finished pipeline job ${pipelineJob.id}`);
+          }
         } catch (error) {
           await failPipeline(pipelineJob.id, error);
         } finally {
