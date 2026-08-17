@@ -15,7 +15,6 @@ export function VideoPage() {
   const [frame, setFrame] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [rendering, setRendering] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [copied, setCopied] = useState(false);
   const navigate = useNavigate();
@@ -35,7 +34,7 @@ export function VideoPage() {
         {error ? <div className="banner error">{error}</div> : null}
         {!health.readyToRender ? (
           <div className="banner warning">
-            <strong>Cannot render yet</strong>
+            <strong>Cannot share yet</strong>
             {health.missingImages.length > 0 ? (
               <div>
                 {health.missingImages.length} scenes are missing images.{' '}
@@ -110,48 +109,9 @@ export function VideoPage() {
               {regenerating ? 'Queueing…' : `Uppdatera ändrade bilder (${stale.totalStaleImages})`}
             </button>
           ) : null}
-          {stale?.videoStale && stale.totalStaleImages === 0 ? (
-            <button
-              className="btn btn-primary"
-              disabled={!health.readyToRender || rendering}
-              onClick={async () => {
-                setRendering(true);
-                setError(null);
-                try {
-                  const data = await api.render(project.id);
-                  navigate(`/projects/${project.id}/result/${data.job.id}`);
-                } catch (err) {
-                  setError(err instanceof ApiClientError ? err.message : 'Could not start the render.');
-                } finally {
-                  setRendering(false);
-                }
-              }}
-            >
-              {rendering ? 'Queueing render…' : 'Rendera om filmen'}
-            </button>
-          ) : (
-            <button
-              className="btn btn-primary"
-              disabled={!health.readyToRender || rendering}
-              onClick={async () => {
-                setRendering(true);
-                setError(null);
-                try {
-                  const data = await api.render(project.id);
-                  navigate(`/projects/${project.id}/result/${data.job.id}`);
-                } catch (err) {
-                  setError(err instanceof ApiClientError ? err.message : 'Could not start the render.');
-                } finally {
-                  setRendering(false);
-                }
-              }}
-            >
-              {rendering ? 'Queueing render…' : 'Render Music Video'}
-            </button>
-          )}
           {health.readyToRender ? (
             <button
-              className="btn"
+              className="btn btn-primary"
               onClick={async () => {
                 try {
                   const data = await api.share(project.id);
@@ -163,7 +123,7 @@ export function VideoPage() {
                 }
               }}
             >
-              {copied ? 'Link copied!' : project.status === 'complete' ? 'Copy watch link' : 'Copy preview link'}
+              {copied ? 'Link copied!' : 'Copy preview link'}
             </button>
           ) : null}
         </div>

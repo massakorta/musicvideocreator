@@ -19,11 +19,10 @@ import { config, supabaseConfigured } from '../../api/src/config.js';
 import { getRepositories } from '../../api/src/repositories/index.js';
 import { getProjectOrThrow, saveProject, storeGeneratedFileFromPath } from '../../api/src/services/projects.js';
 import { getObjectStorage } from '../../api/src/storage/index.js';
-import { runPipelineJob, type PipelineRunOptions } from './pipelineRunner.js';
+import { runPipelineJob } from './pipelineRunner.js';
 import {
   isRenderBlockedByPipeline,
   setPipelineHeavy,
-  setPipelineWaitingForRender,
 } from './heavyWork.js';
 import { createRenderStallGuard, prefetchCompositionStills, startStillsServer } from './renderHelpers.js';
 
@@ -123,10 +122,6 @@ async function recoverInterruptedJobs(): Promise<void> {
   }
 }
 
-const pipelineRunOptions: PipelineRunOptions = {
-  onRenderWaitStart: () => setPipelineWaitingForRender(true),
-  onRenderWaitEnd: () => setPipelineWaitingForRender(false),
-};
 
 async function claimPipeline() {
   return getRepositories().pipelineJobs.claimNext(config.workerId);
@@ -336,13 +331,12 @@ async function pipelineLoop(): Promise<void> {
         console.log(`Claimed pipeline job ${pipelineJob.id} (${pipelineJob.kind})`);
         setPipelineHeavy(true);
         try {
-          await runPipelineJob(pipelineJob, pipelineRunOptions);
+          await runPipelineJob(pipelineJob);
           console.log(`Finished pipeline job ${pipelineJob.id}`);
         } catch (error) {
           await failPipeline(pipelineJob.id, error);
         } finally {
           setPipelineHeavy(false);
-          setPipelineWaitingForRender(false);
         }
       } else if (Date.now() - lastActivity >= IDLE_HEARTBEAT_MS) {
         console.log('[worker] pipeline loop: no queued jobs');

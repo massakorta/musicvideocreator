@@ -141,7 +141,7 @@ export function computeProjectHealth(project: MusicVideoProject): ProjectHealth 
   const fatalOverlaps = issues.filter((i) => i.type === 'overlap' || i.type === 'negative_duration').length;
 
   const blockers: string[] = [];
-  if (!project.audio) blockers.push('Upload a song before rendering.');
+  if (!project.audio) blockers.push('Upload a song before sharing.');
   if (!project.durationSeconds) blockers.push('Song duration is unknown.');
   if (project.scenes.length === 0) blockers.push('Generate a storyboard first.');
   if (missingImages.length > 0) {

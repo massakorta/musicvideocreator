@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { PIPELINE_STAGE_LABELS, exportDurationFrames, estimateRenderExpectedSeconds, type PipelineJob } from '@music-video/shared';
+import { PIPELINE_STAGE_LABELS, type PipelineJob } from '@music-video/shared';
 import { useProject } from '../hooks/useProject';
 import { api, ApiClientError } from '../lib/api';
 import { formatClockShort } from '../lib/time';
@@ -36,14 +36,8 @@ export function PipelinePage() {
           return;
         }
         if (data.job?.status === 'complete') {
-          const fresh = await api.project(project.id);
-          const renderJobId = data.job.renderJobId ?? fresh.project.lastRenderJobId;
-          if (renderJobId) {
-            navigate(`/projects/${project.id}/result/${renderJobId}`, { replace: true });
-          } else {
-            await reload();
-            navigate(`/projects/${project.id}/video`, { replace: true });
-          }
+          await reload();
+          navigate(`/projects/${project.id}/video`, { replace: true });
           return;
         }
         if (data.job?.status === 'failed') {
@@ -106,11 +100,7 @@ export function PipelinePage() {
 
   const stageLabel = job ? PIPELINE_STAGE_LABELS[job.stage] : 'Working';
   const progress = job?.progress ?? 0;
-  const exportFrames = exportDurationFrames(project.durationSeconds, project.formatId);
-  const expectedSeconds =
-    job?.stage === 'render'
-      ? estimateRenderExpectedSeconds(exportFrames)
-      : (job?.expectedSeconds ?? 300);
+  const expectedSeconds = job?.expectedSeconds ?? 300;
 
   return (
     <div className="page" style={{ maxWidth: 640 }}>
@@ -128,7 +118,6 @@ export function PipelinePage() {
           'Painting character references…',
           'Cutting the storyboard…',
           'Generating scene stills…',
-          'Rendering the final MP4…',
         ]}
       />
       {etaAt ? (
@@ -147,24 +136,6 @@ export function PipelinePage() {
         </p>
       ) : null}
       {error ? <div className="banner warning">{error}</div> : null}
-      {health.readyToRender && job?.stage === 'render' ? (
-        <button
-          className="btn"
-          style={{ marginTop: 16 }}
-          onClick={async () => {
-            try {
-              const data = await api.share(project.id);
-              await navigator.clipboard.writeText(data.url);
-              setCopied(true);
-              window.setTimeout(() => setCopied(false), 2000);
-            } catch (err) {
-              setError(err instanceof ApiClientError ? err.message : 'Could not copy share link.');
-            }
-          }}
-        >
-          {copied ? 'Preview link copied!' : 'Copy preview link while rendering'}
-        </button>
-      ) : null}
       <Link className="btn" to="/" style={{ marginTop: 16 }}>
         Back to projects
       </Link>

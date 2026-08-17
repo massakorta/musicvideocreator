@@ -31,7 +31,6 @@ export function touch(project: MusicVideoProject, patch: Partial<MusicVideoProje
 
 export function deriveStatus(project: MusicVideoProject, pipelineActive = false): ProjectStatus {
   if (pipelineActive) return 'generating_images';
-  if (project.status === 'rendering' && !project.lastError) return 'rendering';
   if (project.status === 'error' && project.lastError) return 'error';
   if (!project.audio || !project.styleId) return 'setup';
   if (!project.visualBible || !project.visualBibleApproved) return 'visual_bible';
@@ -39,8 +38,8 @@ export function deriveStatus(project: MusicVideoProject, pipelineActive = false)
   const generating = project.scenes.some((s) => s.generationState === 'generating');
   if (generating) return 'generating_images';
   const health = computeProjectHealth(project);
-  if (project.status === 'complete' && health.readyToRender) return 'complete';
-  if (health.readyToRender) return 'ready_to_render';
+  if (health.readyToRender) return 'complete';
+  if (project.status === 'rendering' && !project.lastError) return 'rendering';
   if (project.scenes.some((s) => s.currentAssetId || s.image)) return 'editing';
   return 'storyboard';
 }

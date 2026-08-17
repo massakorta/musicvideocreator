@@ -137,8 +137,7 @@ export function estimatePipelineSeconds(
   const storyboard = kind === 'full' ? Math.max(55, Math.round(duration * 0.45)) : 0;
   const chars = Math.ceil(Math.max(charCount, 1) / concurrency) * perStill;
   const images = Math.ceil(Math.max(sceneCount, 1) / concurrency) * perStill;
-  const render = kind === 'full' || stale?.videoStale ? Math.max(90, Math.round(duration * 4)) : 0;
-  return bible + storyboard + chars + images + render;
+  return bible + storyboard + chars + images;
 }
 
 export function pipelineProgressFromJob(job: {
@@ -154,7 +153,7 @@ export function pipelineProgressFromJob(job: {
     bible: [0, 10],
     characters: [10, 25],
     storyboard: [25, 35],
-    images: [35, 85],
+    images: [35, 100],
     render: [85, 100],
   };
   const [start, end] = weights[job.stage] ?? [0, 100];

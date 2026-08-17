@@ -141,7 +141,7 @@ export async function duplicateProject(id: string): Promise<MusicVideoProject> {
     ...structuredClone(source),
     id: newProjectId,
     name: `${source.name} copy`,
-    status: source.status === 'complete' || source.status === 'rendering' ? 'ready_to_render' : source.status,
+    status: source.status === 'complete' || source.status === 'rendering' || source.status === 'ready_to_render' ? 'complete' : source.status,
     createdAt: timestamp,
     updatedAt: timestamp,
     audio: source.audio ? { ...source.audio, assetId: remap(source.audio.assetId) } : undefined,

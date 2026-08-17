@@ -40,7 +40,7 @@ async function enqueuePipeline(projectId: string, kind: PipelineJobKind): Promis
 
   const project = await getProjectOrThrow(projectId);
   const stale = kind === 'stale_assets' ? computeStaleAssets(project) : undefined;
-  if (kind === 'stale_assets' && stale!.totalStaleImages === 0 && !stale!.videoStale) {
+  if (kind === 'stale_assets' && stale!.totalStaleImages === 0) {
     throw new AppError(ERROR_CODES.VALIDATION, 'Nothing needs updating right now.', 400);
   }
 
@@ -50,7 +50,7 @@ async function enqueuePipeline(projectId: string, kind: PipelineJobKind): Promis
     projectId,
     kind,
     status: 'queued',
-    stage: kind === 'full' ? 'bible' : stale!.staleCharacterIds.length > 0 ? 'characters' : stale!.staleSceneIds.length > 0 ? 'images' : 'render',
+    stage: kind === 'full' ? 'bible' : stale!.staleCharacterIds.length > 0 ? 'characters' : 'images',
     progress: 0,
     expectedSeconds,
     charactersDone: 0,

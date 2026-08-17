@@ -18,7 +18,7 @@ export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
   storyboard: 'Storyboard',
   generating_images: 'Generating Images',
   editing: 'Editing',
-  ready_to_render: 'Ready to Render',
+  ready_to_render: 'Ready',
   rendering: 'Rendering',
   complete: 'Complete',
   error: 'Error',

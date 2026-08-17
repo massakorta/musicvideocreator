@@ -108,25 +108,6 @@ export async function getPublicWatch(shareId: string): Promise<PublicWatchPayloa
     throw new AppError(ERROR_CODES.NOT_FOUND, 'This video is not ready to watch yet.', 404);
   }
 
-  const jobs = await getRepositories().renderJobs.listByProject(project.id);
-  const complete = jobs.find((job) => job.status === 'complete' && job.outputUrl);
-  if (complete?.outputUrl) {
-    const storage = getObjectStorage();
-    const videoUrl =
-      storage instanceof LocalObjectStorage
-        ? `${config.apiUrl.replace(/\/$/, '')}/api/public/watch/${shareId}/file`
-        : complete.outputUrl;
-    return {
-      title: hydrated.name,
-      songTitle: hydrated.songTitle,
-      durationSeconds: hydrated.durationSeconds,
-      shareId,
-      mode: 'video',
-      videoUrl,
-      lyrics: publicLyricsFromProject(hydrated),
-    };
-  }
-
   const composition = projectToComposition(hydrated);
   const preset = getVideoPreset(hydrated.formatId);
   const durationInFrames = compositionDurationFrames(composition);

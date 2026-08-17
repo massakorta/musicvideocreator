@@ -17,7 +17,7 @@ export function HealthPanel({ health }: { health: ProjectHealth }) {
         </dd>
         <dt>Timing conflicts</dt>
         <dd>{health.timingConflicts}</dd>
-        <dt>Ready to render</dt>
+        <dt>Ready to share</dt>
         <dd>{health.readyToRender ? 'Yes' : 'Not yet'}</dd>
       </dl>
       {health.blockers.length > 0 ? (
@@ -27,7 +27,7 @@ export function HealthPanel({ health }: { health: ProjectHealth }) {
           ))}
         </div>
       ) : health.readyToRender ? (
-        <div className="banner success">This cut is ready to render.</div>
+        <div className="banner success">This cut is ready to share.</div>
       ) : null}
     </aside>
   );

@@ -93,26 +93,13 @@ export function WatchPage() {
                 <p className="muted">
                   {watch.songTitle} · {formatClockShort(watch.durationSeconds)}
                 </p>
-                {watch.mode === 'preview' ? (
-                  <p className="faint watch-note">
-                    Interactive preview — plays in your browser like the editor cut.
-                  </p>
-                ) : (
-                  <p className="faint watch-note">Final render.</p>
-                )}
+                <p className="faint watch-note">
+                  Plays in your browser like the editor cut.
+                </p>
               </div>
 
               <div className="watch-player-wrap">
-                {watch.mode === 'video' && watch.videoUrl ? (
-                  <WatchStage
-                    mode="video"
-                    videoUrl={watch.videoUrl}
-                    durationSeconds={watch.durationSeconds}
-                    lyrics={watch.lyrics}
-                    onTime={setCurrentSeconds}
-                    onFullscreenChange={setFullscreen}
-                  />
-                ) : watch.preview ? (
+                {watch.preview ? (
                   <WatchStage
                     mode="preview"
                     composition={watch.preview.composition}

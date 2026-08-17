@@ -59,7 +59,7 @@ export function StylePage() {
           expectedSeconds={generatingAll ? 8 : 6}
           stages={
             generatingAll
-              ? ['Queuing bible, storyboard, stills, and render…']
+              ? ['Queuing bible, storyboard, and stills…']
               : ['Saving the style so every later still stays in this world…']
           }
         />

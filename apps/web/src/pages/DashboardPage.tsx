@@ -135,7 +135,7 @@ export function DashboardPage({ onLogout }: { onLogout: () => void }) {
                         setError(null);
                         try {
                           const copy = await api.duplicateProject(project.id);
-                          navigate(`/projects/${copy.project.id}/${copy.project.status === 'ready_to_render' ? 'video' : 'setup'}`);
+                          navigate(`/projects/${copy.project.id}/${copy.project.status === 'complete' || copy.project.status === 'ready_to_render' ? 'video' : 'setup'}`);
                         } catch (err) {
                           setError(err instanceof ApiClientError ? err.message : 'Could not duplicate that project.');
                         } finally {
