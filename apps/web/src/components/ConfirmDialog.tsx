@@ -20,16 +20,22 @@ export function ConfirmDialog({
       if (event.key === 'Escape' && !busy) onCancel();
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+    };
   }, [busy, onCancel]);
 
   return (
     <div className="modal-backdrop" onClick={() => (!busy ? onCancel() : undefined)}>
       <div className="modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-handle" aria-hidden="true" />
         <h2>{title}</h2>
         <p className="muted">{body}</p>
-        <div className="row" style={{ marginTop: 18 }}>
+        <div className="modal-actions">
           <button
+            type="button"
             className="btn btn-danger"
             disabled={busy}
             onClick={async () => {
@@ -43,7 +49,7 @@ export function ConfirmDialog({
           >
             {busy ? 'Working…' : confirmLabel}
           </button>
-          <button className="btn btn-ghost" disabled={busy} onClick={onCancel}>
+          <button type="button" className="btn btn-ghost" disabled={busy} onClick={onCancel}>
             Cancel
           </button>
         </div>

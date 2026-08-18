@@ -25,10 +25,11 @@ type WatchStageProps = (PreviewProps | VideoProps) & {
   lyrics?: PublicWatchLyrics;
   onTime?: (seconds: number) => void;
   onFullscreenChange?: (fullscreen: boolean) => void;
+  overlayControls?: boolean;
 };
 
 export function WatchStage(props: WatchStageProps) {
-  const { durationSeconds, lyrics, onTime, onFullscreenChange } = props;
+  const { durationSeconds, lyrics, onTime, onFullscreenChange, overlayControls = false } = props;
   const stageRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<PlayerRef>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -272,18 +273,34 @@ export function WatchStage(props: WatchStageProps) {
           </>
         )}
         {caption ? <div className="watch-caption">{caption}</div> : null}
+        {overlayControls ? (
+          <WatchControls
+            playing={playing}
+            currentSeconds={currentSeconds}
+            durationSeconds={durationSeconds}
+            fullscreen={fullscreen}
+            overlay
+            onTogglePlay={togglePlay}
+            onSeek={seekTo}
+            onToggleFullscreen={() => {
+              void toggleFullscreen();
+            }}
+          />
+        ) : null}
       </div>
-      <WatchControls
-        playing={playing}
-        currentSeconds={currentSeconds}
-        durationSeconds={durationSeconds}
-        fullscreen={fullscreen}
-        onTogglePlay={togglePlay}
-        onSeek={seekTo}
-        onToggleFullscreen={() => {
-          void toggleFullscreen();
-        }}
-      />
+      {!overlayControls ? (
+        <WatchControls
+          playing={playing}
+          currentSeconds={currentSeconds}
+          durationSeconds={durationSeconds}
+          fullscreen={fullscreen}
+          onTogglePlay={togglePlay}
+          onSeek={seekTo}
+          onToggleFullscreen={() => {
+            void toggleFullscreen();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

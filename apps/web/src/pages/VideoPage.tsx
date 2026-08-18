@@ -50,7 +50,7 @@ export function VideoPage() {
             )}
           </div>
         ) : null}
-        <div>
+        <div className="preview-wrap">
           {composition.scenes.length > 0 ? (
             <SyncedPreview
               ref={preview}
@@ -70,7 +70,7 @@ export function VideoPage() {
             </div>
           )}
         </div>
-        <div className="row" style={{ margin: '10px 0', justifyContent: 'space-between' }}>
+        <div className="row" style={{ margin: '10px 0', justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <span className="mono">
             {formatClock(currentSeconds)} / {formatClock(project.durationSeconds)}
           </span>
@@ -88,7 +88,7 @@ export function VideoPage() {
             if (scene) preview.current?.seekToSeconds(scene.startTime);
           }}
         />
-        <div className="row" style={{ marginTop: 16, flexWrap: 'wrap' }}>
+        <div className="actions" style={{ marginTop: 16 }}>
           {stale && stale.totalStaleImages > 0 ? (
             <button
               className="btn btn-primary"
@@ -128,7 +128,7 @@ export function VideoPage() {
           ) : null}
         </div>
       </div>
-      <div>
+      <div className="editor-sidebar">
         <HealthPanel health={health} />
         {selected ? (
           <SceneEditor
@@ -161,21 +161,24 @@ function Timeline({
     <div
       className="timeline"
       onClick={(e) => {
-        const rect = e.currentTarget.getBoundingClientRect();
+        const track = e.currentTarget.querySelector('.timeline-track:last-of-type');
+        if (!track) return;
+        const rect = track.getBoundingClientRect();
         const ratio = (e.clientX - rect.left) / rect.width;
-        onSeek(ratio * duration);
+        onSeek(Math.max(0, Math.min(1, ratio)) * duration);
       }}
     >
       <div className="faint">Audio</div>
-      <div className="timeline-track" style={{ height: 10, margin: '6px 0 10px', background: '#3a3328' }} />
+      <div className="timeline-track" style={{ height: 10, margin: '6px 0 10px', background: '#2a2234' }} />
       <div className="timeline-track">
         {project.scenes.map((scene, index) => (
           <button
             key={scene.id}
+            type="button"
             className="timeline-block"
             style={{
-              width: `${((scene.endTime - scene.startTime) / Math.max(duration, 0.01)) * 100}%`,
-              background: index % 2 === 0 ? '#3b3124' : '#2c261d',
+              width: `${Math.max(((scene.endTime - scene.startTime) / Math.max(duration, 0.01)) * 100, 8)}%`,
+              background: index % 2 === 0 ? '#2a2234' : '#1f1b28',
             }}
             onClick={(e) => {
               e.stopPropagation();

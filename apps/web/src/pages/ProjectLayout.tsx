@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   EDITOR_STEP_LABELS,
@@ -28,6 +28,7 @@ export function ProjectLayout() {
   const [stale, setStale] = useState<StaleAssets | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
+  const railRef = useRef<HTMLElement>(null);
 
   const reload = useCallback(async () => {
     if (!id) return;
@@ -49,6 +50,14 @@ export function ProjectLayout() {
     if (location.pathname.includes('/result/')) return;
     navigate(`/projects/${id}/pipeline`, { replace: true });
   }, [pipeline?.active, location.pathname, navigate, id]);
+
+  const activeStep = EDITOR_STEPS.find((step) => location.pathname.includes(`/${step}`));
+
+  useEffect(() => {
+    if (!railRef.current || !activeStep) return;
+    const frame = railRef.current.querySelector(`[data-step="${activeStep}"]`);
+    frame?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+  }, [activeStep, location.pathname]);
 
   if (error) {
     return (
@@ -72,6 +81,7 @@ export function ProjectLayout() {
   const completed = completedEditorStepCount(project);
   const nextStep = nextEditorStep(project);
   const pipelineLocked = Boolean(pipeline?.active);
+  const onPipeline = location.pathname.includes('/pipeline');
 
   const value = {
     project,
@@ -100,43 +110,49 @@ export function ProjectLayout() {
 
   return (
     <ProjectContext.Provider value={value}>
-      <div className="project-header">
-        <div className="row" style={{ justifyContent: 'space-between' }}>
-          <Link to="/" className="faint">
-            ← Projects
-          </Link>
-          <span className="save-dot">
-            {pipelineLocked
-              ? 'Generating in background…'
-              : saveState === 'saving'
-                ? 'Saving…'
-                : saveState === 'error'
-                  ? 'Save failed'
-                  : saveState === 'saved'
-                    ? 'Saved'
-                    : `${completed} / ${EDITOR_STEPS.length} completed`}
-          </span>
+      <div className="project-chrome">
+        <div className="project-header">
+          <div className="row" style={{ justifyContent: 'space-between' }}>
+            <Link to="/" className="faint">
+              ← Projects
+            </Link>
+            <span className="save-dot">
+              {pipelineLocked
+                ? 'Generating…'
+                : saveState === 'saving'
+                  ? 'Saving…'
+                  : saveState === 'error'
+                    ? 'Save failed'
+                    : saveState === 'saved'
+                      ? 'Saved'
+                      : `${completed} / ${EDITOR_STEPS.length}`}
+            </span>
+          </div>
+          <h1>{project.name}</h1>
         </div>
-        <h1>{project.name}</h1>
+        {!onPipeline ? (
+          <nav className="contact-rail" ref={railRef} aria-label="Editor steps">
+            {EDITOR_STEPS.map((step, index) => {
+              const done = isEditorStepComplete(project, step);
+              const active = location.pathname.includes(`/${step}`);
+              return (
+                <button
+                  key={step}
+                  type="button"
+                  data-step={step}
+                  className={`contact-frame ${active ? 'active' : ''} ${done ? 'done' : ''} ${step === nextStep && !active ? 'next' : ''}`}
+                  disabled={pipelineLocked}
+                  aria-current={active ? 'step' : undefined}
+                  onClick={() => navigate(`/projects/${project.id}/${step}`)}
+                >
+                  <div className="contact-frame-index">{String(index + 1).padStart(2, '0')}</div>
+                  <div className="contact-frame-label">{EDITOR_STEP_LABELS[step]}</div>
+                </button>
+              );
+            })}
+          </nav>
+        ) : null}
       </div>
-      {!location.pathname.includes('/pipeline') ? (
-        <nav className="stepper" aria-label="Editor steps">
-          {EDITOR_STEPS.map((step) => {
-            const done = isEditorStepComplete(project, step);
-            const active = location.pathname.includes(`/${step}`);
-            return (
-              <button
-                key={step}
-                className={`step ${active ? 'active' : ''} ${done ? 'done' : ''} ${step === nextStep && !active ? 'next' : ''}`}
-                disabled={pipelineLocked}
-                onClick={() => navigate(`/projects/${project.id}/${step}`)}
-              >
-                {EDITOR_STEP_LABELS[step]}
-              </button>
-            );
-          })}
-        </nav>
-      ) : null}
       <Outlet />
     </ProjectContext.Provider>
   );

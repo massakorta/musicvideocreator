@@ -62,7 +62,7 @@ export function StoryboardPage() {
             ]}
           />
         ) : null}
-        <div className="row" style={{ marginBottom: 14 }}>
+        <div className="actions">
           <button className="btn btn-primary" disabled={busy || !project.visualBibleApproved} onClick={() => void generate()}>
             {busy ? 'Creating storyboard…' : project.scenes.length ? 'Regenerate Storyboard' : 'Generate Storyboard'}
           </button>
@@ -124,8 +124,8 @@ export function StoryboardPage() {
                 ) : (
                   <div className="scene-thumb" />
                 )}
-                <div>
-                  <div className="row" style={{ justifyContent: 'space-between' }}>
+                <div className="scene-card-meta">
+                  <div className="scene-card-head">
                     <strong>
                       Scene {scene.order} · {scene.title}
                     </strong>
@@ -141,37 +141,39 @@ export function StoryboardPage() {
                     {environmentName(project, scene.environmentId)} · Motion: {MOTION_PRESET_LABELS[scene.motion]}
                   </p>
                 </div>
-                <div className="row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-                  <button className="btn" onClick={() => setSelectedId(scene.id)}>
+                <div className="card-actions">
+                  <button className="btn btn-primary" onClick={() => setSelectedId(scene.id)}>
                     Edit
                   </button>
-                  <button
-                    className="btn"
-                    onClick={async () => {
-                      try {
-                        const data = await api.duplicateScene(project.id, scene.id);
-                        setProject(data.project);
-                      } catch (err) {
-                        setError(err instanceof ApiClientError ? err.message : 'Could not duplicate that scene.');
-                      }
-                    }}
-                  >
-                    Duplicate
-                  </button>
-                  <button
-                    className="btn btn-danger"
-                    onClick={async () => {
-                      try {
-                        const data = await api.deleteScene(project.id, scene.id);
-                        setProject(data.project);
-                        if (selectedId === scene.id) setSelectedId(null);
-                      } catch (err) {
-                        setError(err instanceof ApiClientError ? err.message : 'Could not delete that scene.');
-                      }
-                    }}
-                  >
-                    Delete
-                  </button>
+                  <div className="card-actions-secondary">
+                    <button
+                      className="btn"
+                      onClick={async () => {
+                        try {
+                          const data = await api.duplicateScene(project.id, scene.id);
+                          setProject(data.project);
+                        } catch (err) {
+                          setError(err instanceof ApiClientError ? err.message : 'Could not duplicate that scene.');
+                        }
+                      }}
+                    >
+                      Duplicate
+                    </button>
+                    <button
+                      className="btn btn-danger"
+                      onClick={async () => {
+                        try {
+                          const data = await api.deleteScene(project.id, scene.id);
+                          setProject(data.project);
+                          if (selectedId === scene.id) setSelectedId(null);
+                        } catch (err) {
+                          setError(err instanceof ApiClientError ? err.message : 'Could not delete that scene.');
+                        }
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
               </article>
             ))}
@@ -179,14 +181,14 @@ export function StoryboardPage() {
         )}
         <button
           className="btn btn-primary"
-          style={{ marginTop: 16 }}
+          style={{ marginTop: 16, width: '100%' }}
           disabled={project.scenes.length === 0}
           onClick={() => navigate(`/projects/${project.id}/images`)}
         >
           Continue to images
         </button>
       </div>
-      <div>
+      <div className="editor-sidebar">
         <HealthPanel health={health} />
         {selected ? (
           <SceneEditor

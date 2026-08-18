@@ -123,12 +123,14 @@ export function NewProjectPage() {
 
       {error ? <div className="banner error">{error}</div> : null}
 
-      <div className="intake-actions">
+      <div className="intake-sticky-bar">
         <button className="btn btn-primary" disabled={!ready || busy} onClick={() => void start()}>
           {busy ? 'Starting…' : 'Start the cut'}
         </button>
-        {!ready ? <p className="faint">Add a song or Suno link to continue.</p> : null}
       </div>
+      {!ready ? (
+        <p className="faint intake-actions">Add a song or Suno link to continue.</p>
+      ) : null}
     </div>
   );
 }

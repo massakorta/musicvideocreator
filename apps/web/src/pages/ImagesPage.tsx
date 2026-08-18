@@ -216,7 +216,7 @@ export function ImagesPage() {
           disabled={generationBusy}
           variant="compact"
         />
-        <div className="row" style={{ marginBottom: 14, flexWrap: 'wrap' }}>
+        <div className="actions">
           {qualityRegenerateNeeded ? (
             <button
               className="btn btn-primary"
@@ -311,9 +311,9 @@ export function ImagesPage() {
                           : GENERATION_STATE_LABELS[scene.generationState]}
                   </div>
                   {scene.generationError ? <p className="muted">{scene.generationError}</p> : null}
-                  <div className="row" style={{ marginTop: 10, flexWrap: 'wrap' }}>
+                  <div className="card-actions">
                     <button
-                      className="btn"
+                      className="btn btn-primary"
                       disabled={busy || Boolean(singleTitle)}
                       onClick={async () => {
                         setSingleTitle(scene.title);
@@ -341,22 +341,24 @@ export function ImagesPage() {
                     >
                       {scene.generationState === 'failed' ? 'Retry' : scene.image ? 'Regenerate' : 'Generate'}
                     </button>
-                    <button className="btn" onClick={() => setSelectedId(scene.id)}>
-                      Edit Prompt
-                    </button>
-                    <button
-                      className="btn"
-                      onClick={async () => {
-                        try {
-                          const data = await api.patchScene(project.id, scene.id, { approved: !scene.approved });
-                          setProject(data.project, data.health);
-                        } catch (err) {
-                          setError(err instanceof ApiClientError ? err.message : 'Could not update approval.');
-                        }
-                      }}
-                    >
-                      {scene.approved ? 'Approved' : 'Approve'}
-                    </button>
+                    <div className="card-actions-secondary">
+                      <button className="btn" onClick={() => setSelectedId(scene.id)}>
+                        Edit
+                      </button>
+                      <button
+                        className="btn"
+                        onClick={async () => {
+                          try {
+                            const data = await api.patchScene(project.id, scene.id, { approved: !scene.approved });
+                            setProject(data.project, data.health);
+                          } catch (err) {
+                            setError(err instanceof ApiClientError ? err.message : 'Could not update approval.');
+                          }
+                        }}
+                      >
+                        {scene.approved ? 'Approved' : 'Approve'}
+                      </button>
+                    </div>
                     <label className="btn">
                       Replace Image
                       <input
@@ -405,14 +407,14 @@ export function ImagesPage() {
         )}
         <button
           className="btn btn-primary"
-          style={{ marginTop: 18 }}
+          style={{ marginTop: 18, width: '100%' }}
           disabled={project.scenes.length === 0}
           onClick={() => navigate(`/projects/${project.id}/video`)}
         >
           Continue to video
         </button>
       </div>
-      <div>
+      <div className="editor-sidebar">
         <HealthPanel health={health} />
         {selected ? (
           <SceneEditor

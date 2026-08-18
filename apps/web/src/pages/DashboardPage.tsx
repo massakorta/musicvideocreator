@@ -42,7 +42,8 @@ export function DashboardPage({ onLogout }: { onLogout: () => void }) {
         <div className="row">
           {session.accessRequired ? (
             <button
-              className="btn btn-ghost"
+              type="button"
+              className="text-link"
               onClick={async () => {
                 await api.logout().catch(() => undefined);
                 onLogout();
@@ -53,7 +54,7 @@ export function DashboardPage({ onLogout }: { onLogout: () => void }) {
             </button>
           ) : null}
           <Link className="btn btn-primary" to="/projects/new">
-            + Create Music Video
+            + Create
           </Link>
         </div>
       </header>
@@ -114,7 +115,7 @@ export function DashboardPage({ onLogout }: { onLogout: () => void }) {
                   ) : (
                     <div className="faint">Updated {formatRelative(project.updatedAt)}</div>
                   )}
-                  <div className="row" style={{ marginTop: 14 }}>
+                  <div className="card-actions">
                     <button
                       className="btn btn-primary"
                       onClick={() =>
@@ -127,27 +128,29 @@ export function DashboardPage({ onLogout }: { onLogout: () => void }) {
                     >
                       {project.pipelineActive ? 'View progress' : project.status === 'complete' ? 'Watch' : 'Continue'}
                     </button>
-                    <button
-                      className="btn"
-                      disabled={busyId === project.id}
-                      onClick={async () => {
-                        setBusyId(project.id);
-                        setError(null);
-                        try {
-                          const copy = await api.duplicateProject(project.id);
-                          navigate(`/projects/${copy.project.id}/${copy.project.status === 'complete' || copy.project.status === 'ready_to_render' ? 'video' : 'setup'}`);
-                        } catch (err) {
-                          setError(err instanceof ApiClientError ? err.message : 'Could not duplicate that project.');
-                        } finally {
-                          setBusyId(null);
-                        }
-                      }}
-                    >
-                      {busyId === project.id ? 'Copying…' : 'Duplicate'}
-                    </button>
-                    <button className="btn btn-danger" onClick={() => setPendingDelete(project)}>
-                      Delete
-                    </button>
+                    <div className="card-actions-secondary">
+                      <button
+                        className="btn"
+                        disabled={busyId === project.id}
+                        onClick={async () => {
+                          setBusyId(project.id);
+                          setError(null);
+                          try {
+                            const copy = await api.duplicateProject(project.id);
+                            navigate(`/projects/${copy.project.id}/${copy.project.status === 'complete' || copy.project.status === 'ready_to_render' ? 'video' : 'setup'}`);
+                          } catch (err) {
+                            setError(err instanceof ApiClientError ? err.message : 'Could not duplicate that project.');
+                          } finally {
+                            setBusyId(null);
+                          }
+                        }}
+                      >
+                        {busyId === project.id ? 'Copying…' : 'Duplicate'}
+                      </button>
+                      <button className="btn btn-danger" onClick={() => setPendingDelete(project)}>
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
               </article>

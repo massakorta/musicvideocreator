@@ -99,7 +99,7 @@ export function StylePage() {
         variant="cards"
       />
       {project.styleId ? (
-        <div className="row" style={{ marginTop: 18, flexWrap: 'wrap', gap: 10 }}>
+        <div className="actions" style={{ marginTop: 18 }}>
           <button
             className="btn btn-primary"
             disabled={!canGenerateAll || generatingAll || Boolean(busyId)}

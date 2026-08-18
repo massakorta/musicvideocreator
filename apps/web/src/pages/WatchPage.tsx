@@ -64,74 +64,70 @@ export function WatchPage() {
   }
 
   return (
-    <div className="app-shell watch-shell">
-      <div className="sprocket" aria-hidden="true" />
-      <div className="app-main">
-        <div className="page watch-page">
-          <header className="watch-header">
-            <div className="brand">
-              <small>{PRODUCT_NAME}</small>
-              <strong>Shared film</strong>
-            </div>
-          </header>
-
-          {loading ? <p className="muted">Loading video…</p> : null}
-
-          {error ? (
-            <>
-              <div className="banner error">{error}</div>
-              <Link className="btn" to="/">
-                Studio home
-              </Link>
-            </>
-          ) : null}
-
-          {watch ? (
-            <>
-              <div className="watch-meta">
-                <h1>{watch.title}</h1>
-                <p className="muted">
-                  {watch.songTitle} · {formatClockShort(watch.durationSeconds)}
-                </p>
-                <p className="faint watch-note">
-                  Plays in your browser like the editor cut.
-                </p>
-              </div>
-
-              <div className="watch-player-wrap">
-                {watch.preview ? (
-                  <WatchStage
-                    mode="preview"
-                    composition={watch.preview.composition}
-                    durationInFrames={watch.preview.durationInFrames}
-                    fps={watch.preview.fps}
-                    width={watch.preview.width}
-                    height={watch.preview.height}
-                    audioUrl={watch.preview.audioUrl}
-                    durationSeconds={watch.durationSeconds}
-                    lyrics={watch.lyrics}
-                    onTime={setCurrentSeconds}
-                    onFullscreenChange={setFullscreen}
-                  />
-                ) : (
-                  <div className="banner warning">This shared film could not be loaded.</div>
-                )}
-              </div>
-
-              <WatchLyrics lyrics={watch.lyrics} currentSeconds={currentSeconds} hidden={fullscreen} />
-
-              <footer className="watch-footer">
-                <button type="button" className="btn" onClick={() => void copyLink()}>
-                  {copied ? 'Link copied' : 'Copy link'}
-                </button>
-                <Link className="watch-footer-link" to="/">
-                  Made with {PRODUCT_NAME}
-                </Link>
-              </footer>
-            </>
-          ) : null}
+    <div className="watch-page watch-page--standalone">
+      <header className="watch-header">
+        <div className="brand">
+          <small>{PRODUCT_NAME}</small>
+          <strong>Shared film</strong>
         </div>
-      </div>
+      </header>
+
+      {loading ? <p className="muted" style={{ paddingInline: 'var(--page-x)' }}>Loading video…</p> : null}
+
+      {error ? (
+        <div style={{ paddingInline: 'var(--page-x)' }}>
+          <div className="banner error">{error}</div>
+          <Link className="btn" to="/">
+            Studio home
+          </Link>
+        </div>
+      ) : null}
+
+      {watch ? (
+        <>
+          <div className="watch-meta">
+            <h1>{watch.title}</h1>
+            <p className="muted">
+              {watch.songTitle} · {formatClockShort(watch.durationSeconds)}
+            </p>
+            <p className="faint watch-note">Plays in your browser like the editor cut.</p>
+          </div>
+
+          <div className="watch-player-wrap watch-player-wrap--bleed">
+            {watch.preview ? (
+              <WatchStage
+                mode="preview"
+                composition={watch.preview.composition}
+                durationInFrames={watch.preview.durationInFrames}
+                fps={watch.preview.fps}
+                width={watch.preview.width}
+                height={watch.preview.height}
+                audioUrl={watch.preview.audioUrl}
+                durationSeconds={watch.durationSeconds}
+                lyrics={watch.lyrics}
+                onTime={setCurrentSeconds}
+                onFullscreenChange={setFullscreen}
+                overlayControls
+              />
+            ) : (
+              <div className="banner warning" style={{ marginInline: 'var(--page-x)' }}>
+                This shared film could not be loaded.
+              </div>
+            )}
+          </div>
+
+          <WatchLyrics lyrics={watch.lyrics} currentSeconds={currentSeconds} hidden={fullscreen} />
+
+          <footer className="watch-footer">
+            <button type="button" className="btn btn-primary" onClick={() => void copyLink()}>
+              {copied ? 'Link copied' : 'Copy link'}
+            </button>
+            <Link className="watch-footer-link" to="/">
+              Made with {PRODUCT_NAME}
+            </Link>
+          </footer>
+        </>
+      ) : null}
     </div>
   );
 }

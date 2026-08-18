@@ -110,7 +110,7 @@ export function CharactersPage() {
             disabled={generationBusy}
             variant="compact"
           />
-          <div className="row" style={{ marginBottom: 16 }}>
+          <div className="actions">
             <button className="btn btn-primary" disabled={Boolean(busyId)} onClick={() => void generateAll()}>
               {busyId === 'all' ? 'Generating sheets…' : 'Generate all character sheets'}
             </button>
@@ -135,13 +135,13 @@ export function CharactersPage() {
                 ) : character.lockedReferenceImage ? (
                   <div className="pill success">Approved</div>
                 ) : busyId === character.id || (busyId === 'all' && progress.name === character.name) ? (
-                  <div className="pill warning">Painting</div>
+                  <div className="pill live">Painting</div>
                 ) : (
                   <div className="pill warning">Needs approval</div>
                 )}
-                <div className="row" style={{ marginTop: 12 }}>
+                <div className="card-actions">
                   <button
-                    className="btn"
+                    className="btn btn-primary"
                     disabled={Boolean(busyId)}
                     onClick={() => void generateOne(character.id, Boolean(character.lockedReferenceImage))}
                   >
@@ -153,7 +153,7 @@ export function CharactersPage() {
                   </button>
                   {character.referenceAssetId ? (
                     <button
-                      className="btn btn-primary"
+                      className="btn"
                       onClick={async () => {
                         try {
                           const data = await api.approveCharacter(
@@ -176,11 +176,13 @@ export function CharactersPage() {
           </div>
         </>
       )}
-      <div className="row" style={{ marginTop: 20 }}>
-        <button className="btn btn-primary" onClick={() => navigate(`/projects/${project.id}/storyboard`)}>
-          Continue to storyboard
-        </button>
-      </div>
+      <button
+        className="btn btn-primary"
+        style={{ marginTop: 20, width: '100%' }}
+        onClick={() => navigate(`/projects/${project.id}/storyboard`)}
+      >
+        Continue to storyboard
+      </button>
     </div>
   );
 }

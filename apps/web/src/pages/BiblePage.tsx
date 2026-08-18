@@ -79,7 +79,7 @@ export function BiblePage() {
             ]}
           />
         ) : null}
-        <div className="row" style={{ marginBottom: 16 }}>
+        <div className="actions">
           <button className="btn btn-primary" onClick={() => void generate()} disabled={busy}>
             {busy ? 'Creating visual bible…' : bible ? 'Regenerate Visual Bible' : 'Generate Visual Bible'}
           </button>

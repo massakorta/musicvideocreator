@@ -84,57 +84,61 @@ export function App() {
 
   return (
     <SessionContext.Provider value={session}>
-      <div className="app-shell">
-        <div className="sprocket" aria-hidden="true" />
-        <div className="app-main">
-          <Routes>
-            <Route
-              path="/access"
-              element={<AccessPage onAuthed={() => setSession({ ...session, authenticated: true })} />}
-            />
-            <Route
-              path="/watch/:shareId"
-              element={<WatchPage />}
-            />
-            <Route
-              path="/"
-              element={
-                <RequireAuth>
-                  <DashboardPage onLogout={() => setSession({ ...session, authenticated: false })} />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/projects/new"
-              element={
-                <RequireAuth>
-                  <NewProjectPage />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/projects/:id"
-              element={
-                <RequireAuth>
-                  <ProjectLayout />
-                </RequireAuth>
-              }
-            >
-              <Route path="setup" element={<SetupPage />} />
-              <Route path="style" element={<StylePage />} />
-              <Route path="bible" element={<BiblePage />} />
-              <Route path="characters" element={<CharactersPage />} />
-              <Route path="storyboard" element={<StoryboardPage />} />
-              <Route path="images" element={<ImagesPage />} />
-              <Route path="video" element={<VideoPage />} />
-              <Route path="pipeline" element={<PipelinePage />} />
-              <Route path="result/:jobId" element={<ResultPage />} />
-              <Route index element={<Navigate to="setup" replace />} />
-            </Route>
-            <Route path="*" element={<NotFoundPage />} />
-          </Routes>
-        </div>
-      </div>
+      <Routes>
+        <Route path="/watch/:shareId" element={<WatchPage />} />
+        <Route
+          path="*"
+          element={
+            <div className="app-shell">
+              <div className="sprocket" aria-hidden="true" />
+              <div className="app-main">
+                <Routes>
+                  <Route
+                    path="/access"
+                    element={<AccessPage onAuthed={() => setSession({ ...session, authenticated: true })} />}
+                  />
+                  <Route
+                    path="/"
+                    element={
+                      <RequireAuth>
+                        <DashboardPage onLogout={() => setSession({ ...session, authenticated: false })} />
+                      </RequireAuth>
+                    }
+                  />
+                  <Route
+                    path="/projects/new"
+                    element={
+                      <RequireAuth>
+                        <NewProjectPage />
+                      </RequireAuth>
+                    }
+                  />
+                  <Route
+                    path="/projects/:id"
+                    element={
+                      <RequireAuth>
+                        <ProjectLayout />
+                      </RequireAuth>
+                    }
+                  >
+                    <Route path="setup" element={<SetupPage />} />
+                    <Route path="style" element={<StylePage />} />
+                    <Route path="bible" element={<BiblePage />} />
+                    <Route path="characters" element={<CharactersPage />} />
+                    <Route path="storyboard" element={<StoryboardPage />} />
+                    <Route path="images" element={<ImagesPage />} />
+                    <Route path="video" element={<VideoPage />} />
+                    <Route path="pipeline" element={<PipelinePage />} />
+                    <Route path="result/:jobId" element={<ResultPage />} />
+                    <Route index element={<Navigate to="setup" replace />} />
+                  </Route>
+                  <Route path="*" element={<NotFoundPage />} />
+                </Routes>
+              </div>
+            </div>
+          }
+        />
+      </Routes>
     </SessionContext.Provider>
   );
 }
