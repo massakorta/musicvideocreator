@@ -5,7 +5,7 @@ import type {
   VisualBible,
   VisualStylePreset,
 } from '@music-video/shared';
-import { styleRenderMode, type StyleRenderMode } from '@music-video/shared';
+import { styleRenderMode, normalizeMotionPreset, type StyleRenderMode } from '@music-video/shared';
 
 export interface SceneImagePromptInput {
   style: VisualStylePreset;
@@ -116,7 +116,8 @@ function motionLanguageForVideo(
   motion: StoryboardScene['suggestedMotion'],
   cameraIntent: string,
 ): string {
-  const map: Partial<Record<StoryboardScene['suggestedMotion'], string>> = {
+  const preset = normalizeMotionPreset(motion);
+  const map: Partial<Record<ReturnType<typeof normalizeMotionPreset>, string>> = {
     static: 'Hold the frame steady with only ambient environmental motion.',
     slowZoomIn: 'Very slow push-in on the same subject, barely perceptible.',
     slowZoomOut: 'Very slow pull-back while keeping the same framing.',
@@ -131,10 +132,8 @@ function motionLanguageForVideo(
     gentleDrift: 'Soft floating camera drift within the same frame.',
     dramaticZoom: 'Cinematic slow push-in, same subject and scene.',
     punchZoom: 'Quick but controlled punch-in on the same subject.',
-    lightShake: 'Subtle handheld tremor, same composition.',
-    heavyShake: 'Stronger handheld shake, same composition, no scene change.',
   };
-  return `Camera motion: ${map[motion] ?? 'Gentle cinematic drift.'} Director intent: ${cameraIntent}.`;
+  return `Camera motion: ${map[preset] ?? 'Gentle cinematic drift.'} Director intent: ${cameraIntent}.`;
 }
 
 export function buildSceneImagePrompt(input: SceneImagePromptInput): {

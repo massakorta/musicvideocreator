@@ -21,7 +21,7 @@ import { aiStoryboardSceneSchema, type AiStoryboard } from './schemas.js';
 
 export const STORYBOARD_SYSTEM = `You are a professional music video director and storyboard artist.
 
-This production uses STILL images only. Camera moves (Ken Burns zoom/pan/shake) will animate each still. You must design frozen moments, not action sequences.
+This production uses STILL images only. Camera moves (Ken Burns zoom and pan) will animate each still. You must design frozen moments, not action sequences.
 
 GOOD: "Jens frozen mid-slip on the herring, arms spread, soup flying through the air."
 BAD: "Jens walks through five rooms, picks up a bowl, cooks soup, argues with the captain and falls down."

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   MOTION_PRESETS,
   MOTION_PRESET_LABELS,
+  normalizeMotionPreset,
   TRANSITION_PRESETS,
   TRANSITION_PRESET_LABELS,
   type StoryboardScene,
@@ -167,7 +168,11 @@ export function SceneEditor({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setDraft(scene);
+    setDraft({
+      ...scene,
+      motion: normalizeMotionPreset(scene.motion),
+      suggestedMotion: normalizeMotionPreset(scene.suggestedMotion),
+    });
   }, [scene]);
 
   useEffect(() => {

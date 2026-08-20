@@ -13,11 +13,34 @@ export const MOTION_PRESETS = [
   'gentleDrift',
   'dramaticZoom',
   'punchZoom',
-  'lightShake',
-  'heavyShake',
 ] as const;
 
 export type MotionPresetId = (typeof MOTION_PRESETS)[number];
+
+/** @deprecated Removed from the picker — mapped to zoom presets for older projects. */
+export type LegacyMotionPresetId = 'lightShake' | 'heavyShake';
+
+export type StoredMotionPresetId = MotionPresetId | LegacyMotionPresetId;
+
+const LEGACY_MOTION_MAP: Record<LegacyMotionPresetId, MotionPresetId> = {
+  lightShake: 'slowZoomIn',
+  heavyShake: 'slowZoomOut',
+};
+
+export function normalizeMotionPreset(id: string | undefined): MotionPresetId {
+  if (!id) return 'slowZoomIn';
+  if (id in LEGACY_MOTION_MAP) {
+    return LEGACY_MOTION_MAP[id as LegacyMotionPresetId];
+  }
+  if (MOTION_PRESETS.includes(id as MotionPresetId)) {
+    return id as MotionPresetId;
+  }
+  return 'slowZoomIn';
+}
+
+export function motionPresetLabel(id: string | undefined): string {
+  return MOTION_PRESET_LABELS[normalizeMotionPreset(id)];
+}
 
 export const MOTION_PRESET_LABELS: Record<MotionPresetId, string> = {
   static: 'Static',
@@ -34,8 +57,6 @@ export const MOTION_PRESET_LABELS: Record<MotionPresetId, string> = {
   gentleDrift: 'Gentle Drift',
   dramaticZoom: 'Dramatic Zoom',
   punchZoom: 'Punch Zoom',
-  lightShake: 'Light Shake',
-  heavyShake: 'Heavy Shake',
 };
 
 export const TRANSITION_PRESETS = [
@@ -75,10 +96,10 @@ export interface MotionKeyframe {
 
 const BASE: KenBurnsTransform = { scale: 1, x: 0, y: 0, rotate: 0 };
 
-export function getMotionKeyframe(preset: MotionPresetId, durationSeconds: number): MotionKeyframe {
+export function getMotionKeyframe(preset: StoredMotionPresetId | string, durationSeconds: number): MotionKeyframe {
   const intensity = motionIntensityForDuration(durationSeconds);
 
-  switch (preset) {
+  switch (normalizeMotionPreset(preset)) {
     case 'static':
       return { start: BASE, end: { ...BASE, scale: 1.02 }, shakeAmplitude: 0 };
     case 'slowZoomIn':
@@ -155,18 +176,6 @@ export function getMotionKeyframe(preset: MotionPresetId, durationSeconds: numbe
         end: { scale: 1.2, x: 0, y: 0, rotate: 0 },
         shakeAmplitude: 0.4,
       };
-    case 'lightShake':
-      return {
-        start: { scale: 1.08, x: 0, y: 0, rotate: 0 },
-        end: { scale: 1.1, x: 1, y: -0.5, rotate: 0 },
-        shakeAmplitude: 1.2,
-      };
-    case 'heavyShake':
-      return {
-        start: { scale: 1.1, x: 0, y: 0, rotate: 0 },
-        end: { scale: 1.14, x: 0, y: 0, rotate: 0 },
-        shakeAmplitude: 2.6,
-      };
     default:
       return { start: BASE, end: { ...BASE, scale: 1.06 }, shakeAmplitude: 0 };
   }
@@ -197,15 +206,15 @@ export interface MotionSelectionInput {
 
 export function selectMotion(input: MotionSelectionInput): MotionPresetId {
   const { shotType, songSection, suggested, previousMotions, visualComedy, cameraIntent } = input;
-  const lastThree = previousMotions.slice(-3);
+  const lastThree = previousMotions.map(normalizeMotionPreset).slice(-3);
   const energetic =
     /chaos|action|crash|slam|punch|explode|fight|run/i.test(`${visualComedy ?? ''} ${cameraIntent ?? ''}`) ||
     songSection === 'chorus';
 
   const candidates: MotionPresetId[] = [];
 
-  if (suggested && MOTION_PRESETS.includes(suggested)) {
-    candidates.push(suggested);
+  if (suggested) {
+    candidates.push(normalizeMotionPreset(suggested));
   }
 
   if (CLOSE_UPS.includes(shotType)) {
@@ -217,7 +226,7 @@ export function selectMotion(input: MotionSelectionInput): MotionPresetId {
   }
 
   if (energetic) {
-    candidates.unshift('dramaticZoom', 'punchZoom', 'lightShake');
+    candidates.unshift('dramaticZoom', 'punchZoom', 'slowZoomIn');
   }
 
   if (songSection === 'bridge' || songSection === 'outro') {
@@ -228,7 +237,7 @@ export function selectMotion(input: MotionSelectionInput): MotionPresetId {
     candidates.unshift('slowZoomIn', 'panRight');
   }
 
-  const unique = [...new Set(candidates)].filter((m) => m !== 'heavyShake' || energetic);
+  const unique = [...new Set(candidates)];
   const available = unique.filter((m) => !isTooRepetitive(m, lastThree));
   const pool = available.length > 0 ? available : unique;
   const index = hashString(`${shotType}:${songSection}:${previousMotions.length}`) % pool.length;

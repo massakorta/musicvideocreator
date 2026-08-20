@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MOTION_PRESETS, TRANSITION_PRESETS } from '../motion.js';
+import { MOTION_PRESETS, TRANSITION_PRESETS, normalizeMotionPreset } from '../motion.js';
 import { ASSET_SOURCES, ASSET_TYPES, MEDIA_TYPES, PROJECT_STATUSES, SHOT_TYPES, SONG_SECTIONS } from '../status.js';
 import { IMAGE_QUALITY_PRESETS, normalizeImageQualityId } from '../imageQuality.js';
 import { VIDEO_PRESETS } from '../videoConfig.js';
@@ -15,6 +15,10 @@ const imageQualityField = z
   .enum(storedImageQualityIds)
   .optional()
   .transform((id) => (id === undefined ? undefined : normalizeImageQualityId(id)));
+
+const storedMotionPresets = [...MOTION_PRESETS, 'lightShake', 'heavyShake'] as const;
+
+const motionPresetField = z.enum(storedMotionPresets).transform(normalizeMotionPreset);
 
 export const hexColorSchema = z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
 
@@ -116,8 +120,8 @@ export const storyboardSceneSchema = z.object({
   visualComedy: z.string().optional(),
   imagePrompt: z.string().min(1),
   negativePrompt: z.string().optional(),
-  suggestedMotion: z.enum(MOTION_PRESETS),
-  motion: z.enum(MOTION_PRESETS),
+  suggestedMotion: motionPresetField,
+  motion: motionPresetField,
   transitionIn: z.enum(TRANSITION_PRESETS),
   transitionOut: z.enum(TRANSITION_PRESETS),
   mediaType: z.enum(MEDIA_TYPES).default('image'),

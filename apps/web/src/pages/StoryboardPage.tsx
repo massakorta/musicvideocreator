@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { MOTION_PRESET_LABELS, characterNames, environmentName, missingCharacterReferences } from '@music-video/shared';
+import { motionPresetLabel, characterNames, environmentName, missingCharacterReferences } from '@music-video/shared';
 import { useProject } from '../hooks/useProject';
 import { api, ApiClientError } from '../lib/api';
 import { AudioPlayer } from '../components/AudioPlayer';
@@ -138,7 +138,7 @@ export function StoryboardPage() {
                   <p>{scene.description}</p>
                   <p className="muted">
                     Characters: {characterNames(project, scene.characters)} · Location:{' '}
-                    {environmentName(project, scene.environmentId)} · Motion: {MOTION_PRESET_LABELS[scene.motion]}
+                    {environmentName(project, scene.environmentId)} · Motion: {motionPresetLabel(scene.motion)}
                   </p>
                 </div>
                 <div className="card-actions">

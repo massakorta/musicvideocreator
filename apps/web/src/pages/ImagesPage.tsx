@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { GENERATION_STATE_LABELS, IMAGE_GENERATION_EXPECTED_SECONDS_PER_STILL, MOTION_PRESET_LABELS, VIDEO_GENERATION_EXPECTED_SECONDS, missingCharacterReferences, sceneHasStill, sceneHasVideo } from '@music-video/shared';
+import { GENERATION_STATE_LABELS, IMAGE_GENERATION_EXPECTED_SECONDS_PER_STILL, VIDEO_GENERATION_EXPECTED_SECONDS, missingCharacterReferences, motionPresetLabel, sceneHasStill, sceneHasVideo } from '@music-video/shared';
 import { useProject } from '../hooks/useProject';
 import { api, ApiClientError } from '../lib/api';
 import { formatClockShort } from '../lib/time';
@@ -325,7 +325,7 @@ export function ImagesPage() {
                   <div className="mono faint">
                     {formatClockShort(scene.startTime)} – {formatClockShort(scene.endTime)}
                   </div>
-                  <div className="pill">{MOTION_PRESET_LABELS[scene.motion]}</div>
+                  <div className="pill">{motionPresetLabel(scene.motion)}</div>
                   <div
                     className={`pill ${
                       stale?.staleSceneIds.includes(scene.id)
