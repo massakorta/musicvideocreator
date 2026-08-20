@@ -21,20 +21,28 @@ import { aiStoryboardSceneSchema, type AiStoryboard } from './schemas.js';
 
 export const STORYBOARD_SYSTEM = `You are a professional music video director and storyboard artist.
 
-This production uses STILL images only. Camera moves (Ken Burns zoom and pan) will animate each still. You must design frozen moments, not action sequences.
+Each scene becomes one STILL image, then may get Ken Burns camera motion and/or a short animated clip from that still. Design ONE peak instant per beat — active, expressive, and readable — not a multi-step story.
 
-GOOD: "Jens frozen mid-slip on the herring, arms spread, soup flying through the air."
-BAD: "Jens walks through five rooms, picks up a bowl, cooks soup, argues with the captain and falls down."
+GOOD action: "Jens frozen mid-slip on the herring, arms windmilling, soup arcing through the air, herring skidding underfoot."
+BAD action: "Jens walks through five rooms, picks up a bowl, cooks soup, argues with the captain and falls down."
+
+Field guide:
+- description: what the viewer sees at the peak instant of this lyric beat.
+- action: the held peak pose AND what should subtly move if animated (liquid wobble, fabric sway, steam, hair drift, breathing, weight shift, gag payoff). One composition — no cuts, no new characters entering frame.
+- visualComedy: the visual gag frozen at its funniest millisecond, when the style allows.
+- cameraIntent: how the camera sells the energy of this beat (not a sequence of shots).
+- imagePrompt: extra notes for the still generator — expressions, props mid-air, lighting, texture.
 
 Requirements:
 - The TIMED BEATS are locked to the actual song. Copy each beat's startTime, endTime, songSection, and lyricsExcerpt exactly.
 - Create exactly one scene per timed beat, in the same order.
-- The still must illustrate THAT lyric or instrumental moment — not a generic mood board of the whole song.
+- The frame must illustrate THAT lyric or instrumental moment — not a generic mood board of the whole song.
 - Use lyrical structure: intros establish, verses tell, choruses repeat a recognizable visual motif but escalate, bridges shift mood, outros resolve.
 - Do not illustrate every lyric word literally. Find cinematic metaphors and, where the style allows, visual jokes.
 - Recurring characters must stay consistent. Use only character ids and environment ids from the visual bible.
 - Vary shot types. Do not stack three identical close-ups.
-- Each scene is one strong still suitable for Ken Burns motion.
+- Prefer dynamic peak frames over passive standing portraits, unless the lyric is genuinely calm.
+- Each scene must work as a strong still AND give clip animation something alive to move (faces, cloth, liquids, light, small props).
 - suggestedMotion must be one of the allowed motion presets.
 - Keep imagePrompt as additional scene-specific notes, not a full dump of the bible.`;
 
@@ -238,12 +246,12 @@ function fallbackAiScene(slot: SceneTimingSlot, index: number): AiStoryboard['sc
     songSection: slot.songSection,
     lyricsExcerpt: slot.lyricsExcerpt ?? null,
     title: slot.title,
-    description: `A frozen cinematic still for ${lyric}.`,
-    action: 'A single held pose, ready for Ken Burns motion.',
+    description: `Peak-action frame for ${lyric}.`,
+    action: 'Characters caught mid-gesture with one clear element that could subtly move (fabric, liquid, steam, or expression).',
     characterIds: [],
     environmentId: null,
     shotType: index % 2 === 0 ? 'wide' : 'medium',
-    cameraIntent: 'Hold the moment, gentle drift',
+    cameraIntent: 'Hold the peak beat with a gentle push-in',
     visualComedy: null,
     imagePrompt: `Cinematic still illustrating ${lyric}`,
     negativePrompt: null,

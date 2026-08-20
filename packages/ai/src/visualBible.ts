@@ -18,7 +18,7 @@ Rules:
 - masterPrompt must be a reusable paragraph that can prefix every later image prompt.
 - Color palette hex values must be valid CSS hex colors.
 - Character and environment ids must be kebab-case slugs.
-- This video will be made from STILL images with camera moves, not animated character acting. Design looks that read as strong frozen frames.`;
+- Scenes become stills that may later receive Ken Burns motion and optional short clip animation. Design characters and locations for peak-action frames (mid-gesture, mid-gag, mid-reaction), not only neutral standing poses.`;
 
 export async function generateVisualBible(options: {
   client: OpenAI;
