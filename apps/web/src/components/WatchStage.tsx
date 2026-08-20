@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FC } from 'react';
 import { Player, type PlayerRef } from '@remotion/player';
 import { MusicVideoComposition, type CompositionProject } from '@music-video/video';
 import { WatchControls } from './watch/WatchControls';
+import { useMobileFullscreenControls } from './watch/useMobileFullscreenControls';
 import { useWatchFullscreen } from './watch/useWatchFullscreen';
 import { currentLyricLine, type PublicWatchLyrics } from './watch/types';
 
@@ -38,6 +39,8 @@ export function WatchStage(props: WatchStageProps) {
   const [currentSeconds, setCurrentSeconds] = useState(0);
   const currentSecondsRef = useRef(0);
   const { fullscreen, immersive, toggleFullscreen } = useWatchFullscreen(stageRef);
+  const { mobileFullscreen, controlsVisible, showControls, scheduleHideControls } =
+    useMobileFullscreenControls(fullscreen, playing);
 
   const setTime = useCallback(
     (seconds: number) => {
@@ -66,32 +69,54 @@ export function WatchStage(props: WatchStageProps) {
     [durationSeconds, props, setTime],
   );
 
-  const togglePlay = useCallback(() => {
+  const pause = useCallback(() => {
     if (props.mode === 'video') {
-      const video = videoRef.current;
-      if (!video) return;
-      if (video.paused) {
-        void video.play();
-      } else {
-        video.pause();
-      }
+      videoRef.current?.pause();
       return;
     }
 
     if (props.audioUrl && audioRef.current) {
-      if (audioRef.current.paused) {
-        void audioRef.current.play();
-      } else {
-        audioRef.current.pause();
+      audioRef.current.pause();
+      return;
+    }
+
+    playerRef.current?.pause();
+  }, [props]);
+
+  const play = useCallback(() => {
+    if (props.mode === 'video') {
+      const video = videoRef.current;
+      if (video) void video.play();
+      return;
+    }
+
+    if (props.audioUrl && audioRef.current) {
+      void audioRef.current.play();
+      return;
+    }
+
+    playerRef.current?.play();
+  }, [props]);
+
+  const togglePlay = useCallback(() => {
+    if (playing) {
+      pause();
+    } else {
+      play();
+    }
+  }, [pause, play, playing]);
+
+  const handleFrameClick = useCallback(() => {
+    if (mobileFullscreen) {
+      if (playing) {
+        pause();
+        showControls();
       }
       return;
     }
 
-    const instance = playerRef.current;
-    if (!instance) return;
-    if (instance.isPlaying()) instance.pause();
-    else instance.play();
-  }, [props]);
+    togglePlay();
+  }, [mobileFullscreen, pause, playing, showControls, togglePlay]);
 
   useEffect(() => {
     onFullscreenChange?.(fullscreen);
@@ -233,7 +258,7 @@ export function WatchStage(props: WatchStageProps) {
     >
       <div
         className="watch-frame"
-        onClick={togglePlay}
+        onClick={handleFrameClick}
         onDoubleClick={() => {
           void toggleFullscreen();
         }}
@@ -282,11 +307,22 @@ export function WatchStage(props: WatchStageProps) {
             currentSeconds={currentSeconds}
             durationSeconds={durationSeconds}
             fullscreen={fullscreen}
+            hidden={mobileFullscreen && !controlsVisible}
             overlay
-            onTogglePlay={togglePlay}
-            onSeek={seekTo}
+            onTogglePlay={() => {
+              togglePlay();
+              showControls();
+            }}
+            onSeek={(seconds) => {
+              seekTo(seconds);
+              showControls();
+              if (playing) {
+                scheduleHideControls();
+              }
+            }}
             onToggleFullscreen={() => {
               void toggleFullscreen();
+              showControls();
             }}
           />
         ) : null}

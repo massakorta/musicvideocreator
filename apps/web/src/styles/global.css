@@ -1076,6 +1076,14 @@ h3 {
   z-index: 4;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: auto auto auto;
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 0.25s ease;
+}
+
+.watch-controls--overlay.watch-controls--hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .watch-controls--overlay .watch-control-btn:first-of-type {

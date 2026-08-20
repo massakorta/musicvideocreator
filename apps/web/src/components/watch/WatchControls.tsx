@@ -5,6 +5,7 @@ export function WatchControls({
   currentSeconds,
   durationSeconds,
   fullscreen,
+  hidden,
   overlay,
   onTogglePlay,
   onSeek,
@@ -14,6 +15,7 @@ export function WatchControls({
   currentSeconds: number;
   durationSeconds: number;
   fullscreen: boolean;
+  hidden?: boolean;
   overlay?: boolean;
   onTogglePlay: () => void;
   onSeek: (seconds: number) => void;
@@ -23,7 +25,7 @@ export function WatchControls({
 
   return (
     <div
-      className={`watch-controls${overlay ? ' watch-controls--overlay' : ''}`}
+      className={`watch-controls${overlay ? ' watch-controls--overlay' : ''}${hidden ? ' watch-controls--hidden' : ''}`}
       role="group"
       aria-label="Video controls"
       onClick={(event) => event.stopPropagation()}
