@@ -9,7 +9,7 @@ import {
   rewriteSceneTextLocallyForSafety,
   type SafeSceneCopyTarget,
 } from '@music-video/ai';
-import { AppError, ERROR_CODES, FIXED_IMAGE_QUALITY_ID, getImageQuality, visualBibleSchema, type AiUsageLog, type ImageQualityId, type VisualBible } from '@music-video/shared';
+import { AppError, ERROR_CODES, FIXED_IMAGE_QUALITY_ID, getImageQuality, softenSceneTextForSafety, visualBibleSchema, type AiUsageLog, type ImageQualityId, type VisualBible } from '@music-video/shared';
 import { config, falConfigured, openaiConfigured } from '../config.js';
 import { getRepositories } from '../repositories/index.js';
 import { demoStoryboard, demoVisualBible } from './demo.js';
@@ -170,10 +170,10 @@ export async function generateSafeSceneCopy(
     });
     await finishLog(log, 'success', usage);
     return {
-      description: text.description,
-      action: text.action,
-      imagePrompt: text.imagePrompt,
-      visualComedy: text.visualComedy ?? undefined,
+      description: softenSceneTextForSafety(text.description),
+      action: softenSceneTextForSafety(text.action),
+      imagePrompt: softenSceneTextForSafety(text.imagePrompt),
+      visualComedy: text.visualComedy ? softenSceneTextForSafety(text.visualComedy) : undefined,
       demo: false,
     };
   } catch (error) {

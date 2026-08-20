@@ -21,6 +21,7 @@ import {
   buildMinimalSafeSceneImagePrompt,
   buildSceneImagePrompt,
   buildUltraMinimalSafeSceneImagePrompt,
+  buildBareSafeSceneImagePrompt,
 } from './promptBuilder.js';
 
 export interface SceneImageGenerationRequest {
@@ -99,7 +100,8 @@ export class FalImageProvider implements ImageGenerationProvider {
     const { prompt, negativePrompt } = buildSceneImagePrompt(promptInput);
     const minimalPrompt = buildMinimalSafeSceneImagePrompt(promptInput);
     const ultraMinimalPrompt = buildUltraMinimalSafeSceneImagePrompt(promptInput);
-    return this.generateWithSafetyRetries(prompt, negativePrompt, minimalPrompt, ultraMinimalPrompt);
+    const barePrompt = buildBareSafeSceneImagePrompt(request.style);
+    return this.generateWithSafetyRetries(prompt, negativePrompt, minimalPrompt, ultraMinimalPrompt, barePrompt);
   }
 
   async generateCharacterReference(request: CharacterReferenceRequest): Promise<GeneratedImageBytes> {
@@ -113,6 +115,7 @@ export class FalImageProvider implements ImageGenerationProvider {
     negativePrompt: string,
     minimalPrompt?: string,
     ultraMinimalPrompt?: string,
+    barePrompt?: string,
   ): Promise<GeneratedImageBytes> {
     const fullPrompt = `${prompt}\nAvoid: ${negativePrompt}`.slice(0, 8000);
     const saferPrompt = sanitizeImagePromptForSafety(fullPrompt);
@@ -122,7 +125,10 @@ export class FalImageProvider implements ImageGenerationProvider {
     const ultraMinimalFullPrompt = ultraMinimalPrompt
       ? sanitizeImagePromptForSafety(`${ultraMinimalPrompt}\nAvoid: ${negativePrompt}`.slice(0, 8000))
       : undefined;
-    const candidates = [fullPrompt, saferPrompt, minimalFullPrompt, ultraMinimalFullPrompt].filter(
+    const bareFullPrompt = barePrompt
+      ? sanitizeImagePromptForSafety(`${barePrompt}\nAvoid: ${negativePrompt}`.slice(0, 8000))
+      : undefined;
+    const candidates = [fullPrompt, saferPrompt, minimalFullPrompt, ultraMinimalFullPrompt, bareFullPrompt].filter(
       (candidate, index, list): candidate is string =>
         Boolean(candidate) && list.indexOf(candidate) === index,
     );

@@ -209,21 +209,31 @@ export function buildMinimalSafeSceneImagePrompt(input: SceneImagePromptInput): 
     .slice(0, 1500);
 }
 
-/** Ultra-minimal prompt when fal still rejects — drops body-contact and heat-injury detail. */
+/** Ultra-minimal prompt when fal still rejects — no scene title or body-harm detail. */
 export function buildUltraMinimalSafeSceneImagePrompt(input: SceneImagePromptInput): string {
   const { style } = input;
-  const scene = softenSceneFields(input.scene);
   return [
     `${style.name} family-friendly cartoon illustration.`,
-    `Slapstick comedy kitchen moment inspired by: ${scene.title}.`,
-    'Two adult cartoon characters with exaggerated surprised expressions.',
-    'Splashing cartoon soup gag. Fully clothed. Thick ink outlines. Bright colors.',
-    'No text, logos, realistic injury, or body-focused framing.',
+    'Two adult cartoon characters in an exaggerated slapstick comedy moment.',
+    'Bright colors, thick ink outlines, fully clothed, playful expressions.',
+    'No text, logos, realistic injury, dental detail, or body-focused close-ups.',
   ]
     .join(' ')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 800);
+}
+
+/** Last-resort generic still with no scene-specific wording. */
+export function buildBareSafeSceneImagePrompt(style: VisualStylePreset): string {
+  return [
+    `${style.name} family-friendly cartoon illustration.`,
+    'Cheerful adult cartoon characters in a slapstick comedy scene.',
+    'Hand-painted 2D cartoon, thick outlines, saturated colors, fully clothed.',
+    'No text, logos, injury, or close-up body detail.',
+  ]
+    .join(' ')
+    .slice(0, 500);
 }
 
 function softenSceneFields<T extends Pick<

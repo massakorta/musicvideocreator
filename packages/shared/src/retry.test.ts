@@ -68,6 +68,7 @@ describe('findRiskyPromptTerms', () => {
 
   it('ignores safety allow phrases such as no children', () => {
     expect(findRiskyPromptTerms('No children. Adult characters only.')).toEqual([]);
+    expect(findRiskyPromptTerms('Family-friendly kid-friendly cartoon.')).toEqual([]);
   });
 });
 
@@ -100,6 +101,13 @@ describe('softenSceneTextForSafety', () => {
     const result = softenSceneTextForSafety('No children in frame. Keep kid proportions cartoonish.');
     expect(result).toContain('adult-only cast');
     expect(result).not.toMatch(/\bkid\b/i);
+  });
+
+  it('softens kid-friendly bible wording and teeth-breaking gags', () => {
+    expect(softenSceneTextForSafety('kid-friendly child-safe')).toBe('family-friendly family-safe');
+    const teeth = softenSceneTextForSafety("Breaking Sailors' Teeth, cartoon teeth bending mid-bite");
+    expect(teeth).not.toMatch(/\bteeth\b/i);
+    expect(teeth).not.toMatch(/\bbreaking\b/i);
   });
 });
 

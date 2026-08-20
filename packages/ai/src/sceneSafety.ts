@@ -22,6 +22,8 @@ Keep the same characters, lyric beat, and visual gag. Change only wording that t
 Guidelines:
 - smoking, smoldering, charred, burnt, or blackened food or hair → cartoon steam, tousled hair, or overcooked silly cartoon food
 - sizzling, scalding, hot liquid on skin or toes → splashing cartoon soup, surprised reaction, no injury detail
+- breaking teeth, bending teeth, or dental distress → tough-food slapstick, wide cartoon grins, no dental injury
+- kid-friendly or child-safe phrasing → family-friendly
 - blood, weapons, death, or realistic violence → slapstick cartoon equivalents
 - minors or young children → clearly adult characters only
 - suggestive or NSFW wording → neutral, fully clothed, slapstick tone

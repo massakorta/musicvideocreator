@@ -106,7 +106,17 @@ export function providerRetryDelayMs(attempt: number, random: () => number = Mat
 export function softenSceneTextForSafety(text: string): string {
   return text
     .replace(/\bno (?:children|child|kids|kid|minors|minor)\b/gi, 'adult-only cast')
-    .replace(/\b(children|child|kids|kid|toddlers|toddler|infants|infant|babies|baby|teenagers|teenager|teens|teen|minors|minor|underage)\b/gi, 'adult')
+    .replace(/\bkid-friendly\b/gi, 'family-friendly')
+    .replace(/\bchild-safe\b/gi, 'family-safe')
+    .replace(/\bchildlike\b/gi, 'playful')
+    .replace(/\b(breaking|broken|cracked|cracking)\s+(?:[\w']+\s+){0,2}teeth\b/gi, 'tough-bun comedy gag')
+    .replace(/\b(?:cartoon )?teeth\s+(?:comically\s+)?(?:stretch(?:ing)?|bend(?:ing)?|flex(?:ing)?|wobble|wobbling)\b/gi, 'cartoon mouths stretch wide')
+    .replace(/\b(?:stretch(?:ing)?|bend(?:ing)?|flex(?:ing)?|wobble|wobbling)\s+(?:cartoon )?teeth\b/gi, 'exaggerated cartoon grins')
+    .replace(/\b(?:mid-)?bite\b/gi, 'mid-nibble')
+    .replace(/\bteeth\b/gi, 'cartoon mouths')
+    .replace(/\b(children|child|kids|kid|toddlers|toddler|infants|infant|babies|baby|teenagers|teenager|teens|underage)\b/gi, 'adult')
+    .replace(/\b(?:minors|minor)\b/gi, 'adults')
+    .replace(/\bteen\b/gi, 'adult')
     .replace(/\byoung (?:boy|girl|child|man|woman)\b/gi, 'adult')
     .replace(/\bblood(y)?\b/gi, 'cartoon paint splatter')
     .replace(/\b(guns?|rifle|pistol|knives|knife|weapons?|sword)\b/gi, 'cartoon prop')
@@ -127,13 +137,18 @@ export function softenSceneTextForSafety(text: string): string {
 function stripSafetyAllowPhrases(text: string): string {
   return text
     .replace(/\bno (?:children|child|kids|kid|minors|minor)\b/gi, '')
-    .replace(/\badult(?:-only cast| characters only| character)\b/gi, '')
-    .replace(/\bclearly adult\b/gi, '');
+    .replace(/\badult(?:-only cast| characters only| character|s)\b/gi, '')
+    .replace(/\bclearly adult\b/gi, '')
+    .replace(/\bfamily-friendly\b/gi, '')
+    .replace(/\bfamily-safe\b/gi, '')
+    .replace(/\bkid-friendly\b/gi, '')
+    .replace(/\bchild-safe\b/gi, '');
 }
 
 const RISKY_PROMPT_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
   { label: 'smoking/smoke/charred', pattern: /\b(smoking|smoke|smoldering|charred|burnt|burned|brända|bränskrot|scorched|sizzle|sizzling)\b/i },
-  { label: 'child/minor terms', pattern: /\b(children|child|kids|kid|teen|minor|underage|young boy|young girl)\b/i },
+  { label: 'child/minor terms', pattern: /\b(children|child|kids|kid|teenagers?|teens|minors|underage|young boy|young girl|kid-friendly|child-safe)\b/i },
+  { label: 'dental/body harm', pattern: /\b(breaking|broken|cracked|cracking)\s+\w*'?s?\s*teeth\b|\bteeth\s+(?:stretch|bend|flex|wobble)/i },
   { label: 'violence/weapons', pattern: /\b(blood|gun|knife|weapon|kill|murder|death|corpse)\b/i },
   { label: 'suggestive content', pattern: /\b(nude|naked|nsfw|sexy|seductive|erotic|shirtless)\b/i },
   { label: 'alcohol/intoxication', pattern: /\b(drunk|intoxicated|beer|wine|vodka|whiskey|liquor|alcohol)\b/i },

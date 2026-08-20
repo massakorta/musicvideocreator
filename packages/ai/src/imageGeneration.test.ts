@@ -142,6 +142,9 @@ describe('FalImageProvider', () => {
       .mockRejectedValueOnce(
         new Error('The content could not be processed because it contained material flagged by a content checker.'),
       )
+      .mockRejectedValueOnce(
+        new Error('The content could not be processed because it contained material flagged by a content checker.'),
+      )
       .mockResolvedValueOnce({ data: { images: [{ url: 'https://example.com/min.jpg' }] } });
 
     const scene = {
@@ -173,9 +176,46 @@ describe('FalImageProvider', () => {
 
     const image = await provider().generateSceneImage({ scene, bible, style });
     expect(image.bytes.toString()).toBe('minimal');
-    expect(subscribe).toHaveBeenCalledTimes(4);
-    const fourthPrompt = subscribe.mock.calls[3]?.[1]?.input?.prompt as string;
-    expect(fourthPrompt).toContain('family-friendly cartoon illustration');
+    expect(subscribe).toHaveBeenCalledTimes(5);
+    const fifthPrompt = subscribe.mock.calls[4]?.[1]?.input?.prompt as string;
+    expect(fifthPrompt).toContain('Cheerful adult cartoon characters');
+  });
+
+  it('softens teeth-breaking scenes before sending to fal', async () => {
+    mockFetchImage(Buffer.from('teeth'));
+    subscribe.mockResolvedValueOnce({ data: { images: [{ url: 'https://example.com/teeth.jpg' }] } });
+
+    const scene = {
+      id: 's3',
+      order: 3,
+      startTime: 6,
+      endTime: 9,
+      duration: 3,
+      songSection: 'verse' as const,
+      title: "Breaking Sailors' Teeth",
+      description: "The crew tries to eat Jens' extra-tough cartoon buns, but their teeth comically stretch and wobble.",
+      action: 'Crew members are mid-bite, with cartoon teeth bending and flexing.',
+      characters: ['jens'],
+      shotType: 'medium' as const,
+      cameraIntent: 'comedy close-up',
+      visualComedy: 'Teeth stretch like rubber.',
+      imagePrompt: 'breaking teeth, tough buns',
+      suggestedMotion: 'slowZoomIn' as const,
+      motion: 'slowZoomIn' as const,
+      transitionIn: 'cut' as const,
+      transitionOut: 'cut' as const,
+      mediaType: 'image' as const,
+      previousAssetIds: [],
+      previousVideoAssetIds: [],
+      generationState: 'pending' as const,
+      videoGenerationState: 'pending' as const,
+      approved: false,
+    };
+
+    await provider().generateSceneImage({ scene, bible, style });
+    const firstPrompt = subscribe.mock.calls[0]?.[1]?.input?.prompt as string;
+    expect(firstPrompt).not.toMatch(/\bteeth\b/i);
+    expect(firstPrompt).not.toMatch(/\bbreaking\b/i);
   });
 
   it('softens soup-on-toes scenes before sending to fal', async () => {
