@@ -1,4 +1,14 @@
-import { createOpenAiClient, FalImageProvider, FalVideoProvider, generateStoryboard, generateVisualBible, isOpenAiConfigured } from '@music-video/ai';
+import {
+  createOpenAiClient,
+  FalImageProvider,
+  FalVideoProvider,
+  generateStoryboard,
+  generateVisualBible,
+  isOpenAiConfigured,
+  rewriteSceneForImageSafety,
+  rewriteSceneTextLocallyForSafety,
+  type SafeSceneCopyTarget,
+} from '@music-video/ai';
 import { AppError, ERROR_CODES, FIXED_IMAGE_QUALITY_ID, getImageQuality, visualBibleSchema, type AiUsageLog, type ImageQualityId, type VisualBible } from '@music-video/shared';
 import { config, falConfigured, openaiConfigured } from '../config.js';
 import { getRepositories } from '../repositories/index.js';
@@ -120,6 +130,55 @@ export async function generateProjectStoryboard(projectId: string) {
   } catch (error) {
     await finishLog(log, 'error', undefined, error);
     throw wrapAiError(error, 'The storyboard could not be generated.');
+  }
+}
+
+export async function generateSafeSceneCopy(
+  projectId: string,
+  sceneId: string,
+  target: SafeSceneCopyTarget,
+): Promise<{ description: string; action: string; imagePrompt: string; visualComedy?: string; demo: boolean }> {
+  const project = await getProjectOrThrow(projectId);
+  const scene = project.scenes.find((entry) => entry.id === sceneId);
+  if (!scene) {
+    throw new AppError(ERROR_CODES.NOT_FOUND, 'Scene not found.', 404);
+  }
+  const style = styleOrThrow(project.styleId);
+  const log = startLog('scene_safe_copy', projectId, config.openaiTextModel);
+  try {
+    if (requireOpenAiOrDemo() === 'demo') {
+      const text = rewriteSceneTextLocallyForSafety(scene, target);
+      await finishLog(log, 'success');
+      return {
+        description: text.description,
+        action: text.action,
+        imagePrompt: text.imagePrompt,
+        visualComedy: text.visualComedy ?? undefined,
+        demo: true,
+      };
+    }
+    const client = createOpenAiClient({
+      apiKey: config.openaiApiKey,
+      textModel: config.openaiTextModel,
+    });
+    const { text, usage } = await rewriteSceneForImageSafety({
+      client,
+      model: config.openaiTextModel,
+      scene,
+      target,
+      styleName: style.name,
+    });
+    await finishLog(log, 'success', usage);
+    return {
+      description: text.description,
+      action: text.action,
+      imagePrompt: text.imagePrompt,
+      visualComedy: text.visualComedy ?? undefined,
+      demo: false,
+    };
+  } catch (error) {
+    await finishLog(log, 'error', undefined, error);
+    throw wrapAiError(error, 'Could not rewrite this scene for safer image generation.');
   }
 }
 

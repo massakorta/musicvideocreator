@@ -144,6 +144,21 @@ export const api = {
       `/api/projects/${id}/scenes/${sceneId}`,
       { method: 'PATCH', body: JSON.stringify(body) },
     ),
+  generateSafeSceneCopy: (
+    id: string,
+    sceneId: string,
+    target: 'description' | 'imagePrompt' | 'all',
+  ) =>
+    request<{
+      description: string;
+      action: string;
+      imagePrompt: string;
+      visualComedy?: string;
+      demo: boolean;
+    }>(`/api/projects/${id}/scenes/${sceneId}/safe-copy`, {
+      method: 'POST',
+      body: JSON.stringify({ target }),
+    }),
   addScene: (id: string, afterSceneId?: string) =>
     request<{ project: import('@music-video/shared').MusicVideoProject }>(`/api/projects/${id}/scenes`, {
       method: 'POST',

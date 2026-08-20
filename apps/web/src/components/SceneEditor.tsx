@@ -8,37 +8,55 @@ import {
   type StoryboardScene,
 } from '@music-video/shared';
 import { useProject } from '../hooks/useProject';
-import { api } from '../lib/api';
+import { api, ApiClientError } from '../lib/api';
+
+type SafeCopyTarget = 'description' | 'imagePrompt' | 'all';
 
 function SceneEditorForm({
   scene,
   draft,
   setDraft,
   busy,
+  safeCopyTarget,
   error,
   onClose,
   onSave,
   onRegenerate,
   onUpload,
   onDelete,
+  onMakeSafer,
 }: {
   scene: StoryboardScene;
   draft: StoryboardScene;
   setDraft: (next: StoryboardScene) => void;
   busy: boolean;
+  safeCopyTarget: SafeCopyTarget | null;
   error: string | null;
   onClose: () => void;
   onSave: () => void;
   onRegenerate: () => void;
   onUpload: (file: File) => void;
   onDelete: () => void;
+  onMakeSafer: (target: SafeCopyTarget) => void;
 }) {
+  const safeCopyBusy = safeCopyTarget !== null;
+
   return (
     <>
       <div className="sheet-head">
         <h3>Scene {scene.order}</h3>
         <button type="button" className="btn btn-ghost" onClick={onClose}>
           Close
+        </button>
+      </div>
+      <div className="actions" style={{ marginBottom: 12 }}>
+        <button
+          type="button"
+          className="btn"
+          disabled={busy || safeCopyBusy}
+          onClick={() => onMakeSafer('all')}
+        >
+          {safeCopyTarget === 'all' ? 'Making safer…' : 'Make all safer for images'}
         </button>
       </div>
       <div className="field">
@@ -72,7 +90,18 @@ function SceneEditorForm({
         />
       </div>
       <div className="field">
-        <label>Scene description</label>
+        <div className="field-head">
+          <label>Scene description</label>
+          <button
+            type="button"
+            className="btn btn-ghost field-action"
+            disabled={busy || safeCopyBusy}
+            onClick={() => onMakeSafer('description')}
+          >
+            {safeCopyTarget === 'description' ? 'Making safer…' : 'Make safer'}
+          </button>
+        </div>
+        <p className="muted field-hint">Also rewrites action and visual gag used when building the image prompt.</p>
         <textarea
           style={{ minHeight: 90 }}
           value={draft.description}
@@ -80,7 +109,17 @@ function SceneEditorForm({
         />
       </div>
       <div className="field">
-        <label>Image prompt</label>
+        <div className="field-head">
+          <label>Image prompt</label>
+          <button
+            type="button"
+            className="btn btn-ghost field-action"
+            disabled={busy || safeCopyBusy}
+            onClick={() => onMakeSafer('imagePrompt')}
+          >
+            {safeCopyTarget === 'imagePrompt' ? 'Making safer…' : 'Make safer'}
+          </button>
+        </div>
         <textarea
           style={{ minHeight: 90 }}
           value={draft.imagePrompt}
@@ -125,11 +164,11 @@ function SceneEditorForm({
       </div>
       {error ? <div className="banner error">{error}</div> : null}
       <div className="actions">
-        <button type="button" className="btn btn-primary" disabled={busy} onClick={onSave}>
+        <button type="button" className="btn btn-primary" disabled={busy || safeCopyBusy} onClick={onSave}>
           {busy ? 'Saving…' : 'Save'}
         </button>
         <div className="actions-split">
-          <button type="button" className="btn" disabled={busy} onClick={onRegenerate}>
+          <button type="button" className="btn" disabled={busy || safeCopyBusy} onClick={onRegenerate}>
             Regenerate Image
           </button>
           <label className="btn">
@@ -138,6 +177,7 @@ function SceneEditorForm({
               type="file"
               accept="image/*"
               hidden
+              disabled={busy || safeCopyBusy}
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) onUpload(file);
@@ -145,7 +185,7 @@ function SceneEditorForm({
             />
           </label>
         </div>
-        <button type="button" className="btn btn-danger" disabled={busy} onClick={onDelete}>
+        <button type="button" className="btn btn-danger" disabled={busy || safeCopyBusy} onClick={onDelete}>
           Delete Scene
         </button>
       </div>
@@ -165,6 +205,7 @@ export function SceneEditor({
   const { project } = useProject();
   const [draft, setDraft] = useState(scene);
   const [busy, setBusy] = useState(false);
+  const [safeCopyTarget, setSafeCopyTarget] = useState<SafeCopyTarget | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -177,7 +218,7 @@ export function SceneEditor({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !busy) onClose();
+      if (event.key === 'Escape' && !busy && !safeCopyTarget) onClose();
     };
     window.addEventListener('keydown', onKey);
     const mobile = window.matchMedia('(max-width: 1079px)');
@@ -186,7 +227,7 @@ export function SceneEditor({
       window.removeEventListener('keydown', onKey);
       document.body.style.overflow = '';
     };
-  }, [busy, onClose]);
+  }, [busy, onClose, safeCopyTarget]);
 
   async function save() {
     setBusy(true);
@@ -198,6 +239,8 @@ export function SceneEditor({
         endTime: Number(draft.endTime),
         lyricsExcerpt: draft.lyricsExcerpt,
         description: draft.description,
+        action: draft.action,
+        visualComedy: draft.visualComedy,
         imagePrompt: draft.imagePrompt,
         motion: draft.motion,
         transitionIn: draft.transitionIn,
@@ -210,6 +253,25 @@ export function SceneEditor({
       setError(err instanceof Error ? err.message : 'Could not save this scene.');
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function makeSafer(target: SafeCopyTarget) {
+    setSafeCopyTarget(target);
+    setError(null);
+    try {
+      const result = await api.generateSafeSceneCopy(project.id, scene.id, target);
+      setDraft((current) => ({
+        ...current,
+        description: result.description,
+        action: result.action,
+        imagePrompt: result.imagePrompt,
+        visualComedy: result.visualComedy ?? current.visualComedy,
+      }));
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : 'Could not rewrite this scene for safer image generation.');
+    } finally {
+      setSafeCopyTarget(null);
     }
   }
 
@@ -242,16 +304,18 @@ export function SceneEditor({
     draft,
     setDraft,
     busy,
+    safeCopyTarget,
     error,
     onClose,
     onSave: () => void save(),
     onRegenerate: () => void regenerate(),
     onUpload: (file: File) => void upload(file),
     onDelete: () => void remove(),
+    onMakeSafer: (target: SafeCopyTarget) => void makeSafer(target),
   };
 
   return (
-    <div className="sheet-backdrop sheet-backdrop-modal" onClick={() => (!busy ? onClose() : undefined)}>
+    <div className="sheet-backdrop sheet-backdrop-modal" onClick={() => (!busy && !safeCopyTarget ? onClose() : undefined)}>
       <aside
         className="sheet side-panel"
         role="dialog"

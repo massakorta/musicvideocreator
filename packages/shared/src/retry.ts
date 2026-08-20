@@ -103,8 +103,8 @@ export function providerRetryDelayMs(attempt: number, random: () => number = Mat
   return base + Math.floor(random() * 400);
 }
 
-export function sanitizeImagePromptForSafety(prompt: string): string {
-  const cleaned = prompt
+export function softenSceneTextForSafety(text: string): string {
+  return text
     .replace(/\b(children|child|kids|kid|toddlers|toddler|infants|infant|babies|baby|teenagers|teenager|teens|teen|minors|minor|underage)\b/gi, 'adult')
     .replace(/\byoung (?:boy|girl|child|man|woman)\b/gi, 'adult')
     .replace(/\bblood(y)?\b/gi, 'cartoon paint splatter')
@@ -113,6 +113,10 @@ export function sanitizeImagePromptForSafety(prompt: string): string {
     .replace(/\b(nude|naked|nsfw|sexy|seductive|erotic)\b/gi, 'fully clothed')
     .replace(/\b(smoking|smoke|smoldering|charred|burnt|burned|brända|bränskrot)\b/gi, 'cartoon steam')
     .replace(/\b(black lump|crispy black|carbonized)\b/gi, 'overcooked cartoon food');
+}
+
+export function sanitizeImagePromptForSafety(prompt: string): string {
+  const cleaned = softenSceneTextForSafety(prompt);
   const suffix =
     'Family-friendly illustrated cartoon. Every person shown is a clearly adult character. No minors, no suggestive content, no realistic violence, no text, letters, captions, labels, or logos.';
   const extra = 'Safe illustrated character design only. Neutral pose, fully clothed, slapstick comedy tone, no celebrity likeness.';

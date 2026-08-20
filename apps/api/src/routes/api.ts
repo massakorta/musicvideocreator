@@ -7,6 +7,7 @@ import {
   patchSceneBodySchema,
   patchVisualBibleBodySchema,
   reorderScenesBodySchema,
+  safeSceneCopyBodySchema,
   sunoImportBodySchema,
   validateSceneTiming,
   VISUAL_STYLE_PRESETS,
@@ -14,7 +15,7 @@ import {
 import { asyncHandler, param } from '../middleware/errorHandler.js';
 import { readAudioDuration, sanitizeFilename, validateAudioUpload } from '../services/audio.js';
 import { importSunoTrack } from '../services/suno.js';
-import { generateProjectStoryboard, generateProjectVisualBible, patchVisualBible } from '../services/aiService.js';
+import { generateProjectStoryboard, generateProjectVisualBible, generateSafeSceneCopy, patchVisualBible } from '../services/aiService.js';
 import {
   approveCharacterReference,
   generateCharacterReference,
@@ -281,6 +282,16 @@ apiRouter.patch(
     const patch = patchSceneBodySchema.parse(req.body);
     const project = await updateScene(param(req, 'id'), param(req, 'sceneId'), patch);
     res.json({ project, health: computeProjectHealth(project) });
+  }),
+);
+
+apiRouter.post(
+  '/projects/:id/scenes/:sceneId/safe-copy',
+  asyncHandler(async (req, res) => {
+    await assertPipelineNotLocked(param(req, 'id'));
+    const { target } = safeSceneCopyBodySchema.parse(req.body ?? {});
+    const result = await generateSafeSceneCopy(param(req, 'id'), param(req, 'sceneId'), target);
+    res.json(result);
   }),
 );
 

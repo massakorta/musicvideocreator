@@ -239,6 +239,10 @@ export const reorderScenesBodySchema = z.object({
   sceneIds: z.array(z.string()).min(1),
 });
 
+export const safeSceneCopyBodySchema = z.object({
+  target: z.enum(['description', 'imagePrompt', 'all']),
+});
+
 export const clientDurationBodySchema = z.object({
   durationSeconds: z.number().positive(),
 });

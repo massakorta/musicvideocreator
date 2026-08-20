@@ -8,6 +8,7 @@ import {
   pipelineRequeueCount,
   providerRetryDelayMs,
   sanitizeImagePromptForSafety,
+  softenSceneTextForSafety,
   shouldRequeuePipeline,
   withRetries,
 } from './retry.js';
@@ -45,6 +46,14 @@ describe('isContentPolicyError', () => {
       ),
     ).toBe(true);
     expect(isContentPolicyError(new Error('timeout'))).toBe(false);
+  });
+});
+
+describe('softenSceneTextForSafety', () => {
+  it('rewrites risky terms without adding prompt suffixes', () => {
+    const result = softenSceneTextForSafety('hair smoking over burnt bränskrot');
+    expect(result).toContain('cartoon steam');
+    expect(result).not.toContain('Family-friendly illustrated cartoon');
   });
 });
 
