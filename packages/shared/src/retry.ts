@@ -62,7 +62,9 @@ function safeStringify(value: unknown): string {
 }
 
 export function isContentPolicyError(error: unknown): boolean {
-  return /content.?policy|safety|moderation|refus(?:ed|al)/i.test(errorText(error));
+  return /content.?policy|content checker|flagged by|safety checker|unsafe|nsfw|could not be processed because|safety|moderation|refus(?:ed|al)/i.test(
+    errorText(error),
+  );
 }
 
 /** fal billing lock (TOP_UP) clears after the account is topped up — retry, do not treat as permanent. */
@@ -104,14 +106,18 @@ export function providerRetryDelayMs(attempt: number, random: () => number = Mat
 export function sanitizeImagePromptForSafety(prompt: string): string {
   const cleaned = prompt
     .replace(/\b(children|child|kids|kid|toddlers|toddler|infants|infant|babies|baby|teenagers|teenager|teens|teen|minors|minor|underage)\b/gi, 'adult')
-    .replace(/\byoung (?:boy|girl|child|man|woman)\b/gi, 'adult');
+    .replace(/\byoung (?:boy|girl|child|man|woman)\b/gi, 'adult')
+    .replace(/\bblood(y)?\b/gi, 'cartoon paint splatter')
+    .replace(/\b(guns?|rifle|pistol|knives|knife|weapons?|sword)\b/gi, 'cartoon prop')
+    .replace(/\b(kill(?:ed|ing)?|murder(?:ed|ing)?|death|dying|corpse|dead body)\b/gi, 'comedy tumble')
+    .replace(/\b(nude|naked|nsfw|sexy|seductive|erotic)\b/gi, 'fully clothed');
   const suffix =
-    'Family-friendly illustrated cartoon. Every person shown is a clearly adult character. No minors, no suggestive content, no text, letters, captions, labels, or logos.';
-  const extra = 'Safe illustrated character design only. Neutral pose, fully clothed, no celebrity likeness.';
+    'Family-friendly illustrated cartoon. Every person shown is a clearly adult character. No minors, no suggestive content, no realistic violence, no text, letters, captions, labels, or logos.';
+  const extra = 'Safe illustrated character design only. Neutral pose, fully clothed, slapstick comedy tone, no celebrity likeness.';
   let next = cleaned.includes(suffix) ? cleaned : `${cleaned}\n${suffix}`;
   if (!next.includes(extra)) next = `${next}\n${extra}`;
   if (next === prompt) {
-    next = `${prompt}\nSimplified family-friendly illustration, one adult character, plain background.`;
+    next = `${prompt}\nSimplified family-friendly cartoon illustration, slapstick comedy, plain background.`;
   }
   return next;
 }

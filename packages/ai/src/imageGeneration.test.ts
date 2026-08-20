@@ -102,6 +102,19 @@ describe('FalImageProvider', () => {
     expect(subscribe).toHaveBeenCalledTimes(2);
   });
 
+  it('retries a fal content-checker refusal with a safer prompt', async () => {
+    mockFetchImage(Buffer.from('safe'));
+    subscribe
+      .mockRejectedValueOnce(
+        new Error('The content could not be processed because it contained material flagged by a content checker.'),
+      )
+      .mockResolvedValueOnce({ data: { images: [{ url: 'https://example.com/c.jpg' }] } });
+
+    const image = await provider().generateCharacterReference({ character, bible, style });
+    expect(image.bytes.toString()).toBe('safe');
+    expect(subscribe).toHaveBeenCalledTimes(2);
+  });
+
   it('retries a content-policy refusal with a safer prompt', async () => {
     mockFetchImage(Buffer.from('safe'));
     subscribe

@@ -37,6 +37,13 @@ describe('isContentPolicyError', () => {
   it('detects safety refusals', () => {
     expect(isContentPolicyError(new Error('OpenAI refused this prompt. Edit the scene prompt and retry.'))).toBe(true);
     expect(isContentPolicyError({ error: { code: 'content_policy_violation', message: 'safety' } })).toBe(true);
+    expect(
+      isContentPolicyError(
+        new Error(
+          'The content could not be processed because it contained material flagged by a content checker.',
+        ),
+      ),
+    ).toBe(true);
     expect(isContentPolicyError(new Error('timeout'))).toBe(false);
   });
 });

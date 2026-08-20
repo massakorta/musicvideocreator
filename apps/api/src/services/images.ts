@@ -234,7 +234,8 @@ async function executeSceneImageGeneration(projectId: string, sceneId: string): 
       `[image] complete scene ${sceneId} on project ${projectId} in ${Math.round((Date.now() - startedAt) / 1000)}s`,
     );
   } catch (error) {
-    const message = errorText(error);
+    const message =
+      error instanceof Error && error.message.trim() ? error.message : errorText(error);
     console.error(
       `[image] failed scene ${sceneId} on project ${projectId} after ${Math.round((Date.now() - startedAt) / 1000)}s: ${message}`,
     );

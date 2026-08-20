@@ -102,13 +102,14 @@ export class FalImageProvider implements ImageGenerationProvider {
       return await this.requestImageWithRetry(fullPrompt);
     } catch (error) {
       if (isContentPolicyError(error)) {
-        const safer = sanitizeImagePromptForSafety(fullPrompt);
-        if (safer !== fullPrompt) {
-          try {
-            return await this.requestImageWithRetry(safer);
-          } catch (saferError) {
-            throw new Error(humanizeImageError(saferError));
-          }
+        let safer = sanitizeImagePromptForSafety(fullPrompt);
+        if (safer === fullPrompt) {
+          safer = `${fullPrompt}\nCartoon slapstick comedy only. No realistic violence, weapons, or suggestive content.`;
+        }
+        try {
+          return await this.requestImageWithRetry(safer);
+        } catch (saferError) {
+          throw new Error(humanizeImageError(saferError));
         }
       }
       throw new Error(humanizeImageError(error));
@@ -174,8 +175,8 @@ function humanizeImageError(error: unknown): string {
   if (isBillingOrQuotaError(error)) {
     return 'fal.ai image generation is blocked by billing or quota. Add credit, then retry.';
   }
-  if (/content.?policy|safety|nsfw/i.test(message)) {
-    return 'fal.ai refused this prompt. Edit the scene prompt and retry.';
+  if (isContentPolicyError(error)) {
+    return 'fal.ai flagged this scene as unsafe. Edit the scene description to be more family-friendly, then retry.';
   }
   if (/api key|unauthorized|401|403/i.test(message)) {
     return 'fal.ai rejected the API key.';
