@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { compositionDurationFrames, projectToComposition } from '@music-video/video';
-import { getVideoPreset } from '@music-video/shared';
+import { getVideoPreset, RENDER_JOB_STATUS_LABELS, type RenderJob } from '@music-video/shared';
 import { Link, useNavigate } from 'react-router-dom';
 import { useProject } from '../hooks/useProject';
 import { api, ApiClientError } from '../lib/api';
@@ -17,6 +17,10 @@ export function VideoPage() {
   const [error, setError] = useState<string | null>(null);
   const [regenerating, setRegenerating] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedVideo, setCopiedVideo] = useState(false);
+  const [renderJob, setRenderJob] = useState<RenderJob | null>(null);
+  const [renderBusy, setRenderBusy] = useState(false);
+  const [shareLinks, setShareLinks] = useState<{ url: string; videoFileUrl?: string } | null>(null);
   const navigate = useNavigate();
   const composition = useMemo(() => projectToComposition(project), [project]);
   const preset = getVideoPreset(project.formatId);
@@ -27,6 +31,87 @@ export function VideoPage() {
     (scene) => currentSeconds >= scene.startTime && currentSeconds < scene.endTime,
   ) ?? project.scenes.at(-1);
   const onFrame = useCallback((next: number) => setFrame(next), []);
+
+  const renderActive =
+    renderJob?.status === 'queued' ||
+    renderJob?.status === 'preparing' ||
+    renderJob?.status === 'rendering' ||
+    renderJob?.status === 'uploading';
+  const renderComplete = renderJob?.status === 'complete';
+  const renderFailed = renderJob?.status === 'failed';
+
+  useEffect(() => {
+    let cancelled = false;
+    void api.jobs(project.id).then(({ jobs }) => {
+      if (cancelled) return;
+      const latestComplete = jobs.find((job) => job.status === 'complete');
+      const active = jobs.find(
+        (job) =>
+          job.status === 'queued' ||
+          job.status === 'preparing' ||
+          job.status === 'rendering' ||
+          job.status === 'uploading',
+      );
+      setRenderJob(active ?? latestComplete ?? jobs[0] ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id]);
+
+  useEffect(() => {
+    if (!renderComplete) return;
+    void api.share(project.id).then((links) => {
+      setShareLinks({ url: links.url, videoFileUrl: links.videoFileUrl });
+    });
+  }, [project.id, renderComplete]);
+
+  useEffect(() => {
+    if (!renderJob || renderJob.status === 'complete' || renderJob.status === 'failed') return;
+    const timer = window.setInterval(() => {
+      void api.job(renderJob.id).then(({ job }) => {
+        setRenderJob(job);
+        if (job.status === 'complete' || job.status === 'failed') {
+          setRenderBusy(false);
+        }
+      });
+    }, 2500);
+    return () => window.clearInterval(timer);
+  }, [renderJob?.id, renderJob?.status]);
+
+  async function startRender() {
+    setRenderBusy(true);
+    setError(null);
+    try {
+      const { job } = await api.render(project.id);
+      setRenderJob(job);
+    } catch (err) {
+      setRenderBusy(false);
+      setError(err instanceof ApiClientError ? err.message : 'Could not start MP4 export.');
+    }
+  }
+
+  async function copyShareLink(kind: 'watch' | 'video') {
+    try {
+      const links = shareLinks ?? (await api.share(project.id));
+      setShareLinks({ url: links.url, videoFileUrl: links.videoFileUrl });
+      const target = kind === 'video' ? links.videoFileUrl : links.url;
+      if (!target) {
+        setError(kind === 'video' ? 'Generate an MP4 before copying the direct video link.' : 'Could not copy link.');
+        return;
+      }
+      await navigator.clipboard.writeText(target);
+      if (kind === 'video') {
+        setCopiedVideo(true);
+        window.setTimeout(() => setCopiedVideo(false), 2000);
+      } else {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 2000);
+      }
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : 'Could not copy link.');
+    }
+  }
 
   return (
     <div className="page editor-layout">
@@ -110,23 +195,81 @@ export function VideoPage() {
             </button>
           ) : null}
           {health.readyToRender ? (
-            <button
-              className="btn btn-primary"
-              onClick={async () => {
-                try {
-                  const data = await api.share(project.id);
-                  await navigator.clipboard.writeText(data.url);
-                  setCopied(true);
-                  window.setTimeout(() => setCopied(false), 2000);
-                } catch (err) {
-                  setError(err instanceof ApiClientError ? err.message : 'Could not copy share link.');
-                }
-              }}
-            >
-              {copied ? 'Link copied!' : 'Copy preview link'}
-            </button>
+            <>
+              <button
+                className="btn btn-primary"
+                disabled={renderBusy || renderActive}
+                onClick={() => void startRender()}
+              >
+                {renderBusy || renderActive
+                  ? RENDER_JOB_STATUS_LABELS[renderJob?.status ?? 'queued']
+                  : renderComplete && !(stale?.videoStale)
+                    ? 'Re-export MP4'
+                    : 'Generate MP4'}
+              </button>
+              <button className="btn" onClick={() => void copyShareLink('watch')}>
+                {copied ? 'Watch link copied!' : 'Copy watch link'}
+              </button>
+              {renderComplete ? (
+                <button className="btn" onClick={() => void copyShareLink('video')}>
+                  {copiedVideo ? 'MP4 link copied!' : 'Copy MP4 link'}
+                </button>
+              ) : null}
+            </>
           ) : null}
         </div>
+        {health.readyToRender ? (
+          <div className="panel" style={{ marginTop: 16 }}>
+            <h3 style={{ marginTop: 0 }}>MP4 export</h3>
+            <p className="muted" style={{ marginTop: 0 }}>
+              Renders one finished H.264 file with Remotion. Share links use the MP4 when it exists, so phones play it
+              natively instead of the live preview player.
+            </p>
+            {stale?.videoStale ? (
+              <p className="banner warning" style={{ marginBottom: 12 }}>
+                The cut changed since the last export. Generate a fresh MP4 before sharing.
+              </p>
+            ) : null}
+            {renderJob ? (
+              <>
+                <p className="mono">
+                  {RENDER_JOB_STATUS_LABELS[renderJob.status]}
+                  {renderActive ? ` · ${Math.round(renderJob.progress)}%` : null}
+                </p>
+                {renderActive ? (
+                  <div
+                    className="timeline-track"
+                    style={{ height: 8, marginTop: 8, background: '#2a2234', position: 'relative' }}
+                    aria-hidden
+                  >
+                    <div
+                      style={{
+                        height: '100%',
+                        width: `${Math.max(0, Math.min(100, renderJob.progress))}%`,
+                        background: 'var(--live)',
+                        transition: 'width 0.4s ease',
+                      }}
+                    />
+                  </div>
+                ) : null}
+                {renderFailed && renderJob.error ? (
+                  <p className="banner error" style={{ marginTop: 12 }}>
+                    {renderJob.error}
+                  </p>
+                ) : null}
+                {renderComplete ? (
+                  <p className="faint" style={{ marginTop: 12, marginBottom: 0 }}>
+                    Ready to share. Watch page serves the MP4; “Copy MP4 link” points straight to the file.
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <p className="faint" style={{ marginBottom: 0 }}>
+                No export yet. Rendering runs in the background worker and usually takes a few minutes.
+              </p>
+            )}
+          </div>
+        ) : null}
       </div>
       <div className="editor-sidebar">
         <HealthPanel health={health} />

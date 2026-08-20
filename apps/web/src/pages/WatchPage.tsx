@@ -90,11 +90,25 @@ export function WatchPage() {
             <p className="muted">
               {watch.songTitle} · {formatClockShort(watch.durationSeconds)}
             </p>
-            <p className="faint watch-note">Plays in your browser like the editor cut.</p>
+            <p className="faint watch-note">
+              {watch.mode === 'video'
+                ? 'Finished MP4 — plays natively in your browser.'
+                : 'Live preview cut — generate an MP4 in the editor for smoother mobile playback.'}
+            </p>
           </div>
 
           <div className="watch-player-wrap watch-player-wrap--bleed">
-            {watch.preview ? (
+            {watch.mode === 'video' && watch.videoUrl ? (
+              <WatchStage
+                mode="video"
+                videoUrl={watch.videoUrl}
+                durationSeconds={watch.durationSeconds}
+                lyrics={watch.lyrics}
+                onTime={setCurrentSeconds}
+                onFullscreenChange={setFullscreen}
+                overlayControls
+              />
+            ) : watch.preview ? (
               <WatchStage
                 mode="preview"
                 composition={watch.preview.composition}

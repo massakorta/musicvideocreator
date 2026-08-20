@@ -301,7 +301,7 @@ export function WatchStage(props: WatchStageProps) {
             className="watch-video"
             src={props.videoUrl}
             playsInline
-            preload="metadata"
+            preload="auto"
           />
         ) : (
           <>

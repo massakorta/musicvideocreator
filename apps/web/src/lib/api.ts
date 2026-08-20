@@ -212,7 +212,8 @@ export const api = {
     request<import('@music-video/shared').PipelineStatus & { stale: import('@music-video/shared').StaleAssets }>(
       `/api/projects/${id}/pipeline`,
     ),
-  share: (id: string) => request<{ shareId: string; url: string }>(`/api/projects/${id}/share`, { method: 'POST' }),
+  share: (id: string) =>
+    request<{ shareId: string; url: string; videoFileUrl?: string }>(`/api/projects/${id}/share`, { method: 'POST' }),
   publicWatch: (shareId: string) =>
     request<{
       watch: {
