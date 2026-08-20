@@ -23,6 +23,8 @@ export interface CompositionProject {
 export interface MusicVideoCompositionProps {
   project: CompositionProject;
   includeAudio?: boolean;
+  /** True while the outer preview/watch player is actively playing (needed to unlock HTML video on mobile). */
+  playbackActive?: boolean;
 }
 
 export const TRANSITION_FRAMES: Record<TransitionPresetId, number> = {

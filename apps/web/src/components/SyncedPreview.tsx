@@ -18,9 +18,11 @@ export const SyncedPreview = forwardRef<
     onFrame: (frame: number) => void;
   }
 >(function SyncedPreview({ composition, durationInFrames, fps, width, height, audioUrl, onFrame }, ref) {
+  const preview = useRef<HTMLDivElement>(null);
   const player = useRef<PlayerRef>(null);
   const audio = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
+  const [playbackActive, setPlaybackActive] = useState(false);
 
   useImperativeHandle(ref, () => ({
     seekToSeconds(seconds: number) {
@@ -45,6 +47,7 @@ export const SyncedPreview = forwardRef<
     const onPause = () => setPlaying(false);
     const onEnded = () => {
       setPlaying(false);
+      setPlaybackActive(false);
       player.current?.seekTo(0);
       onFrame(0);
     };
@@ -84,28 +87,40 @@ export const SyncedPreview = forwardRef<
     return () => cancelAnimationFrame(raf);
   }, [audioUrl, fps, onFrame]);
 
+  function unlockSceneVideos() {
+    preview.current?.querySelectorAll('video').forEach((video) => {
+      video.muted = true;
+      void video.play().catch(() => {});
+    });
+  }
+
   function togglePlay() {
-    if (audioUrl && audio.current) {
-      if (audio.current.paused) {
-        void audio.current.play();
-      } else {
+    if (playing) {
+      setPlaybackActive(false);
+      if (audioUrl && audio.current) {
         audio.current.pause();
+      } else {
+        player.current?.pause();
       }
       return;
     }
-    const instance = player.current;
-    if (!instance) return;
-    if (instance.isPlaying()) instance.pause();
-    else instance.play();
+
+    setPlaybackActive(true);
+    unlockSceneVideos();
+    if (audioUrl && audio.current) {
+      void audio.current.play().catch(() => setPlaybackActive(false));
+      return;
+    }
+    player.current?.play();
   }
 
   return (
-    <div className="preview-stage" style={{ position: 'relative' }}>
+    <div ref={preview} className="preview-stage" style={{ position: 'relative' }}>
       {audioUrl ? <audio ref={audio} src={audioUrl} preload="auto" playsInline /> : null}
       <Player
         ref={player}
         component={MusicVideoComposition as FC}
-        inputProps={{ project: composition, includeAudio: false }}
+        inputProps={{ project: composition, includeAudio: false, playbackActive }}
         durationInFrames={durationInFrames}
         fps={fps}
         compositionWidth={width}

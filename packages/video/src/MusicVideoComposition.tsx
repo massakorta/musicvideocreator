@@ -10,6 +10,7 @@ import { transitionStyleForFrame } from './transitions.js';
 export const MusicVideoComposition: React.FC<MusicVideoCompositionProps> = ({
   project,
   includeAudio = false,
+  playbackActive = false,
 }) => {
   const { fps } = useVideoConfig();
 
@@ -27,7 +28,7 @@ export const MusicVideoComposition: React.FC<MusicVideoCompositionProps> = ({
         const duration = Math.max(1, secondsToFrames(scene.endTime - scene.startTime, fps) + overlap);
         return (
           <Sequence key={scene.id} from={from} durationInFrames={duration} layout="none" name={scene.id}>
-            <SceneLayer scene={scene} durationInFrames={duration} />
+            <SceneLayer scene={scene} durationInFrames={duration} playbackActive={playbackActive} />
           </Sequence>
         );
       })}
@@ -36,10 +37,11 @@ export const MusicVideoComposition: React.FC<MusicVideoCompositionProps> = ({
   );
 };
 
-const SceneLayer: React.FC<{ scene: CompositionScene; durationInFrames: number }> = ({
-  scene,
-  durationInFrames,
-}) => {
+const SceneLayer: React.FC<{
+  scene: CompositionScene;
+  durationInFrames: number;
+  playbackActive: boolean;
+}> = ({ scene, durationInFrames, playbackActive }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const motion = motionStyle(scene.motion, frame, durationInFrames, scene.id);
@@ -65,6 +67,7 @@ const SceneLayer: React.FC<{ scene: CompositionScene; durationInFrames: number }
           clipDurationSeconds={scene.videoDurationSeconds}
           sceneDurationSeconds={sceneDurationSeconds}
           fallbackImageUrl={scene.imageUrl}
+          playbackActive={playbackActive}
           style={mediaStyle}
         />
       ) : (

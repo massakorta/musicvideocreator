@@ -36,6 +36,7 @@ export function WatchStage(props: WatchStageProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
+  const [playbackActive, setPlaybackActive] = useState(false);
   const [currentSeconds, setCurrentSeconds] = useState(0);
   const currentSecondsRef = useRef(0);
   const { fullscreen, immersive, toggleFullscreen } = useWatchFullscreen(stageRef);
@@ -69,7 +70,15 @@ export function WatchStage(props: WatchStageProps) {
     [durationSeconds, props, setTime],
   );
 
+  const unlockSceneVideos = useCallback(() => {
+    stageRef.current?.querySelectorAll('video').forEach((video) => {
+      video.muted = true;
+      void video.play().catch(() => {});
+    });
+  }, []);
+
   const pause = useCallback(() => {
+    setPlaybackActive(false);
     if (props.mode === 'video') {
       videoRef.current?.pause();
       return;
@@ -83,26 +92,38 @@ export function WatchStage(props: WatchStageProps) {
     playerRef.current?.pause();
   }, [props]);
 
-  const play = useCallback(() => {
+  const play = useCallback(async () => {
+    setPlaybackActive(true);
+    unlockSceneVideos();
     if (props.mode === 'video') {
       const video = videoRef.current;
-      if (video) void video.play();
+      if (video) {
+        try {
+          await video.play();
+        } catch {
+          setPlaybackActive(false);
+        }
+      }
       return;
     }
 
     if (props.audioUrl && audioRef.current) {
-      void audioRef.current.play();
+      try {
+        await audioRef.current.play();
+      } catch {
+        setPlaybackActive(false);
+      }
       return;
     }
 
     playerRef.current?.play();
-  }, [props]);
+  }, [props, unlockSceneVideos]);
 
   const togglePlay = useCallback(() => {
     if (playing) {
       pause();
     } else {
-      play();
+      void play();
     }
   }, [pause, play, playing]);
 
@@ -127,6 +148,14 @@ export function WatchStage(props: WatchStageProps) {
     for (const scene of props.composition.scenes) {
       const image = new Image();
       image.src = scene.imageUrl;
+      if (scene.videoUrl) {
+        const video = document.createElement('video');
+        video.preload = 'auto';
+        video.muted = true;
+        video.playsInline = true;
+        video.src = scene.videoUrl;
+        video.load();
+      }
     }
   }, [props.mode, props.mode === 'preview' ? props.composition.scenes : null]);
 
@@ -139,6 +168,7 @@ export function WatchStage(props: WatchStageProps) {
       const onTimeUpdate = () => setTime(video.currentTime);
       const onEnded = () => {
         setPlaying(false);
+        setPlaybackActive(false);
         setTime(0);
       };
       video.addEventListener('play', onPlay);
@@ -160,6 +190,7 @@ export function WatchStage(props: WatchStageProps) {
       const onTimeUpdate = () => setTime(audio.currentTime);
       const onEnded = () => {
         setPlaying(false);
+        setPlaybackActive(false);
         playerRef.current?.seekTo(0);
         setTime(0);
       };
@@ -286,7 +317,7 @@ export function WatchStage(props: WatchStageProps) {
             <Player
               ref={playerRef}
               component={MusicVideoComposition as FC}
-              inputProps={{ project: props.composition, includeAudio: false }}
+              inputProps={{ project: props.composition, includeAudio: false, playbackActive }}
               durationInFrames={props.durationInFrames}
               fps={props.fps}
               compositionWidth={props.width}
@@ -310,7 +341,7 @@ export function WatchStage(props: WatchStageProps) {
             hidden={mobileFullscreen && !controlsVisible}
             overlay
             onTogglePlay={() => {
-              togglePlay();
+              void togglePlay();
               showControls();
             }}
             onSeek={(seconds) => {

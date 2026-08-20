@@ -15,15 +15,30 @@ function offthreadVideoFrameUrl(src: string, currentTime: number): string {
   return `http://localhost:${port}/proxy?src=${encodeURIComponent(src)}&time=${encodeURIComponent(Math.max(0, currentTime))}&transparent=false&toneMapped=true`;
 }
 
+function seekVideo(video: HTMLVideoElement, sourceTime: number) {
+  if (Math.abs(video.currentTime - sourceTime) <= 0.08) return;
+  try {
+    if ('fastSeek' in video && typeof video.fastSeek === 'function') {
+      video.fastSeek(sourceTime);
+    } else {
+      video.currentTime = sourceTime;
+    }
+  } catch {
+    // ignore seek errors while metadata is loading
+  }
+}
+
 function PingPongSceneVideoPreview({
   src,
   sourceTime,
   fallbackImageUrl,
+  playbackActive,
   style,
 }: {
   src: string;
   sourceTime: number;
   fallbackImageUrl: string;
+  playbackActive: boolean;
   style?: React.CSSProperties;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -32,17 +47,23 @@ function PingPongSceneVideoPreview({
   useLayoutEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    if (Math.abs(video.currentTime - sourceTime) <= 0.08) return;
-    try {
-      if ('fastSeek' in video && typeof video.fastSeek === 'function') {
-        video.fastSeek(sourceTime);
-      } else {
-        video.currentTime = sourceTime;
-      }
-    } catch {
-      // ignore seek errors while metadata is loading
+
+    if (!playbackActive) {
+      video.pause();
+      return;
     }
-  }, [sourceTime]);
+
+    void (async () => {
+      try {
+        if (video.paused) {
+          await video.play();
+        }
+      } catch {
+        // Mobile Safari requires a user gesture before play(); the parent toggles playbackActive after Play is tapped.
+      }
+      seekVideo(video, sourceTime);
+    })();
+  }, [playbackActive, sourceTime]);
 
   const fillStyle: React.CSSProperties = {
     ...style,
@@ -55,7 +76,7 @@ function PingPongSceneVideoPreview({
 
   return (
     <AbsoluteFill>
-      {!videoReady ? <Img src={fallbackImageUrl} style={fillStyle} /> : null}
+      <Img src={fallbackImageUrl} style={fillStyle} />
       <video
         ref={videoRef}
         src={src}
@@ -63,6 +84,7 @@ function PingPongSceneVideoPreview({
         playsInline
         preload="auto"
         onLoadedData={() => setVideoReady(true)}
+        onCanPlay={() => setVideoReady(true)}
         style={{ ...fillStyle, opacity: videoReady ? 1 : 0 }}
       />
     </AbsoluteFill>
@@ -124,12 +146,14 @@ export function PingPongSceneVideo({
   clipDurationSeconds,
   sceneDurationSeconds,
   fallbackImageUrl,
+  playbackActive = false,
   style,
 }: {
   src: string;
   clipDurationSeconds: number;
   sceneDurationSeconds: number;
   fallbackImageUrl: string;
+  playbackActive?: boolean;
   style?: React.CSSProperties;
 }) {
   const frame = useCurrentFrame();
@@ -153,6 +177,7 @@ export function PingPongSceneVideo({
       src={src}
       sourceTime={sourceTime}
       fallbackImageUrl={fallbackImageUrl}
+      playbackActive={playbackActive}
       style={style}
     />
   );
