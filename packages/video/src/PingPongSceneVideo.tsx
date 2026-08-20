@@ -1,5 +1,13 @@
 import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Img, cancelRender, continueRender, useCurrentFrame, useDelayRender, useVideoConfig } from 'remotion';
+import {
+  AbsoluteFill,
+  Img,
+  cancelRender,
+  continueRender,
+  useCurrentFrame,
+  useDelayRender,
+  useVideoConfig,
+} from 'remotion';
 import { sceneVideoSourceSeconds } from '@music-video/shared';
 
 function offthreadVideoFrameUrl(src: string, currentTime: number): string {
@@ -19,31 +27,45 @@ function PingPongSceneVideoPreview({
   style?: React.CSSProperties;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [videoReady, setVideoReady] = useState(false);
 
   useLayoutEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    if (Math.abs(video.currentTime - sourceTime) > 0.04) {
-      try {
+    if (Math.abs(video.currentTime - sourceTime) <= 0.08) return;
+    try {
+      if ('fastSeek' in video && typeof video.fastSeek === 'function') {
+        video.fastSeek(sourceTime);
+      } else {
         video.currentTime = sourceTime;
-      } catch {
-        // ignore seek errors while metadata is loading
       }
+    } catch {
+      // ignore seek errors while metadata is loading
     }
   }, [sourceTime]);
 
+  const fillStyle: React.CSSProperties = {
+    ...style,
+    position: 'absolute',
+    inset: 0,
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+  };
+
   return (
-    <>
-      <Img src={fallbackImageUrl} style={{ ...style, position: 'absolute', inset: 0 }} />
+    <AbsoluteFill>
+      {!videoReady ? <Img src={fallbackImageUrl} style={fillStyle} /> : null}
       <video
         ref={videoRef}
         src={src}
         muted
         playsInline
         preload="auto"
-        style={{ ...style, position: 'relative', zIndex: 1 }}
+        onLoadedData={() => setVideoReady(true)}
+        style={{ ...fillStyle, opacity: videoReady ? 1 : 0 }}
       />
-    </>
+    </AbsoluteFill>
   );
 }
 

@@ -37,7 +37,7 @@ export function WatchStage(props: WatchStageProps) {
   const [playing, setPlaying] = useState(false);
   const [currentSeconds, setCurrentSeconds] = useState(0);
   const currentSecondsRef = useRef(0);
-  const { fullscreen, toggleFullscreen } = useWatchFullscreen(stageRef);
+  const { fullscreen, immersive, toggleFullscreen } = useWatchFullscreen(stageRef);
 
   const setTime = useCallback(
     (seconds: number) => {
@@ -227,7 +227,10 @@ export function WatchStage(props: WatchStageProps) {
       : null;
 
   return (
-    <div ref={stageRef} className="watch-stage">
+    <div
+      ref={stageRef}
+      className={`watch-stage${immersive ? ' watch-stage--immersive' : ''}${fullscreen ? ' watch-stage--fullscreen' : ''}`}
+    >
       <div
         className="watch-frame"
         onClick={togglePlay}

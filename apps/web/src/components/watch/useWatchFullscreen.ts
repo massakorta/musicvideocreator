@@ -10,12 +10,17 @@ type FullscreenDocument = Document & {
 };
 
 export function useWatchFullscreen(containerRef: RefObject<HTMLElement | null>) {
-  const [fullscreen, setFullscreen] = useState(false);
+  const [nativeFullscreen, setNativeFullscreen] = useState(false);
+  const [immersive, setImmersive] = useState(false);
+  const fullscreen = nativeFullscreen || immersive;
 
   const syncFullscreen = useCallback(() => {
     const doc = document as FullscreenDocument;
     const active = Boolean(doc.fullscreenElement ?? doc.webkitFullscreenElement);
-    setFullscreen(active);
+    setNativeFullscreen(active);
+    if (active) {
+      setImmersive(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -27,21 +32,42 @@ export function useWatchFullscreen(containerRef: RefObject<HTMLElement | null>) 
     };
   }, [syncFullscreen]);
 
+  useEffect(() => {
+    if (!immersive) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setImmersive(false);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [immersive]);
+
   const enterFullscreen = useCallback(async () => {
     const el = containerRef.current as FullscreenElement | null;
     if (!el) return;
     try {
       if (el.requestFullscreen) {
         await el.requestFullscreen();
-      } else if (el.webkitRequestFullscreen) {
+        return;
+      }
+      if (el.webkitRequestFullscreen) {
         await el.webkitRequestFullscreen();
+        return;
       }
     } catch {
-      // Ignore if the browser blocks fullscreen.
+      // Fall back to in-page theater mode when the browser blocks native fullscreen.
     }
+    setImmersive(true);
   }, [containerRef]);
 
   const exitFullscreen = useCallback(async () => {
+    setImmersive(false);
     const doc = document as FullscreenDocument;
     try {
       if (doc.fullscreenElement && doc.exitFullscreen) {
@@ -62,5 +88,5 @@ export function useWatchFullscreen(containerRef: RefObject<HTMLElement | null>) 
     }
   }, [enterFullscreen, exitFullscreen, fullscreen]);
 
-  return { fullscreen, enterFullscreen, exitFullscreen, toggleFullscreen };
+  return { fullscreen, immersive, nativeFullscreen, enterFullscreen, exitFullscreen, toggleFullscreen };
 }

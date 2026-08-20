@@ -64,7 +64,7 @@ export function WatchPage() {
   }
 
   return (
-    <div className="watch-page watch-page--standalone">
+    <div className={`watch-page watch-page--standalone${fullscreen ? ' watch-page--theater' : ''}`}>
       <header className="watch-header">
         <div className="brand">
           <small>{PRODUCT_NAME}</small>
