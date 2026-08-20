@@ -70,6 +70,30 @@ export function CharactersPage() {
     }
   }
 
+  async function approveAll() {
+    const queue = characters.filter((character) => character.referenceAssetId && !character.lockedReferenceImage);
+    if (queue.length === 0) return;
+    setBusyId('approve-all');
+    setError(null);
+    try {
+      let latest = project;
+      for (const character of queue) {
+        const data = await api.approveCharacter(project.id, character.id, true);
+        latest = data.project;
+        setProject(data.project);
+      }
+      setProject(latest);
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : 'Could not approve character sheets.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const pendingApprovalCount = characters.filter(
+    (character) => character.referenceAssetId && !character.lockedReferenceImage,
+  ).length;
+
   return (
     <div className="page">
       <p className="hero-copy">
@@ -109,6 +133,13 @@ export function CharactersPage() {
           <div className="actions">
             <button className="btn btn-primary" disabled={Boolean(busyId)} onClick={() => void generateAll()}>
               {busyId === 'all' ? 'Generating sheets…' : 'Generate all character sheets'}
+            </button>
+            <button
+              className="btn"
+              disabled={Boolean(busyId) || pendingApprovalCount === 0}
+              onClick={() => void approveAll()}
+            >
+              {busyId === 'approve-all' ? 'Approving…' : 'Approve all character sheets'}
             </button>
           </div>
           <div className="character-grid">
