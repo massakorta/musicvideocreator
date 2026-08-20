@@ -30,6 +30,10 @@ export function tryAcquireSceneVideoGeneration(projectId: string, sceneId: strin
   return true;
 }
 
+export function isSceneVideoGenerationActive(projectId: string, sceneId: string): boolean {
+  return activeGenerations.has(sceneVideoGenerationKey(projectId, sceneId));
+}
+
 export function releaseSceneVideoGeneration(projectId: string, sceneId: string): void {
   activeGenerations.delete(sceneVideoGenerationKey(projectId, sceneId));
 }

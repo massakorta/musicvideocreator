@@ -41,6 +41,28 @@ interface FalVideoResult {
   };
 }
 
+function extractVideoUrl(result: FalVideoResult): { url?: string; contentType?: string } {
+  const direct = result.data?.video;
+  if (direct?.url) {
+    return { url: direct.url, contentType: direct.content_type };
+  }
+  const record = result.data as Record<string, unknown> | undefined;
+  const nested = record?.video;
+  if (nested && typeof nested === 'object' && nested !== null && 'url' in nested) {
+    const url = (nested as { url?: unknown }).url;
+    if (typeof url === 'string') {
+      return {
+        url,
+        contentType:
+          typeof (nested as { content_type?: unknown }).content_type === 'string'
+            ? ((nested as { content_type?: string }).content_type ?? undefined)
+            : undefined,
+      };
+    }
+  }
+  return {};
+}
+
 export class FalVideoProvider {
   private readonly requestTimeoutMs: number;
   private readonly retryDelayMs: (attempt: number) => number;
@@ -129,16 +151,16 @@ export class FalVideoProvider {
       },
     })) as FalVideoResult;
 
-    const video = result.data?.video;
-    if (!video?.url) {
+    const { url: videoUrl, contentType } = extractVideoUrl(result);
+    if (!videoUrl) {
       throw new Error('Video provider returned no clip.');
     }
 
-    const response = await fetch(video.url, { signal: AbortSignal.timeout(this.requestTimeoutMs) });
+    const response = await fetch(videoUrl, { signal: AbortSignal.timeout(this.requestTimeoutMs) });
     if (!response.ok) {
       throw new Error('Failed to download generated video.');
     }
-    const mimeType = video.content_type ?? response.headers.get('content-type') ?? 'video/mp4';
+    const mimeType = contentType ?? response.headers.get('content-type') ?? 'video/mp4';
     return {
       bytes: Buffer.from(await response.arrayBuffer()),
       mimeType,

@@ -19,7 +19,7 @@ import {
 import { getRepositories } from '../repositories/index.js';
 import { getObjectStorage } from '../storage/index.js';
 import { applyScenePatch, deriveStatus, newId, nowIso, replaceScenes, toSummary, touch } from './projectUtils.js';
-import { isSceneGenerationActive } from './sceneGenerationLock.js';
+import { isSceneGenerationActive, isSceneVideoGenerationActive } from './sceneGenerationLock.js';
 
 export async function listProjects(): Promise<ProjectSummary[]> {
   const projects = await getRepositories().projects.list();
@@ -362,13 +362,24 @@ export { computeProjectHealth };
 async function repairProjectDocument(project: MusicVideoProject): Promise<MusicVideoProject> {
   const assets = await getRepositories().assets.listByProject(project.id);
   const latestSceneAssets = new Map<string, AssetRecord>();
+  const latestSceneVideos = new Map<string, AssetRecord>();
   for (const asset of assets) {
-    if (asset.type !== 'scene_image') continue;
-    const sceneId = typeof asset.metadata?.sceneId === 'string' ? asset.metadata.sceneId : undefined;
-    if (!sceneId) continue;
-    const existing = latestSceneAssets.get(sceneId);
-    if (!existing || asset.createdAt.localeCompare(existing.createdAt) > 0) {
-      latestSceneAssets.set(sceneId, asset);
+    if (asset.type === 'scene_image') {
+      const sceneId = typeof asset.metadata?.sceneId === 'string' ? asset.metadata.sceneId : undefined;
+      if (!sceneId) continue;
+      const existing = latestSceneAssets.get(sceneId);
+      if (!existing || asset.createdAt.localeCompare(existing.createdAt) > 0) {
+        latestSceneAssets.set(sceneId, asset);
+      }
+      continue;
+    }
+    if (asset.type === 'scene_video') {
+      const sceneId = typeof asset.metadata?.sceneId === 'string' ? asset.metadata.sceneId : undefined;
+      if (!sceneId) continue;
+      const existing = latestSceneVideos.get(sceneId);
+      if (!existing || asset.createdAt.localeCompare(existing.createdAt) > 0) {
+        latestSceneVideos.set(sceneId, asset);
+      }
     }
   }
 
@@ -378,10 +389,22 @@ async function repairProjectDocument(project: MusicVideoProject): Promise<MusicV
       changed = true;
       break;
     }
+    if (!scene.currentVideoAssetId && latestSceneVideos.has(scene.id)) {
+      changed = true;
+      break;
+    }
     if (
       scene.generationState === 'generating' &&
       !scene.currentAssetId &&
       !isSceneGenerationActive(project.id, scene.id)
+    ) {
+      changed = true;
+      break;
+    }
+    if (
+      scene.videoGenerationState === 'generating' &&
+      !scene.currentVideoAssetId &&
+      !isSceneVideoGenerationActive(project.id, scene.id)
     ) {
       changed = true;
       break;
@@ -405,6 +428,19 @@ async function repairProjectDocument(project: MusicVideoProject): Promise<MusicV
         }
       }
 
+      if (!next.currentVideoAssetId) {
+        const asset = latestSceneVideos.get(scene.id);
+        if (asset) {
+          next = {
+            ...next,
+            currentVideoAssetId: asset.id,
+            mediaType: 'video' as const,
+            videoGenerationState: 'complete' as const,
+            videoGenerationError: undefined,
+          };
+        }
+      }
+
       if (
         next.generationState === 'generating' &&
         !next.currentAssetId &&
@@ -414,6 +450,18 @@ async function repairProjectDocument(project: MusicVideoProject): Promise<MusicV
           ...next,
           generationState: 'pending' as const,
           generationError: undefined,
+        };
+      }
+
+      if (
+        next.videoGenerationState === 'generating' &&
+        !next.currentVideoAssetId &&
+        !isSceneVideoGenerationActive(project.id, scene.id)
+      ) {
+        next = {
+          ...next,
+          videoGenerationState: 'pending' as const,
+          videoGenerationError: undefined,
         };
       }
 

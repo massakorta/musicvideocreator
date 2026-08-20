@@ -26,7 +26,7 @@ export async function generateSceneVideo(projectId: string, sceneId: string, for
     throw new AppError(ERROR_CODES.VALIDATION, 'Generate a still for this scene before animating it.', 400);
   }
   if (sceneHasVideo(scene) && !force) {
-    return { project, asset: scene.video, demo: scene.video?.source === 'demo' };
+    return { project, asset: scene.video, demo: scene.video?.source === 'demo', started: false };
   }
   if (requireFalOrDemo() === 'demo') {
     throw new AppError(
@@ -43,9 +43,9 @@ export async function generateSceneVideo(projectId: string, sceneId: string, for
     );
   }
 
-  const style = styleOrThrow(project.styleId);
   const provider = createVideoProvider();
   if (!provider) {
+    releaseSceneVideoGeneration(projectId, sceneId);
     throw new AppError(
       ERROR_CODES.VIDEO_FAILED,
       'Scene animation requires fal.ai. Set FAL_KEY to animate stills into clips.',
@@ -64,6 +64,38 @@ export async function generateSceneVideo(projectId: string, sceneId: string, for
         ),
       ),
     );
+
+    console.log(`[video] queued scene ${sceneId} on project ${projectId}`);
+    void executeSceneVideoGeneration(projectId, sceneId).catch((error) => {
+      console.error(`[video] unhandled failure for ${projectId}/${sceneId}`, error);
+    });
+
+    return { project: await getProjectOrThrow(projectId), demo: false, started: true };
+  } catch (error) {
+    releaseSceneVideoGeneration(projectId, sceneId);
+    throw error;
+  }
+}
+
+async function executeSceneVideoGeneration(projectId: string, sceneId: string): Promise<void> {
+  const startedAt = Date.now();
+  let sceneOrder = 0;
+  try {
+    const project = await getProjectOrThrow(projectId);
+    const scene = project.scenes.find((s) => s.id === sceneId);
+    if (!scene || !project.visualBible) {
+      throw new AppError(ERROR_CODES.NOT_FOUND, 'That scene could not be found.', 404);
+    }
+    sceneOrder = scene.order;
+    const style = styleOrThrow(project.styleId);
+    const provider = createVideoProvider();
+    if (!provider) {
+      throw new AppError(
+        ERROR_CODES.VIDEO_FAILED,
+        'Scene animation requires fal.ai. Set FAL_KEY to animate stills into clips.',
+        502,
+      );
+    }
 
     const imageAssetId = scene.currentAssetId ?? scene.image?.id;
     if (!imageAssetId) {
@@ -97,9 +129,15 @@ export async function generateSceneVideo(projectId: string, sceneId: string, for
       metadata: { sceneId, sourceImageAssetId: imageAssetId, prompt: video.prompt, model: video.model },
     });
 
-    const saved = await attachVideoToScene(await getProjectOrThrow(projectId), sceneId, asset);
-    return { project: saved, asset, demo: false };
+    await attachVideoToScene(await getProjectOrThrow(projectId), sceneId, asset);
+    console.log(
+      `[video] complete scene ${sceneId} on project ${projectId} in ${Math.round((Date.now() - startedAt) / 1000)}s`,
+    );
   } catch (error) {
+    console.error(
+      `[video] failed scene ${sceneId} on project ${projectId} after ${Math.round((Date.now() - startedAt) / 1000)}s:`,
+      error instanceof Error ? error.message : error,
+    );
     await updateProjectDocument(projectId, (latest) =>
       replaceScenes(
         latest,
@@ -111,20 +149,12 @@ export async function generateSceneVideo(projectId: string, sceneId: string, for
                 videoGenerationError:
                   error instanceof AppError
                     ? error.message
-                    : `Scene ${scene.order} could not be animated. The video provider returned an error.`,
+                    : `Scene ${sceneOrder || s.order} could not be animated. ${errorText(error)}`,
               }
             : s,
         ),
       ),
     ).catch(() => undefined);
-
-    if (error instanceof AppError) throw error;
-    throw new AppError(
-      ERROR_CODES.VIDEO_FAILED,
-      `Scene ${scene.order} could not be animated. ${errorText(error)}`,
-      502,
-      error instanceof Error ? error.message : undefined,
-    );
   } finally {
     releaseSceneVideoGeneration(projectId, sceneId);
   }
