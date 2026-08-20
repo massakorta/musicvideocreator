@@ -144,10 +144,7 @@ export function mergeSceneState(previous: StoryboardScene, incoming: StoryboardS
     };
   }
 
-  if (
-    GENERATION_RANK[previous.generationState] > GENERATION_RANK[incoming.generationState] &&
-    incoming.generationState !== 'failed'
-  ) {
+  if (GENERATION_RANK[previous.generationState] > GENERATION_RANK[incoming.generationState]) {
     return {
       ...incoming,
       generationState: previous.generationState,
