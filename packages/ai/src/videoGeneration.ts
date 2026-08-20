@@ -1,5 +1,6 @@
 import type { StoryboardScene, VisualBible, VisualStylePreset } from '@music-video/shared';
 import {
+  errorText,
   isRetryableProviderError,
   MAX_IMAGE_ATTEMPTS,
   providerRetryDelayMs,
@@ -82,7 +83,7 @@ export class FalVideoProvider {
       scene: request.scene,
     });
     const duration = sceneClipDurationSeconds(request.scene.duration);
-    const fullPrompt = `${prompt}\nAvoid: ${negativePrompt}`.slice(0, 8000);
+    const fullPrompt = `${prompt}\nAvoid: ${negativePrompt}`.slice(0, 2500);
     return this.generate(fullPrompt, request.sourceImageBytes, request.sourceImageMimeType, duration);
   }
 
@@ -172,13 +173,7 @@ export class FalVideoProvider {
 }
 
 function humanizeVideoError(error: unknown): string {
-  if (!error || typeof error !== 'object') return 'The video provider returned an error.';
-  const record = error as {
-    message?: string;
-    status?: number;
-    body?: { detail?: string };
-  };
-  const message = record.body?.detail ?? record.message ?? String(error);
+  const message = errorText(error);
   if (/timed out|timeout|ETIMEDOUT|AbortError/i.test(message)) {
     return 'The video provider took too long to respond. Try again.';
   }
@@ -191,5 +186,5 @@ function humanizeVideoError(error: unknown): string {
   if (/api key|unauthorized|401|403/i.test(message)) {
     return 'fal.ai rejected the API key.';
   }
-  return message;
+  return message || 'The video provider returned an error.';
 }

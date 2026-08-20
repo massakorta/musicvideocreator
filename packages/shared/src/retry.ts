@@ -18,8 +18,44 @@ export function errorText(error: unknown): string {
     code?: string;
     status?: number;
     error?: { message?: string; code?: string };
+    body?: unknown;
   };
-  return [record.error?.message, record.message, record.error?.code, record.code].filter(Boolean).join(' ') || String(error);
+  const fromBody = formatProviderBody(record.body);
+  if (fromBody) return fromBody;
+  const parts = [record.error?.message, record.message, record.error?.code, record.code].filter(Boolean);
+  if (parts.length > 0) return parts.join(' ');
+  return safeStringify(error);
+}
+
+function formatProviderBody(body: unknown): string | undefined {
+  if (!body) return undefined;
+  if (typeof body === 'string' && body.trim()) return body;
+  if (typeof body !== 'object') return String(body);
+  const record = body as { detail?: unknown; message?: string; error?: string };
+  if (typeof record.message === 'string' && record.message.trim()) return record.message;
+  if (typeof record.error === 'string' && record.error.trim()) return record.error;
+  if (typeof record.detail === 'string' && record.detail.trim()) return record.detail;
+  if (Array.isArray(record.detail)) {
+    const messages = record.detail
+      .map((item) => {
+        if (typeof item === 'string') return item;
+        if (item && typeof item === 'object' && 'msg' in item) {
+          return String((item as { msg?: unknown }).msg ?? '');
+        }
+        return '';
+      })
+      .filter(Boolean);
+    if (messages.length > 0) return messages.join('; ');
+  }
+  return safeStringify(body);
+}
+
+function safeStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }
 
 export function isContentPolicyError(error: unknown): boolean {

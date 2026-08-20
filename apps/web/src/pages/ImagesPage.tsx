@@ -421,7 +421,29 @@ export function ImagesPage() {
                           ? 'In queue'
                           : GENERATION_STATE_LABELS[scene.generationState]}
                   </div>
+                  {sceneHasStill(scene) ? (
+                    <div
+                      className={`pill ${
+                        scene.videoGenerationState === 'failed'
+                          ? 'error'
+                          : sceneHasVideo(scene)
+                            ? 'success'
+                            : sceneIsActivelyAnimating(scene)
+                              ? 'warning'
+                              : ''
+                      }`}
+                    >
+                      {sceneIsActivelyAnimating(scene)
+                        ? 'Animating clip'
+                        : sceneHasVideo(scene)
+                          ? 'Clip ready'
+                          : scene.videoGenerationState === 'failed'
+                            ? 'Clip failed'
+                            : 'Ken Burns cut'}
+                    </div>
+                  ) : null}
                   {scene.generationError ? <p className="muted">{scene.generationError}</p> : null}
+                  {scene.videoGenerationError ? <p className="muted">{scene.videoGenerationError}</p> : null}
                   <div className="card-actions">
                     <button
                       className="btn btn-primary"

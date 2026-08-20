@@ -67,7 +67,7 @@ export async function generateSceneVideo(projectId: string, sceneId: string, for
 
     console.log(`[video] queued scene ${sceneId} on project ${projectId}`);
     void executeSceneVideoGeneration(projectId, sceneId).catch((error) => {
-      console.error(`[video] unhandled failure for ${projectId}/${sceneId}`, error);
+      console.error(`[video] unhandled failure for ${projectId}/${sceneId}: ${errorText(error)}`);
     });
 
     return { project: await getProjectOrThrow(projectId), demo: false, started: true };
@@ -134,9 +134,9 @@ async function executeSceneVideoGeneration(projectId: string, sceneId: string): 
       `[video] complete scene ${sceneId} on project ${projectId} in ${Math.round((Date.now() - startedAt) / 1000)}s`,
     );
   } catch (error) {
+    const message = errorText(error);
     console.error(
-      `[video] failed scene ${sceneId} on project ${projectId} after ${Math.round((Date.now() - startedAt) / 1000)}s:`,
-      error instanceof Error ? error.message : error,
+      `[video] failed scene ${sceneId} on project ${projectId} after ${Math.round((Date.now() - startedAt) / 1000)}s: ${message}`,
     );
     await updateProjectDocument(projectId, (latest) =>
       replaceScenes(

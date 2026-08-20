@@ -31,26 +31,32 @@ export function buildSceneVideoPrompt(input: SceneImagePromptInput): {
   prompt: string;
   negativePrompt: string;
 } {
-  const { style, bible, scene } = input;
+  const { style, scene } = input;
   const motionHint = motionLanguageForVideo(scene.suggestedMotion, scene.cameraIntent);
-  const imagePrompt = buildSceneImagePrompt(input);
+  const imageNegative = buildSceneImagePrompt(input).negativePrompt;
 
   const prompt = [
-    imagePrompt.prompt,
-    'Animate this exact still frame with subtle in-place motion only.',
+    `${style.name} music video clip.`,
+    `Scene: ${scene.title}. ${scene.description}`,
+    `Frozen moment: ${scene.action}.`,
     motionHint,
-    'Keep the same composition, characters, costumes, and environment. No new shots, no scene changes, no walking into new rooms.',
-    'Add natural micro-movement: breathing, fabric sway, steam, light flicker, hair drift, gentle environmental motion.',
+    'Subtle in-place motion only. Same frame, same characters, same environment.',
+    'Natural micro-movement: fabric sway, steam, light flicker, hair drift, breathing.',
+    scene.imagePrompt ? `Notes: ${scene.imagePrompt}` : '',
   ]
     .filter(Boolean)
-    .join('\n');
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 2000);
 
   const negativePrompt = [
-    imagePrompt.negativePrompt,
+    imageNegative,
     'face morphing, identity change, extra limbs, new characters, scene change, cut, zoom to different location, on-screen text, subtitles, watermark, logo',
   ]
     .filter(Boolean)
-    .join(', ');
+    .join(', ')
+    .slice(0, 1000);
 
   return { prompt, negativePrompt };
 }

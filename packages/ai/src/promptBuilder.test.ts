@@ -135,11 +135,12 @@ describe('buildSceneImagePrompt', () => {
 describe('buildSceneVideoPrompt', () => {
   it('adds in-place motion language and forbids new shots', () => {
     const { prompt, negativePrompt } = buildSceneVideoPrompt({ style, bible, scene });
-    expect(prompt).toContain('subtle in-place motion');
-    expect(prompt).toContain('Same character design');
+    expect(prompt).toContain('Subtle in-place motion only');
     expect(prompt).toContain('slow push-in');
+    expect(prompt).toContain('Scene: Slip');
     expect(negativePrompt).toContain('scene change');
     expect(negativePrompt).toContain('face morphing');
+    expect(prompt.length).toBeLessThanOrEqual(2000);
   });
 });
 

@@ -85,4 +85,15 @@ describe('errorText', () => {
     const error = Object.assign(new Error('Character failed'), { details: 'rate limit' });
     expect(errorText(error)).toContain('rate limit');
   });
+
+  it('formats fal validation bodies', () => {
+    expect(
+      errorText({
+        status: 422,
+        body: {
+          detail: [{ msg: 'prompt too long', type: 'value_error' }],
+        },
+      }),
+    ).toBe('prompt too long');
+  });
 });
