@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  contentPolicyHint,
   errorText,
+  findRiskyPromptTerms,
   isContentPolicyError,
   isPermanentProviderError,
   isRetryableProviderError,
@@ -46,6 +48,26 @@ describe('isContentPolicyError', () => {
       ),
     ).toBe(true);
     expect(isContentPolicyError(new Error('timeout'))).toBe(false);
+  });
+});
+
+describe('findRiskyPromptTerms', () => {
+  it('flags common unsafe wording', () => {
+    expect(findRiskyPromptTerms('hair smoking over burnt bränskrot')).toEqual([
+      'smoking/smoke/charred',
+    ]);
+    expect(findRiskyPromptTerms('a kid with a gun')).toEqual([
+      'child/minor terms',
+      'violence/weapons',
+    ]);
+  });
+});
+
+describe('contentPolicyHint', () => {
+  it('includes trigger labels and a prompt excerpt', () => {
+    const hint = contentPolicyHint('Captain hair smoking near burnt food');
+    expect(hint).toContain('smoking/smoke/charred');
+    expect(hint).toContain('Prompt excerpt:');
   });
 });
 

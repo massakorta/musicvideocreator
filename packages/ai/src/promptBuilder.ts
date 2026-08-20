@@ -5,7 +5,7 @@ import type {
   VisualBible,
   VisualStylePreset,
 } from '@music-video/shared';
-import { styleRenderMode, normalizeMotionPreset, type StyleRenderMode } from '@music-video/shared';
+import { softenSceneTextForSafety, styleRenderMode, normalizeMotionPreset, type StyleRenderMode } from '@music-video/shared';
 
 export interface SceneImagePromptInput {
   style: VisualStylePreset;
@@ -140,7 +140,8 @@ export function buildSceneImagePrompt(input: SceneImagePromptInput): {
   prompt: string;
   negativePrompt: string;
 } {
-  const { style, bible, scene } = input;
+  const { style, bible } = input;
+  const scene = softenSceneFields(input.scene);
   const renderMode = styleRenderMode(style);
   const characters = scene.characters
     .map((id) => bible.characters.find((c) => c.id === id))
@@ -148,10 +149,10 @@ export function buildSceneImagePrompt(input: SceneImagePromptInput): {
   const environment = bible.environments.find((e) => e.id === scene.environmentId);
 
   const characterBlock = characters
-    .map((c) => characterContinuityBlock(c))
+    .map((c) => characterContinuityBlock(softenCharacter(c)))
     .join('\n');
 
-  const environmentBlock = environment ? environmentContinuityBlock(environment) : 'No specific location locked.';
+  const environmentBlock = environment ? environmentContinuityBlock(softenEnvironment(environment)) : 'No specific location locked.';
 
   const palette = bible.colorPalette.map((c) => `${c.name} (${c.hex}) for ${c.usage}`).join('; ');
 
@@ -169,7 +170,7 @@ export function buildSceneImagePrompt(input: SceneImagePromptInput): {
     `Camera: ${scene.shotType}, ${scene.cameraIntent}. ${frameLine}`,
     `User image prompt notes: ${scene.imagePrompt}`,
     input.extraInstructions ?? '',
-    `Continuity rules: ${bible.continuityRules.join(' ')}`,
+    `Continuity rules: ${bible.continuityRules.map((rule) => softenSceneTextForSafety(rule)).join(' ')}`,
     `Color palette: ${palette}.`,
     'Single still image. No collage. No panels. No text, letters, captions, speech bubbles, watermarks, or logos.',
   ]
@@ -186,6 +187,55 @@ export function buildSceneImagePrompt(input: SceneImagePromptInput): {
     .join(', ');
 
   return { prompt, negativePrompt };
+}
+
+/** Last-resort still prompt when fal rejects richer scene copy. */
+export function buildMinimalSafeSceneImagePrompt(input: SceneImagePromptInput): string {
+  const { style } = input;
+  const scene = softenSceneFields(input.scene);
+  return [
+    `${style.name}: family-friendly illustrated cartoon still.`,
+    style.promptInstructions,
+    `Scene: ${scene.title}. ${scene.description}`,
+    scene.action ? `Peak pose: ${scene.action}.` : '',
+    scene.visualComedy ? `Gag: ${scene.visualComedy}.` : '',
+    scene.imagePrompt ? `Notes: ${scene.imagePrompt}.` : '',
+    'Clearly adult cartoon characters only. Slapstick comedy. Fully clothed. No text, logos, or realistic violence.',
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 1500);
+}
+
+function softenSceneFields<T extends Pick<
+  StoryboardScene,
+  'title' | 'description' | 'action' | 'visualComedy' | 'imagePrompt' | 'cameraIntent' | 'lyricsExcerpt'
+>>(scene: T): T {
+  return {
+    ...scene,
+    title: softenSceneTextForSafety(scene.title),
+    description: softenSceneTextForSafety(scene.description),
+    action: softenSceneTextForSafety(scene.action),
+    visualComedy: scene.visualComedy ? softenSceneTextForSafety(scene.visualComedy) : scene.visualComedy,
+    imagePrompt: softenSceneTextForSafety(scene.imagePrompt),
+    cameraIntent: softenSceneTextForSafety(scene.cameraIntent),
+    lyricsExcerpt: scene.lyricsExcerpt ? softenSceneTextForSafety(scene.lyricsExcerpt) : scene.lyricsExcerpt,
+  };
+}
+
+function softenCharacter(character: CharacterDefinition): CharacterDefinition {
+  return {
+    ...character,
+    promptDescription: softenSceneTextForSafety(character.promptDescription),
+    bodyType: softenSceneTextForSafety(character.bodyType),
+    face: softenSceneTextForSafety(character.face),
+    hair: softenSceneTextForSafety(character.hair),
+    clothing: softenSceneTextForSafety(character.clothing),
+    personality: softenSceneTextForSafety(character.personality),
+    ageAppearance: character.ageAppearance ? softenSceneTextForSafety(character.ageAppearance) : character.ageAppearance,
+  };
 }
 
 export function buildCharacterReferencePrompt(
@@ -220,7 +270,7 @@ function buildStyleLock(style: VisualStylePreset, bible: VisualBible, renderMode
       : '';
   return [
     `STYLE LOCK — ${style.name}: ${style.promptInstructions}`,
-    bible.masterPrompt,
+    softenSceneTextForSafety(bible.masterPrompt),
     `Overall medium: ${bible.overallStyle.visualMedium}. Mood: ${bible.overallStyle.mood}. Rendering: ${bible.overallStyle.renderingStyle}.`,
     antiPhotoreal,
   ]
@@ -281,4 +331,17 @@ export function environmentContinuityBlock(environment: EnvironmentDefinition): 
     `Keep: ${environment.continuityFeatures.join(', ')}.`,
     'Same environment architecture, same illustration style, same palette.',
   ].join(' ');
+}
+
+function softenEnvironment(environment: EnvironmentDefinition): EnvironmentDefinition {
+  return {
+    ...environment,
+    description: softenSceneTextForSafety(environment.description),
+    promptDescription: softenSceneTextForSafety(environment.promptDescription),
+    layout: softenSceneTextForSafety(environment.layout),
+    lighting: softenSceneTextForSafety(environment.lighting),
+    materials: environment.materials.map((item) => softenSceneTextForSafety(item)),
+    importantObjects: environment.importantObjects.map((item) => softenSceneTextForSafety(item)),
+    continuityFeatures: environment.continuityFeatures.map((item) => softenSceneTextForSafety(item)),
+  };
 }

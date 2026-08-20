@@ -129,4 +129,49 @@ describe('FalImageProvider', () => {
     expect(saferPrompt).not.toBe(firstPrompt);
     expect(saferPrompt).toContain('clearly adult character');
   });
+
+  it('falls back to a minimal safe prompt after repeated content-policy refusals', async () => {
+    mockFetchImage(Buffer.from('minimal'));
+    subscribe
+      .mockRejectedValueOnce(
+        new Error('The content could not be processed because it contained material flagged by a content checker.'),
+      )
+      .mockRejectedValueOnce(
+        new Error('The content could not be processed because it contained material flagged by a content checker.'),
+      )
+      .mockResolvedValueOnce({ data: { images: [{ url: 'https://example.com/min.jpg' }] } });
+
+    const scene = {
+      id: 's1',
+      order: 1,
+      startTime: 0,
+      endTime: 3,
+      duration: 3,
+      songSection: 'verse' as const,
+      title: 'Burnt Food',
+      description: 'Captain hair smoking over burnt bränskrot.',
+      action: 'He holds a charred lump.',
+      characters: ['jens'],
+      shotType: 'medium' as const,
+      cameraIntent: 'comedy close-up',
+      visualComedy: 'Smoking hair gag.',
+      imagePrompt: 'burnt food, hair smoking',
+      suggestedMotion: 'slowZoomIn' as const,
+      motion: 'slowZoomIn' as const,
+      transitionIn: 'cut' as const,
+      transitionOut: 'cut' as const,
+      mediaType: 'image' as const,
+      previousAssetIds: [],
+      previousVideoAssetIds: [],
+      generationState: 'pending' as const,
+      videoGenerationState: 'pending' as const,
+      approved: false,
+    };
+
+    const image = await provider().generateSceneImage({ scene, bible, style });
+    expect(image.bytes.toString()).toBe('minimal');
+    expect(subscribe).toHaveBeenCalledTimes(3);
+    const thirdPrompt = subscribe.mock.calls[2]?.[1]?.input?.prompt as string;
+    expect(thirdPrompt).toContain('family-friendly illustrated cartoon still');
+  });
 });

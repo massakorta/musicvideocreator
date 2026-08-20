@@ -1,5 +1,6 @@
 import { AppError, ERROR_CODES, resolveProjectImageQualityId, type CharacterDefinition } from '@music-video/shared';
-import { characterReferenceFingerprint, errorText, sceneImageFingerprint } from '@music-video/shared';
+import { buildSceneImagePrompt } from '@music-video/ai';
+import { characterReferenceFingerprint, errorText, findRiskyPromptTerms, sceneImageFingerprint, truncateForLog } from '@music-video/shared';
 import { config } from '../config.js';
 import { placeholderSvg } from './demo.js';
 import { createImageProvider, requireFalOrDemo } from './aiService.js';
@@ -236,8 +237,43 @@ async function executeSceneImageGeneration(projectId: string, sceneId: string): 
   } catch (error) {
     const message =
       error instanceof Error && error.message.trim() ? error.message : errorText(error);
+    let promptLog = '';
+    let sceneTerms: string[] = [];
+    try {
+      const latest = await getProjectOrThrow(projectId);
+      const failedScene = latest.scenes.find((s) => s.id === sceneId);
+      if (failedScene && latest.visualBible) {
+        sceneTerms = findRiskyPromptTerms(
+          [
+            failedScene.title,
+            failedScene.description,
+            failedScene.action,
+            failedScene.visualComedy,
+            failedScene.imagePrompt,
+            failedScene.lyricsExcerpt,
+          ]
+            .filter(Boolean)
+            .join(' '),
+        );
+        const style = styleOrThrow(latest.styleId);
+        const refs = referenceUrls(latest.visualBible.characters, failedScene.characters);
+        const { prompt } = buildSceneImagePrompt({
+          style,
+          bible: latest.visualBible,
+          scene: failedScene,
+          extraInstructions: refs.length
+            ? `Match locked character reference sheets for: ${refs.map((ref) => ref.characterId).join(', ')}.`
+            : undefined,
+        });
+        promptLog = truncateForLog(prompt, 500);
+      }
+    } catch {
+      // best-effort debug logging only
+    }
     console.error(
-      `[image] failed scene ${sceneId} on project ${projectId} after ${Math.round((Date.now() - startedAt) / 1000)}s: ${message}`,
+      `[image] failed scene ${sceneId} on project ${projectId} after ${Math.round((Date.now() - startedAt) / 1000)}s: ${message}${
+        sceneTerms.length ? ` | scene triggers: ${sceneTerms.join(', ')}` : ''
+      }${promptLog ? ` | prompt: ${promptLog}` : ''}`,
     );
     await updateProjectDocument(projectId, (latest) =>
       replaceScenes(

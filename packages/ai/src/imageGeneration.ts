@@ -1,7 +1,9 @@
 import type { CharacterDefinition, GeneratedAsset, ImageQualityPreset, VisualBible, VisualStylePreset } from '@music-video/shared';
 import type { StoryboardScene } from '@music-video/shared';
 import {
+  contentPolicyHint,
   errorText,
+  findRiskyPromptTerms,
   isBillingOrQuotaError,
   isContentPolicyError,
   isRetryableProviderError,
@@ -9,10 +11,16 @@ import {
   providerRetryDelayMs,
   sanitizeImagePromptForSafety,
   sleep,
+  truncateForLog,
 } from '@music-video/shared';
 import { fal } from '@fal-ai/client';
 import { ensureFalConfigured } from './falClient.js';
-import { buildCharacterImageNegative, buildCharacterReferencePrompt, buildSceneImagePrompt } from './promptBuilder.js';
+import {
+  buildCharacterImageNegative,
+  buildCharacterReferencePrompt,
+  buildMinimalSafeSceneImagePrompt,
+  buildSceneImagePrompt,
+} from './promptBuilder.js';
 
 export interface SceneImageGenerationRequest {
   scene: StoryboardScene;
@@ -81,39 +89,55 @@ export class FalImageProvider implements ImageGenerationProvider {
   }
 
   async generateSceneImage(request: SceneImageGenerationRequest): Promise<GeneratedImageBytes> {
-    const { prompt, negativePrompt } = buildSceneImagePrompt({
+    const promptInput = {
       style: request.style,
       bible: request.bible,
       scene: request.scene,
       extraInstructions: referenceHint(request.referenceImages),
-    });
-    return this.generate(prompt, negativePrompt);
+    };
+    const { prompt, negativePrompt } = buildSceneImagePrompt(promptInput);
+    const minimalPrompt = buildMinimalSafeSceneImagePrompt(promptInput);
+    return this.generateWithSafetyRetries(prompt, negativePrompt, minimalPrompt);
   }
 
   async generateCharacterReference(request: CharacterReferenceRequest): Promise<GeneratedImageBytes> {
     const prompt = buildCharacterReferencePrompt(request.character, request.bible, request.style);
     const negativePrompt = buildCharacterImageNegative(request.style, request.bible);
-    return this.generate(prompt, negativePrompt);
+    return this.generateWithSafetyRetries(prompt, negativePrompt);
   }
 
-  private async generate(prompt: string, negativePrompt: string): Promise<GeneratedImageBytes> {
+  private async generateWithSafetyRetries(
+    prompt: string,
+    negativePrompt: string,
+    minimalPrompt?: string,
+  ): Promise<GeneratedImageBytes> {
     const fullPrompt = `${prompt}\nAvoid: ${negativePrompt}`.slice(0, 8000);
-    try {
-      return await this.requestImageWithRetry(fullPrompt);
-    } catch (error) {
-      if (isContentPolicyError(error)) {
-        let safer = sanitizeImagePromptForSafety(fullPrompt);
-        if (safer === fullPrompt) {
-          safer = `${fullPrompt}\nCartoon slapstick comedy only. No realistic violence, weapons, or suggestive content.`;
+    const saferPrompt = sanitizeImagePromptForSafety(fullPrompt);
+    const minimalFullPrompt = minimalPrompt
+      ? sanitizeImagePromptForSafety(`${minimalPrompt}\nAvoid: ${negativePrompt}`.slice(0, 8000))
+      : undefined;
+    const candidates = [fullPrompt, saferPrompt, minimalFullPrompt].filter(
+      (candidate, index, list): candidate is string =>
+        Boolean(candidate) && list.indexOf(candidate) === index,
+    );
+
+    let lastError: unknown;
+    let lastPrompt = fullPrompt;
+    for (let index = 0; index < candidates.length; index += 1) {
+      const candidate = candidates[index]!;
+      lastPrompt = candidate;
+      try {
+        return await this.requestImageWithRetry(candidate);
+      } catch (error) {
+        lastError = error;
+        if (!isContentPolicyError(error)) {
+          throw new Error(humanizeImageError(error, candidate));
         }
-        try {
-          return await this.requestImageWithRetry(safer);
-        } catch (saferError) {
-          throw new Error(humanizeImageError(saferError));
-        }
+        logContentPolicyAttempt(index + 1, candidates.length, candidate, error);
       }
-      throw new Error(humanizeImageError(error));
     }
+
+    throw new Error(humanizeImageError(lastError, lastPrompt));
   }
 
   private async requestImageWithRetry(fullPrompt: string, attempt = 0): Promise<GeneratedImageBytes> {
@@ -167,7 +191,19 @@ export class FalImageProvider implements ImageGenerationProvider {
   }
 }
 
-function humanizeImageError(error: unknown): string {
+function logContentPolicyAttempt(
+  attempt: number,
+  total: number,
+  prompt: string,
+  error: unknown,
+): void {
+  const terms = findRiskyPromptTerms(prompt);
+  console.warn(
+    `[fal] content policy attempt ${attempt}/${total}: ${errorText(error)} | risky terms: ${terms.join(', ') || 'none detected'} | prompt: ${truncateForLog(prompt, 500)}`,
+  );
+}
+
+function humanizeImageError(error: unknown, prompt?: string): string {
   const message = errorText(error);
   if (/timed out|timeout|ETIMEDOUT|AbortError/i.test(message)) {
     return 'The image provider took too long to respond. Try again.';
@@ -176,7 +212,8 @@ function humanizeImageError(error: unknown): string {
     return 'fal.ai image generation is blocked by billing or quota. Add credit, then retry.';
   }
   if (isContentPolicyError(error)) {
-    return 'fal.ai flagged this scene as unsafe. Edit the scene description to be more family-friendly, then retry.';
+    const hint = contentPolicyHint(prompt);
+    return `fal.ai flagged this scene as unsafe. Use Make safer in the scene editor, then retry.${hint ? ` ${hint}` : ''}`;
   }
   if (/api key|unauthorized|401|403/i.test(message)) {
     return 'fal.ai rejected the API key.';

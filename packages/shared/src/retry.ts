@@ -110,9 +110,38 @@ export function softenSceneTextForSafety(text: string): string {
     .replace(/\bblood(y)?\b/gi, 'cartoon paint splatter')
     .replace(/\b(guns?|rifle|pistol|knives|knife|weapons?|sword)\b/gi, 'cartoon prop')
     .replace(/\b(kill(?:ed|ing)?|murder(?:ed|ing)?|death|dying|corpse|dead body)\b/gi, 'comedy tumble')
-    .replace(/\b(nude|naked|nsfw|sexy|seductive|erotic)\b/gi, 'fully clothed')
+    .replace(/\b(nude|naked|nsfw|sexy|seductive|erotic|shirtless|underwear|lingerie)\b/gi, 'fully clothed')
     .replace(/\b(smoking|smoke|smoldering|charred|burnt|burned|brända|bränskrot)\b/gi, 'cartoon steam')
-    .replace(/\b(black lump|crispy black|carbonized)\b/gi, 'overcooked cartoon food');
+    .replace(/\b(black lump|crispy black|carbonized|incinerated|scorched)\b/gi, 'overcooked cartoon food')
+    .replace(/\b(drunk|drunken|intoxicated|hangover|wasted|hammered)\b/gi, 'dizzy slapstick')
+    .replace(/\b(beer|wine|vodka|whiskey|whisky|liquor|alcohol|booze)\b/gi, 'cartoon soda')
+    .replace(/\b(fire|flames?|explosion|exploding|detonat(?:e|ion|ing))\b/gi, 'cartoon warm glow');
+}
+
+const RISKY_PROMPT_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
+  { label: 'smoking/smoke/charred', pattern: /\b(smoking|smoke|smoldering|charred|burnt|burned|brända|bränskrot|scorched)\b/i },
+  { label: 'child/minor terms', pattern: /\b(children|child|kids|kid|teen|minor|underage|young boy|young girl)\b/i },
+  { label: 'violence/weapons', pattern: /\b(blood|gun|knife|weapon|kill|murder|death|corpse)\b/i },
+  { label: 'suggestive content', pattern: /\b(nude|naked|nsfw|sexy|seductive|erotic|shirtless)\b/i },
+  { label: 'alcohol/intoxication', pattern: /\b(drunk|intoxicated|beer|wine|vodka|whiskey|liquor|alcohol)\b/i },
+  { label: 'fire/explosion', pattern: /\b(fire|flames?|explosion|exploding|detonat)\b/i },
+];
+
+export function findRiskyPromptTerms(text: string): string[] {
+  return RISKY_PROMPT_PATTERNS.filter(({ pattern }) => pattern.test(text)).map(({ label }) => label);
+}
+
+export function truncateForLog(text: string, max = 400): string {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= max) return normalized;
+  return `${normalized.slice(0, max - 1)}…`;
+}
+
+export function contentPolicyHint(prompt?: string): string {
+  const terms = prompt ? findRiskyPromptTerms(prompt) : [];
+  const termHint = terms.length > 0 ? ` Possible triggers: ${terms.join(', ')}.` : '';
+  const excerpt = prompt ? ` Prompt excerpt: "${truncateForLog(prompt, 220)}"` : '';
+  return `${termHint}${excerpt}`.trim();
 }
 
 export function sanitizeImagePromptForSafety(prompt: string): string {
