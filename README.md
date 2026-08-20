@@ -8,11 +8,11 @@ V1 does **not** generate AI video clips. Motion comes from camera moves on still
 
 ```text
 apps/web      React + Vite editor (Remotion Player preview)
-apps/api      Express API, OpenAI, storage, project persistence
+apps/api      Express API, OpenAI text, fal.ai Flux stills, storage, project persistence
 apps/worker   Polls render jobs and renders MP4s with Remotion
 
 packages/shared   Domain types, validators, motion presets
-packages/ai       Visual bible, storyboard, prompt builder, image provider
+packages/ai       Visual bible, storyboard, prompt builder, fal image provider
 packages/video    MusicVideoComposition used by preview AND final render
 ```
 
@@ -23,7 +23,7 @@ Persistence is abstracted:
 
 ## Tech stack
 
-TypeScript monorepo (npm workspaces), React, Vite, Express, Zod, OpenAI, Remotion, optional Supabase.
+TypeScript monorepo (npm workspaces), React, Vite, Express, Zod, OpenAI (text), fal.ai Flux (stills), Remotion, optional Supabase.
 
 ## Local setup
 
@@ -58,11 +58,9 @@ See `.env.example`.
 | --- | --- |
 | `APP_ACCESS_CODE` | Beta gate. Blank disables it locally. |
 | `SESSION_SECRET` | Signs the access-code session cookie. |
-| `OPENAI_API_KEY` | Live bible / storyboard / image generation. Blank = demo mode. |
+| `OPENAI_API_KEY` | Live bible / storyboard / transcription. Blank = demo text AI. |
 | `OPENAI_TEXT_MODEL` | Default `gpt-4.1` |
-| `OPENAI_IMAGE_MODEL` | Default `gpt-image-1-mini` |
-| `OPENAI_IMAGE_QUALITY` | Default `low` (faster stills; try `medium` or `high` for quality) |
-| `OPENAI_IMAGE_SIZE` | Default `1536x1024` |
+| `FAL_KEY` | Live Flux still generation via fal.ai. Blank = demo placeholder images. |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Postgres + storage. Blank = local files. |
 | `SUPABASE_STORAGE_BUCKET` | Default `music-video-assets` |
 | `MAX_AUDIO_MB` | Audio upload cap |
@@ -70,7 +68,7 @@ See `.env.example`.
 | `AI_RATE_LIMIT_PER_MINUTE` | API rate cap on AI routes (default `80`) |
 | `APP_URL` / `API_URL` | CORS and public asset URLs |
 
-Never put the OpenAI key in the browser. AI routes require the beta session when `APP_ACCESS_CODE` is set.
+Never put API keys in the browser. AI routes require the beta session when `APP_ACCESS_CODE` is set.
 
 ## Supabase setup
 
@@ -81,9 +79,13 @@ Never put the OpenAI key in the browser. AI routes require the beta session when
 
 The service role key stays server-side only.
 
-## OpenAI setup
+## AI setup
 
-Set `OPENAI_API_KEY`. Without it the app still runs: AI buttons produce structured demo bibles, storyboards, and placeholder stills, and they explain that live generation is off.
+**OpenAI** — set `OPENAI_API_KEY` for live visual bibles, storyboards, and lyric transcription. Without it the app still runs with structured demo bibles and storyboards you can edit.
+
+**fal.ai** — set `FAL_KEY` for live Flux stills (character sheets and scene images). Quality tiers map to Flux Schnell → Dev → Flux 2 → Flux 2 Pro. Without it, stills use SVG placeholders.
+
+Text and images are independent: you can have live stills with demo bibles, or vice versa.
 
 ## Running locally
 
@@ -149,8 +151,8 @@ supabase/migrations
 ## Known V1 limitations
 
 - Still images only; no generated video clips.
-- Character continuity uses locked descriptions (and prompt hints). Native reference-image conditioning depends on the configured OpenAI image model.
-- Demo placeholders are used when OpenAI is not configured.
+- Character continuity uses locked descriptions and prompt hints (reference-image conditioning is a future enhancement).
+- Demo placeholders are used when `FAL_KEY` is not configured.
 - Local file storage is single-node. Use Supabase for multi-service deploys.
 - Karaoke/captions are not rendered (`captionsEnabled` is reserved).
 - Format is 16:9 1920×1080; other aspect ratios are modeled but not a first-class editor yet.

@@ -5,7 +5,6 @@ import type { ZodType } from 'zod';
 export interface OpenAiConfig {
   apiKey: string;
   textModel: string;
-  imageModel: string;
   timeoutMs?: number;
 }
 

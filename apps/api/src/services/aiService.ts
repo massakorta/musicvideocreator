@@ -1,6 +1,6 @@
-import { createOpenAiClient, generateStoryboard, generateVisualBible, isOpenAiConfigured, OpenAiImageProvider } from '@music-video/ai';
+import { createOpenAiClient, FalImageProvider, generateStoryboard, generateVisualBible, isOpenAiConfigured } from '@music-video/ai';
 import { AppError, ERROR_CODES, getImageQuality, visualBibleSchema, type AiUsageLog, type ImageQualityId, type VisualBible } from '@music-video/shared';
-import { config, openaiConfigured } from '../config.js';
+import { config, falConfigured, openaiConfigured } from '../config.js';
 import { getRepositories } from '../repositories/index.js';
 import { demoStoryboard, demoVisualBible } from './demo.js';
 import { ensureTranscribedLyrics } from './lyricSync.js';
@@ -9,6 +9,10 @@ import { newId, nowIso, touch } from './projectUtils.js';
 
 export function requireOpenAiOrDemo(): 'live' | 'demo' {
   return openaiConfigured() && isOpenAiConfigured(config.openaiApiKey) ? 'live' : 'demo';
+}
+
+export function requireFalOrDemo(): 'live' | 'demo' {
+  return falConfigured() ? 'live' : 'demo';
 }
 
 export async function generateProjectVisualBible(projectId: string): Promise<{ project: Awaited<ReturnType<typeof getProjectOrThrow>>; demo: boolean }> {
@@ -32,7 +36,6 @@ export async function generateProjectVisualBible(projectId: string): Promise<{ p
     const client = createOpenAiClient({
       apiKey: config.openaiApiKey,
       textModel: config.openaiTextModel,
-      imageModel: config.openaiImageModel,
     });
     const { bible, usage } = await generateVisualBible({
       client,
@@ -100,7 +103,6 @@ export async function generateProjectStoryboard(projectId: string) {
     const client = createOpenAiClient({
       apiKey: config.openaiApiKey,
       textModel: config.openaiTextModel,
-      imageModel: config.openaiImageModel,
     });
     const { scenes, usage } = await generateStoryboard({
       client,
@@ -121,20 +123,12 @@ export async function generateProjectStoryboard(projectId: string) {
   }
 }
 
-export function createImageProvider(imageQualityId?: ImageQualityId): OpenAiImageProvider | null {
-  if (!openaiConfigured()) return null;
+export function createImageProvider(imageQualityId?: ImageQualityId): FalImageProvider | null {
+  if (!falConfigured()) return null;
   const preset = getImageQuality(imageQualityId);
-  const client = createOpenAiClient({
-    apiKey: config.openaiApiKey,
-    textModel: config.openaiTextModel,
-    imageModel: preset.model,
-    timeoutMs: 180_000,
-  });
-  return new OpenAiImageProvider(client, preset.model, {
-    defaultSize: config.openaiImageSize,
-    quality: preset.quality,
-    outputFormat: 'jpeg',
+  return new FalImageProvider(preset, {
     requestTimeoutMs: 180_000,
+    credentials: config.falKey,
   });
 }
 

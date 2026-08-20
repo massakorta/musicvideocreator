@@ -10,6 +10,7 @@ const url = process.env.SUPABASE_URL ?? '';
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
 const bucket = process.env.SUPABASE_STORAGE_BUCKET ?? 'music-video-assets';
 const openaiKey = process.env.OPENAI_API_KEY ?? '';
+const falKey = process.env.FAL_KEY ?? '';
 
 const results = [];
 
@@ -27,6 +28,11 @@ results.push({
   check: 'OPENAI_API_KEY set',
   ok: openaiKey.startsWith('sk-'),
   detail: openaiKey ? 'present' : 'missing',
+});
+results.push({
+  check: 'FAL_KEY set',
+  ok: falKey.length > 10,
+  detail: falKey ? 'present' : 'missing',
 });
 
 if (!url || !key) {
@@ -79,6 +85,26 @@ if (openaiKey.startsWith('sk-')) {
     });
   } catch (e) {
     results.push({ check: 'OpenAI API key', ok: false, detail: String(e) });
+  }
+}
+
+if (falKey.length > 10) {
+  try {
+    const res = await fetch('https://fal.run/fal-ai/flux/schnell', {
+      method: 'POST',
+      headers: {
+        Authorization: `Key ${falKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ prompt: 'health check', num_images: 1 }),
+    });
+    results.push({
+      check: 'fal.ai API key',
+      ok: res.status !== 401 && res.status !== 403,
+      detail: res.status === 401 || res.status === 403 ? 'unauthorized' : `HTTP ${res.status}`,
+    });
+  } catch (e) {
+    results.push({ check: 'fal.ai API key', ok: false, detail: String(e) });
   }
 }
 

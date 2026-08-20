@@ -1,13 +1,27 @@
 export type ImageQualityId = 'low-fast' | 'good' | 'high' | 'highest';
 
+export type FalImageSize =
+  | 'landscape_16_9'
+  | 'landscape_4_3'
+  | 'portrait_16_9'
+  | 'portrait_4_3'
+  | 'square_hd'
+  | 'square'
+  | { width: number; height: number };
+
+export interface FalImageOptions {
+  image_size?: FalImageSize;
+  num_inference_steps?: number;
+  acceleration?: 'none' | 'regular' | 'high';
+}
+
 export interface ImageQualityPreset {
   id: ImageQualityId;
   name: string;
   description: string;
-  /** Hidden from UI — OpenAI model id */
-  model: string;
-  /** Hidden from UI — OpenAI quality param */
-  quality: 'low' | 'medium' | 'high';
+  /** fal.ai model endpoint id */
+  falEndpoint: string;
+  falOptions: FalImageOptions;
   /** Expected seconds per still for wait cards and pipeline ETAs */
   expectedSecondsPerStill: number;
   accent: string;
@@ -19,9 +33,13 @@ export const IMAGE_QUALITY_PRESETS: ImageQualityPreset[] = [
     id: 'low-fast',
     name: 'Low but Fast',
     description: 'Draft stills. Cheapest and quickest — great for exploring ideas.',
-    model: 'gpt-image-1-mini',
-    quality: 'low',
-    expectedSecondsPerStill: 8,
+    falEndpoint: 'fal-ai/flux/schnell',
+    falOptions: {
+      image_size: 'landscape_16_9',
+      num_inference_steps: 4,
+      acceleration: 'high',
+    },
+    expectedSecondsPerStill: 2,
     accent: '#7BA17D',
     secondary: '#4A7C8A',
   },
@@ -29,9 +47,12 @@ export const IMAGE_QUALITY_PRESETS: ImageQualityPreset[] = [
     id: 'good',
     name: 'Good quality',
     description: 'Clearer stills with more detail, still reasonably quick.',
-    model: 'gpt-image-1',
-    quality: 'high',
-    expectedSecondsPerStill: 18,
+    falEndpoint: 'fal-ai/flux/dev',
+    falOptions: {
+      image_size: 'landscape_16_9',
+      num_inference_steps: 28,
+    },
+    expectedSecondsPerStill: 5,
     accent: '#C9A36A',
     secondary: '#6B8E9E',
   },
@@ -39,9 +60,11 @@ export const IMAGE_QUALITY_PRESETS: ImageQualityPreset[] = [
     id: 'high',
     name: 'High quality',
     description: 'Sharper, more faithful stills for polished scenes.',
-    model: 'gpt-image-1.5',
-    quality: 'high',
-    expectedSecondsPerStill: 22,
+    falEndpoint: 'fal-ai/flux-2',
+    falOptions: {
+      image_size: { width: 1536, height: 1024 },
+    },
+    expectedSecondsPerStill: 8,
     accent: '#E8B86D',
     secondary: '#8B6F47',
   },
@@ -49,9 +72,11 @@ export const IMAGE_QUALITY_PRESETS: ImageQualityPreset[] = [
     id: 'highest',
     name: 'Highest quality',
     description: 'Best detail and prompt following — slowest and most expensive.',
-    model: 'gpt-image-2',
-    quality: 'high',
-    expectedSecondsPerStill: 35,
+    falEndpoint: 'fal-ai/flux-2-pro',
+    falOptions: {
+      image_size: { width: 1536, height: 1024 },
+    },
+    expectedSecondsPerStill: 12,
     accent: '#D4A574',
     secondary: '#5C4A6E',
   },

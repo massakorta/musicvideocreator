@@ -26,12 +26,8 @@ projects:
                 sync: false
               - key: OPENAI_TEXT_MODEL
                 value: gpt-4.1
-              - key: OPENAI_IMAGE_MODEL
-                value: gpt-image-1-mini
-              - key: OPENAI_IMAGE_QUALITY
-                value: low
-              - key: OPENAI_IMAGE_SIZE
-                value: 1536x1024
+              - key: FAL_KEY
+                sync: false
               - key: SUPABASE_URL
                 sync: false
               - key: SUPABASE_SERVICE_ROLE_KEY
@@ -64,12 +60,11 @@ projects:
                   envVarKey: SESSION_SECRET
               - key: OPENAI_API_KEY
                 sync: false
-              - key: OPENAI_IMAGE_MODEL
-                value: gpt-image-1-mini
-              - key: OPENAI_IMAGE_QUALITY
-                value: low
-              - key: OPENAI_IMAGE_SIZE
-                value: 1536x1024
+              - key: FAL_KEY
+                fromService:
+                  name: music-video-api
+                  type: web
+                  envVarKey: FAL_KEY
               - key: IMAGE_GENERATION_CONCURRENCY
                 value: "1"
               - key: REMOTION_CONCURRENCY

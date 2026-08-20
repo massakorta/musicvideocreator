@@ -2,7 +2,7 @@ import { AppError, ERROR_CODES, resolveProjectImageQualityId, type CharacterDefi
 import { characterReferenceFingerprint, errorText, sceneImageFingerprint } from '@music-video/shared';
 import { config } from '../config.js';
 import { placeholderSvg } from './demo.js';
-import { createImageProvider, requireOpenAiOrDemo } from './aiService.js';
+import { createImageProvider, requireFalOrDemo } from './aiService.js';
 import {
   attachAssetToScene,
   getProjectOrThrow,
@@ -32,7 +32,7 @@ export async function generateCharacterReference(projectId: string, characterId:
   let mimeType = 'image/svg+xml';
   let source: 'ai' | 'demo' = 'demo';
 
-  if (provider && requireOpenAiOrDemo() === 'live') {
+  if (provider && requireFalOrDemo() === 'live') {
     try {
       const image = await provider.generateCharacterReference({
         character,
@@ -142,7 +142,7 @@ export async function generateSceneImage(projectId: string, sceneId: string, for
     let body: Buffer;
     let mimeType = 'image/svg+xml';
     let source: 'ai' | 'demo' = 'demo';
-    if (provider && requireOpenAiOrDemo() === 'live') {
+    if (provider && requireFalOrDemo() === 'live') {
       const refs = referenceUrls(project.visualBible!.characters, scene.characters);
       const image = await provider.generateSceneImage({
         scene,

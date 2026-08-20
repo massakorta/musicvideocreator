@@ -196,8 +196,12 @@ export interface CreateProjectInput {
 
 export interface AccessSession {
   authenticated: boolean;
+  /** True when OpenAI text generation is unavailable (demo bible/storyboard). */
   demoMode: boolean;
   openaiConfigured: boolean;
+  falConfigured: boolean;
+  /** True when fal.ai still generation is unavailable (demo placeholders). */
+  imagesDemoMode: boolean;
   supabaseConfigured: boolean;
 }
 

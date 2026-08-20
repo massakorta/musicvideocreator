@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { accessCodeBodySchema } from '@music-video/shared';
-import { accessGateEnabled, openaiConfigured, supabaseConfigured } from '../config.js';
+import { accessGateEnabled, falConfigured, openaiConfigured, supabaseConfigured } from '../config.js';
 import {
   clearSessionCookie,
   createSessionToken,
@@ -24,6 +24,8 @@ authRouter.get(
       accessRequired: gated,
       demoMode: !openaiConfigured(),
       openaiConfigured: openaiConfigured(),
+      falConfigured: falConfigured(),
+      imagesDemoMode: !falConfigured(),
       supabaseConfigured: supabaseConfigured(),
     });
   }),

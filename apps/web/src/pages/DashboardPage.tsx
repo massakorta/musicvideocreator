@@ -59,9 +59,9 @@ export function DashboardPage({ onLogout }: { onLogout: () => void }) {
         </div>
       </header>
       <div className="page">
-        {session.demoMode ? (
+        {session.imagesDemoMode ? (
           <div className="banner warning">
-            Live image generation is off. You can still walk the full editor with demo stills.
+            Live image generation is off. Set FAL_KEY on the API to generate Flux stills, or walk the editor with demo placeholders.
           </div>
         ) : null}
         {error ? <div className="banner error">{error}</div> : null}

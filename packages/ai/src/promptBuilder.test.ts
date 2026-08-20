@@ -94,6 +94,11 @@ describe('buildSceneImagePrompt', () => {
     expect(prompt).toContain('Ken Burns');
     expect(negativePrompt).toContain('photorealism');
   });
+
+  it('leads with the frozen visual moment for Flux', () => {
+    const { prompt } = buildSceneImagePrompt({ style, bible, scene });
+    expect(prompt.startsWith('Frozen visual moment: Jens frozen mid-slip')).toBe(true);
+  });
 });
 
 describe('buildCharacterReferencePrompt', () => {

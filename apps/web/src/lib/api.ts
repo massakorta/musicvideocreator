@@ -64,6 +64,8 @@ export const api = {
       accessRequired: boolean;
       demoMode: boolean;
       openaiConfigured: boolean;
+      falConfigured: boolean;
+      imagesDemoMode: boolean;
       supabaseConfigured: boolean;
     }>('/api/auth/session'),
   access: (code: string) => request('/api/auth/access', { method: 'POST', body: JSON.stringify({ code }) }),

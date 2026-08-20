@@ -34,6 +34,8 @@ export function App() {
         accessRequired: data.accessRequired,
         demoMode: data.demoMode,
         openaiConfigured: data.openaiConfigured,
+        falConfigured: data.falConfigured,
+        imagesDemoMode: data.imagesDemoMode,
         supabaseConfigured: data.supabaseConfigured,
       });
     } catch {

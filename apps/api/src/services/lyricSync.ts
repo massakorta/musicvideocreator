@@ -102,7 +102,6 @@ async function transcribeProjectAudio(project: MusicVideoProject) {
   const client = createOpenAiClient({
     apiKey: config.openaiApiKey,
     textModel: config.openaiTextModel,
-    imageModel: config.openaiImageModel,
   });
   return transcribeAudioWords(client, prepared.buffer, prepared.filename);
 }

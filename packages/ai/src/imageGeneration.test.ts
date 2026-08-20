@@ -1,6 +1,19 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { CharacterDefinition, VisualBible, VisualStylePreset } from '@music-video/shared';
-import { OpenAiImageProvider } from './imageGeneration.js';
+import { IMAGE_QUALITY_PRESETS } from '@music-video/shared';
+
+const { subscribe } = vi.hoisted(() => ({
+  subscribe: vi.fn(),
+}));
+
+vi.mock('@fal-ai/client', () => ({
+  fal: {
+    config: vi.fn(),
+    subscribe,
+  },
+}));
+
+import { FalImageProvider } from './imageGeneration.js';
 
 const style: VisualStylePreset = {
   id: 'cartoon-slapstick',
@@ -47,35 +60,48 @@ const bible: VisualBible = {
   masterPrompt: 'A hand-painted cartoon music video world.',
 };
 
-function provider(generate: ReturnType<typeof vi.fn>) {
-  return new OpenAiImageProvider({ images: { generate } } as never, 'gpt-image-1-mini', {
+function mockFetchImage(bytes: Buffer) {
+  global.fetch = vi.fn().mockResolvedValue({
+    ok: true,
+    headers: { get: () => 'image/jpeg' },
+    arrayBuffer: async () => bytes,
+  }) as typeof fetch;
+}
+
+function provider() {
+  return new FalImageProvider(IMAGE_QUALITY_PRESETS[0]!, {
     retryDelayMs: () => 0,
   });
 }
 
-describe('OpenAiImageProvider', () => {
-  it('retries a rate limit and then succeeds', async () => {
-    const generate = vi
-      .fn()
-      .mockRejectedValueOnce({ status: 429, message: 'Rate limit exceeded' })
-      .mockResolvedValueOnce({ data: [{ b64_json: Buffer.from('ok').toString('base64') }] });
+describe('FalImageProvider', () => {
+  beforeEach(() => {
+    subscribe.mockReset();
+    vi.restoreAllMocks();
+  });
 
-    const image = await provider(generate).generateCharacterReference({ character, bible, style });
+  it('retries a rate limit and then succeeds', async () => {
+    mockFetchImage(Buffer.from('ok'));
+    subscribe
+      .mockRejectedValueOnce({ status: 429, message: 'Rate limit exceeded' })
+      .mockResolvedValueOnce({ data: { images: [{ url: 'https://example.com/a.jpg' }] } });
+
+    const image = await provider().generateCharacterReference({ character, bible, style });
     expect(image.bytes.toString()).toBe('ok');
-    expect(generate).toHaveBeenCalledTimes(2);
+    expect(subscribe).toHaveBeenCalledTimes(2);
   });
 
   it('retries a content-policy refusal with a safer prompt', async () => {
-    const generate = vi
-      .fn()
-      .mockRejectedValueOnce({ error: { message: 'Your request was rejected as a result of our safety system' } })
-      .mockResolvedValueOnce({ data: [{ b64_json: Buffer.from('safe').toString('base64') }] });
+    mockFetchImage(Buffer.from('safe'));
+    subscribe
+      .mockRejectedValueOnce({ message: 'Your request was rejected as a result of our safety system' })
+      .mockResolvedValueOnce({ data: { images: [{ url: 'https://example.com/b.jpg' }] } });
 
-    const image = await provider(generate).generateCharacterReference({ character, bible, style });
+    const image = await provider().generateCharacterReference({ character, bible, style });
     expect(image.bytes.toString()).toBe('safe');
-    expect(generate).toHaveBeenCalledTimes(2);
-    const firstPrompt = generate.mock.calls[0]?.[0]?.prompt as string;
-    const saferPrompt = generate.mock.calls[1]?.[0]?.prompt as string;
+    expect(subscribe).toHaveBeenCalledTimes(2);
+    const firstPrompt = subscribe.mock.calls[0]?.[1]?.input?.prompt as string;
+    const saferPrompt = subscribe.mock.calls[1]?.[1]?.input?.prompt as string;
     expect(saferPrompt).not.toBe(firstPrompt);
     expect(saferPrompt).toContain('clearly adult character');
   });

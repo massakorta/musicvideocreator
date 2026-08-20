@@ -43,21 +43,22 @@ export function buildSceneImagePrompt(input: SceneImagePromptInput): {
 
   const palette = bible.colorPalette.map((c) => `${c.name} (${c.hex}) for ${c.usage}`).join('; ');
 
+  // Flux follows the start of the prompt best — lead with the frozen moment, cast, and style.
   const prompt = [
-    bible.masterPrompt,
-    `Visual style preset: ${style.name}. ${style.promptInstructions}`,
-    `Overall medium: ${bible.overallStyle.visualMedium}. Mood: ${bible.overallStyle.mood}. Rendering: ${bible.overallStyle.renderingStyle}.`,
-    `Continuity rules: ${bible.continuityRules.join(' ')}`,
-    `Color palette: ${palette}.`,
-    environmentBlock,
-    characterBlock || 'No named characters in this frame.',
-    `Scene title: ${scene.title}.`,
     `Frozen visual moment: ${scene.description}`,
     `Action freeze: ${scene.action}`,
+    `Scene title: ${scene.title}.`,
+    characterBlock || 'No named characters in this frame.',
+    environmentBlock,
+    `Visual style preset: ${style.name}. ${style.promptInstructions}`,
+    `Overall medium: ${bible.overallStyle.visualMedium}. Mood: ${bible.overallStyle.mood}. Rendering: ${bible.overallStyle.renderingStyle}.`,
     scene.visualComedy ? `Visual gag: ${scene.visualComedy}` : '',
     `Camera: ${scene.shotType}, ${scene.cameraIntent}. 16:9 cinematic still, subject has breathing room on all sides so a Ken Burns zoom will not crop faces. Slightly wider composition than a tight poster crop.`,
     `User image prompt notes: ${scene.imagePrompt}`,
     input.extraInstructions ?? '',
+    bible.masterPrompt,
+    `Continuity rules: ${bible.continuityRules.join(' ')}`,
+    `Color palette: ${palette}.`,
     'Single still image. No collage. No panels. No text, letters, captions, speech bubbles, watermarks, or logos.',
   ]
     .filter(Boolean)
@@ -80,11 +81,11 @@ export function buildCharacterReferencePrompt(
   style: VisualStylePreset,
 ): string {
   return [
-    bible.masterPrompt,
-    style.promptInstructions,
-    'Character reference sheet, single clearly adult character, full body, standing in a neutral three-quarter pose, clear readable face, costume fully visible, plain or softly lit backdrop, 16:9.',
     characterContinuityBlock(character),
     `Personality readable in posture: ${character.personality}.`,
+    style.promptInstructions,
+    'Character reference sheet, single clearly adult character, full body, standing in a neutral three-quarter pose, clear readable face, costume fully visible, plain or softly lit backdrop, 16:9.',
+    bible.masterPrompt,
     'Family-friendly illustrated cartoon. No other characters. No text. No labels. No turnaround grid unless it stays one cohesive image.',
   ].join('\n');
 }

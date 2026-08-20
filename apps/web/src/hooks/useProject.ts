@@ -10,7 +10,7 @@ export const SessionContext = createContext<SessionState | null>(null);
 export function useSession(): SessionState {
   const value = useContext(SessionContext);
   if (!value) {
-    return { authenticated: false, demoMode: true, openaiConfigured: false, supabaseConfigured: false, accessRequired: false };
+    return { authenticated: false, demoMode: true, openaiConfigured: false, falConfigured: false, imagesDemoMode: true, supabaseConfigured: false, accessRequired: false };
   }
   return value;
 }

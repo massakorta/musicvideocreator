@@ -1,5 +1,5 @@
 import { createApp } from './app.js';
-import { config, openaiConfigured } from './config.js';
+import { config, falConfigured, openaiConfigured } from './config.js';
 import { removeLegacyDemoProjects } from './seed/removeLegacyDemoProjects.js';
 
 const app = createApp();
@@ -7,7 +7,10 @@ const app = createApp();
 app.listen(config.apiPort, async () => {
   console.log(`API listening on ${config.apiUrl}`);
   console.log(
-    `OpenAI: ${openaiConfigured() ? 'live' : 'demo mode (set OPENAI_API_KEY and restart)'} · model ${config.openaiTextModel} / ${config.openaiImageModel}`,
+    `OpenAI text: ${openaiConfigured() ? 'live' : 'demo (set OPENAI_API_KEY)'} · model ${config.openaiTextModel}`,
+  );
+  console.log(
+    `fal.ai stills: ${falConfigured() ? 'live' : 'demo (set FAL_KEY)'} · Flux via quality presets`,
   );
   try {
     const removed = await removeLegacyDemoProjects();
