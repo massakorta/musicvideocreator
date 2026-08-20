@@ -139,7 +139,7 @@ export function ImagesPage() {
           setError(
             err instanceof ApiClientError
               ? err.message
-              : `Scene ${scene.order} could not be generated. The rest will keep going.`,
+              : `Scene ${scene.order} could not be queued. The rest will keep going.`,
           );
           await reload();
         } finally {
@@ -153,11 +153,10 @@ export function ImagesPage() {
     );
     await reload();
     if (failures > 0) {
-      setError(`${failures} still${failures === 1 ? '' : 's'} failed. Retry those cards, or generate missing again.`);
+      setError(`${failures} still${failures === 1 ? '' : 's'} could not be queued. Retry those cards, or generate missing again.`);
     }
     setBusy(false);
     setBatch({ done: 0, total: 0, title: '' });
-    setPaintingIds([]);
     setQueuedIds([]);
   }
 
@@ -174,6 +173,16 @@ export function ImagesPage() {
     if (!stillGenerating) {
       setSingleVideoTitle(null);
       setAnimatingIds([]);
+    }
+  }, [project.scenes]);
+
+  useEffect(() => {
+    const stillPainting = project.scenes.some(
+      (scene) => scene.generationState === 'generating' && !scene.currentAssetId && !scene.image,
+    );
+    if (!stillPainting) {
+      setSingleTitle(null);
+      setPaintingIds([]);
     }
   }, [project.scenes]);
 
@@ -385,6 +394,10 @@ export function ImagesPage() {
                             sceneHasStill(scene),
                           );
                           applyProjectUpdate(data.project);
+                          if (!data.started) {
+                            setSingleTitle(null);
+                            setPaintingIds([]);
+                          }
                         } catch (err) {
                           setError(
                             err instanceof ApiClientError

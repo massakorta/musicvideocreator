@@ -118,12 +118,9 @@ export async function generateSceneImage(projectId: string, sceneId: string, for
     throw new AppError(ERROR_CODES.VALIDATION, 'Approve a visual bible first.', 400);
   }
   if (scene.currentAssetId && !force) {
-    return { project, asset: scene.image, demo: scene.image?.source === 'demo' };
+    return { project, asset: scene.image, demo: scene.image?.source === 'demo', started: false };
   }
-
-  await acquireSceneImageSlot();
   if (!tryAcquireSceneGeneration(projectId, sceneId)) {
-    releaseSceneImageSlot();
     throw new AppError(
       ERROR_CODES.CONFLICT,
       'This scene is already being generated. Wait a moment, then retry.',
@@ -132,6 +129,7 @@ export async function generateSceneImage(projectId: string, sceneId: string, for
   }
 
   const style = styleOrThrow(project.styleId);
+  const useLiveProvider = requireFalOrDemo() === 'live' && Boolean(createImageProvider(resolveProjectImageQualityId(project)));
 
   try {
     await updateProjectDocument(projectId, (latest) =>
@@ -143,37 +141,76 @@ export async function generateSceneImage(projectId: string, sceneId: string, for
       ),
     );
 
-    const provider = createImageProvider(resolveProjectImageQualityId(project));
-    let body: Buffer;
-    let mimeType = 'image/svg+xml';
-    let source: 'ai' | 'demo' = 'demo';
-    if (provider && requireFalOrDemo() === 'live') {
-      const refs = referenceUrls(project.visualBible!.characters, scene.characters);
-      const image = await provider.generateSceneImage({
-        scene,
-        bible: project.visualBible!,
-        style,
-        referenceImages: refs,
+    if (useLiveProvider) {
+      console.log(`[image] queued scene ${sceneId} on project ${projectId}`);
+      void executeSceneImageGeneration(projectId, sceneId).catch((error) => {
+        console.error(`[image] unhandled failure for ${projectId}/${sceneId}: ${errorText(error)}`);
       });
-      body = image.bytes;
-      mimeType = image.mimeType;
-      source = 'ai';
-    } else {
-      body = placeholderSvg({
-        title: scene.title,
-        subtitle: `${formatTimecode(scene.startTime)} – ${formatTimecode(scene.endTime)}`,
-        accent: style.accent,
-        secondary: style.secondary,
-      });
+      return { project: await getProjectOrThrow(projectId), demo: false, started: true };
     }
+
+    const body = placeholderSvg({
+      title: scene.title,
+      subtitle: `${formatTimecode(scene.startTime)} – ${formatTimecode(scene.endTime)}`,
+      accent: style.accent,
+      secondary: style.secondary,
+    });
+    const asset = await storeGeneratedFile({
+      projectId,
+      type: 'scene_image',
+      source: 'demo',
+      filename: `${scene.id}.svg`,
+      body,
+      mimeType: 'image/svg+xml',
+      width: 1920,
+      height: 1080,
+      metadata: { sceneId },
+    });
+    let saved = await attachAssetToScene(await getProjectOrThrow(projectId), sceneId, asset);
+    saved = await saveProject(
+      touch(saved, { generatedImageQualityId: resolveProjectImageQualityId(saved) }),
+    );
+    return { project: saved, asset, demo: true, started: false };
+  } catch (error) {
+    if (useLiveProvider) releaseSceneGeneration(projectId, sceneId);
+    throw error;
+  } finally {
+    if (!useLiveProvider) releaseSceneGeneration(projectId, sceneId);
+  }
+}
+
+async function executeSceneImageGeneration(projectId: string, sceneId: string): Promise<void> {
+  const startedAt = Date.now();
+  let sceneOrder = 0;
+  await acquireSceneImageSlot();
+  try {
+    const project = await getProjectOrThrow(projectId);
+    const scene = project.scenes.find((s) => s.id === sceneId);
+    if (!scene || !project.visualBible) {
+      throw new AppError(ERROR_CODES.NOT_FOUND, 'That scene could not be found.', 404);
+    }
+    sceneOrder = scene.order;
+    const style = styleOrThrow(project.styleId);
+    const provider = createImageProvider(resolveProjectImageQualityId(project));
+    if (!provider) {
+      throw new AppError(ERROR_CODES.IMAGE_FAILED, 'Image generation requires fal.ai. Set FAL_KEY.', 502);
+    }
+
+    const refs = referenceUrls(project.visualBible.characters, scene.characters);
+    const image = await provider.generateSceneImage({
+      scene,
+      bible: project.visualBible,
+      style,
+      referenceImages: refs,
+    });
 
     const asset = await storeGeneratedFile({
       projectId,
       type: 'scene_image',
-      source,
-      filename: `${scene.id}${mimeType.includes('svg') ? '.svg' : '.png'}`,
-      body,
-      mimeType,
+      source: 'ai',
+      filename: `${scene.id}${image.mimeType.includes('svg') ? '.svg' : '.png'}`,
+      body: image.bytes,
+      mimeType: image.mimeType,
       width: 1920,
       height: 1080,
       metadata: { sceneId },
@@ -192,12 +229,15 @@ export async function generateSceneImage(projectId: string, sceneId: string, for
       saved = await getProjectOrThrow(projectId);
     }
 
-    saved = await saveProject(
-      touch(saved, { generatedImageQualityId: resolveProjectImageQualityId(saved) }),
+    await saveProject(touch(saved, { generatedImageQualityId: resolveProjectImageQualityId(saved) }));
+    console.log(
+      `[image] complete scene ${sceneId} on project ${projectId} in ${Math.round((Date.now() - startedAt) / 1000)}s`,
     );
-
-    return { project: saved, asset, demo: source === 'demo' };
   } catch (error) {
+    const message = errorText(error);
+    console.error(
+      `[image] failed scene ${sceneId} on project ${projectId} after ${Math.round((Date.now() - startedAt) / 1000)}s: ${message}`,
+    );
     await updateProjectDocument(projectId, (latest) =>
       replaceScenes(
         latest,
@@ -209,20 +249,12 @@ export async function generateSceneImage(projectId: string, sceneId: string, for
                 generationError:
                   error instanceof AppError
                     ? error.message
-                    : `Scene ${scene.order} could not be generated. The image provider returned an error.`,
+                    : `Scene ${sceneOrder || s.order} could not be generated. The image provider returned an error.`,
               }
             : s,
         ),
       ),
     ).catch(() => undefined);
-
-    if (error instanceof AppError) throw error;
-    throw new AppError(
-      ERROR_CODES.IMAGE_FAILED,
-      `Scene ${scene.order} could not be generated. The image provider returned an error.`,
-      502,
-      error instanceof Error ? error.message : undefined,
-    );
   } finally {
     releaseSceneGeneration(projectId, sceneId);
     releaseSceneImageSlot();
@@ -234,15 +266,13 @@ export async function generateMissingImages(projectId: string) {
   const missing = project.scenes.filter((s) => !s.approved && !s.currentAssetId);
   const concurrency = Math.max(1, config.imageConcurrency);
   let cursor = 0;
-  let latest = project;
   async function worker() {
     while (cursor < missing.length) {
       const index = cursor;
       cursor += 1;
       const scene = missing[index];
       if (!scene) return;
-      const result = await generateSceneImage(projectId, scene.id);
-      latest = result.project;
+      await generateSceneImage(projectId, scene.id);
     }
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, missing.length) }, () => worker()));

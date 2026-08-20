@@ -83,8 +83,8 @@ export const FIXED_IMAGE_QUALITY_ID: ImageQualityId = 'high';
 export const IMAGE_GENERATION_EXPECTED_SECONDS_PER_STILL =
   IMAGE_QUALITY_PRESETS.find((preset) => preset.id === FIXED_IMAGE_QUALITY_ID)?.expectedSecondsPerStill ?? 8;
 
-/** Max stills in flight from browser + API. Higher values overload Render with long fal requests. */
-export const IMAGE_GENERATION_CONCURRENCY = 2;
+/** How many stills the browser queues at once. Fal work runs async on the API. */
+export const IMAGE_GENERATION_CONCURRENCY = 4;
 
 const LEGACY_IMAGE_QUALITY_MAP: Record<LegacyImageQualityId, ImageQualityId> = {
   highest: 'high',
