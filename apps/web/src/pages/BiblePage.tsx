@@ -5,6 +5,7 @@ import { useProject, useSession } from '../hooks/useProject';
 import { api, ApiClientError } from '../lib/api';
 import { HealthPanel } from '../components/HealthPanel';
 import { WaitCard } from '../components/WaitCard';
+import { CharacterEditorFields } from '../components/CharacterEditorFields';
 import { useDebouncedCallback } from '../hooks/useDebouncedCallback';
 
 export function BiblePage() {
@@ -142,73 +143,17 @@ function BibleEditor() {
       <section>
         <h2>Characters</h2>
         <div className="character-grid">
-          {bible.characters.map((character, index) => (
+          {bible.characters.map((character) => (
             <article className="card" key={character.id} style={{ padding: 16 }}>
-              <div className="field">
-                <label>Name</label>
-                <input
-                  value={character.name}
-                  onChange={(e) => {
-                    const characters = bible.characters.map((c, i) => (i === index ? { ...c, name: e.target.value } : c));
-                    patch({ characters });
-                  }}
-                />
-              </div>
-              <div className="field">
-                <label>Face</label>
-                <textarea
-                  style={{ minHeight: 70 }}
-                  value={character.face}
-                  onChange={(e) => {
-                    const characters = bible.characters.map((c, i) =>
-                      i === index ? { ...c, face: e.target.value, promptDescription: e.target.value } : c,
-                    );
-                    patch({ characters });
-                  }}
-                />
-              </div>
-              <div className="field">
-                <label>Body</label>
-                <input
-                  value={character.bodyType}
-                  onChange={(e) => {
-                    const characters = bible.characters.map((c, i) => (i === index ? { ...c, bodyType: e.target.value } : c));
-                    patch({ characters });
-                  }}
-                />
-              </div>
-              <div className="field">
-                <label>Hair</label>
-                <input
-                  value={character.hair}
-                  onChange={(e) => {
-                    const characters = bible.characters.map((c, i) => (i === index ? { ...c, hair: e.target.value } : c));
-                    patch({ characters });
-                  }}
-                />
-              </div>
-              <div className="field">
-                <label>Clothes</label>
-                <input
-                  value={character.clothing}
-                  onChange={(e) => {
-                    const characters = bible.characters.map((c, i) => (i === index ? { ...c, clothing: e.target.value } : c));
-                    patch({ characters });
-                  }}
-                />
-              </div>
-              <div className="field">
-                <label>Personality</label>
-                <input
-                  value={character.personality}
-                  onChange={(e) => {
-                    const characters = bible.characters.map((c, i) =>
-                      i === index ? { ...c, personality: e.target.value } : c,
-                    );
-                    patch({ characters });
-                  }}
-                />
-              </div>
+              <CharacterEditorFields
+                character={character}
+                onChange={(next) => {
+                  const characters = bible.characters.map((entry) =>
+                    entry.id === character.id ? next : entry,
+                  );
+                  patch({ characters });
+                }}
+              />
               {character.lockedReferenceImage ? <span className="pill success">Reference locked</span> : null}
             </article>
           ))}

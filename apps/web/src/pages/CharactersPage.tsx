@@ -5,14 +5,17 @@ import { useProject } from '../hooks/useProject';
 import { api, ApiClientError } from '../lib/api';
 import { EmptyState } from '../components/EmptyState';
 import { CardWaitOverlay, WaitCard } from '../components/WaitCard';
+import { CharacterEditor } from '../components/CharacterEditor';
 
 export function CharactersPage() {
   const { project, setProject, stale } = useProject();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState({ current: 0, total: 0, name: '' });
+  const [editingId, setEditingId] = useState<string | null>(null);
   const navigate = useNavigate();
   const characters = project.visualBible?.characters ?? [];
+  const editingCharacter = characters.find((character) => character.id === editingId);
   const perStillSeconds = IMAGE_GENERATION_EXPECTED_SECONDS_PER_STILL;
 
   if (!project.visualBibleApproved) {
@@ -134,6 +137,13 @@ export function CharactersPage() {
                 )}
                 <div className="card-actions">
                   <button
+                    className="btn"
+                    disabled={Boolean(busyId)}
+                    onClick={() => setEditingId(character.id)}
+                  >
+                    Edit
+                  </button>
+                  <button
                     className="btn btn-primary"
                     disabled={Boolean(busyId)}
                     onClick={() => void generateOne(character.id, Boolean(character.lockedReferenceImage))}
@@ -169,6 +179,14 @@ export function CharactersPage() {
           </div>
         </>
       )}
+      {editingCharacter ? (
+        <CharacterEditor
+          key={editingCharacter.id}
+          character={editingCharacter}
+          onClose={() => setEditingId(null)}
+          onSaved={() => undefined}
+        />
+      ) : null}
       <button
         className="btn btn-primary"
         style={{ marginTop: 20, width: '100%' }}

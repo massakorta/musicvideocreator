@@ -693,6 +693,11 @@ h3 {
   background: #070608;
 }
 
+.card-media.scene-card-media {
+  height: auto;
+  aspect-ratio: 16 / 9;
+}
+
 .scene-card-meta {
   display: flex;
   flex-direction: column;

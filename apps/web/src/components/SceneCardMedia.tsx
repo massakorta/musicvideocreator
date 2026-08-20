@@ -6,9 +6,16 @@ type SceneCardMediaProps = {
   previewing: boolean;
   onPreviewChange: (previewing: boolean) => void;
   overlays?: ReactNode;
+  className?: string;
 };
 
-export function SceneCardMedia({ scene, previewing, onPreviewChange, overlays }: SceneCardMediaProps) {
+export function SceneCardMedia({
+  scene,
+  previewing,
+  onPreviewChange,
+  overlays,
+  className,
+}: SceneCardMediaProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const clipUrl = scene.video?.publicUrl;
 
@@ -19,7 +26,7 @@ export function SceneCardMedia({ scene, previewing, onPreviewChange, overlays }:
   }, [previewing]);
 
   return (
-    <div className="card-media">
+    <div className={className ? `card-media ${className}` : 'card-media'}>
       {previewing && clipUrl ? (
         <>
           <video

@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { motionPresetLabel, characterNames, environmentName, missingCharacterReferences } from '@music-video/shared';
+import { motionPresetLabel, characterNames, environmentName, missingCharacterReferences, sceneHasVideo } from '@music-video/shared';
 import { useProject } from '../hooks/useProject';
 import { api, ApiClientError } from '../lib/api';
 import { AudioPlayer } from '../components/AudioPlayer';
 import { HealthPanel } from '../components/HealthPanel';
 import { EmptyState } from '../components/EmptyState';
 import { WaitCard } from '../components/WaitCard';
+import { SceneCardMedia } from '../components/SceneCardMedia';
 import { formatClockShort } from '../lib/time';
 import { SceneEditor } from '../components/SceneEditor';
 
@@ -15,6 +16,7 @@ export function StoryboardPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [previewSceneId, setPreviewSceneId] = useState<string | null>(null);
   const navigate = useNavigate();
   const missingRefs = missingCharacterReferences(project.scenes, project.visualBible);
 
@@ -117,13 +119,25 @@ export function StoryboardPage() {
           />
         ) : (
           <div className="scene-list">
-            {project.scenes.map((scene) => (
+            {project.scenes.map((scene) => {
+              const hasMedia = Boolean(scene.image?.publicUrl || scene.video?.publicUrl);
+              return (
               <article className="card scene-card" key={scene.id}>
-                {scene.image?.publicUrl ? (
-                  <img className="scene-thumb" src={scene.image.publicUrl} alt={scene.title} />
-                ) : (
-                  <div className="scene-thumb" />
-                )}
+                {hasMedia ? (
+                  <SceneCardMedia
+                    scene={scene}
+                    className="scene-card-media"
+                    previewing={previewSceneId === scene.id}
+                    onPreviewChange={(previewing) => setPreviewSceneId(previewing ? scene.id : null)}
+                    overlays={
+                      sceneHasVideo(scene) ? (
+                        <div className="pill success" style={{ position: 'absolute', top: 8, right: 8 }}>
+                          Clip
+                        </div>
+                      ) : null
+                    }
+                  />
+                ) : null}
                 <div className="scene-card-meta">
                   <div className="scene-card-head">
                     <strong>
@@ -134,6 +148,7 @@ export function StoryboardPage() {
                     </span>
                   </div>
                   <div className="pill">{scene.songSection}</div>
+                  {!hasMedia ? <div className="pill faint">No still yet</div> : null}
                   {scene.lyricsExcerpt ? <p className="muted">Lyrics: “{scene.lyricsExcerpt}”</p> : null}
                   <p>{scene.description}</p>
                   <p className="muted">
@@ -142,6 +157,16 @@ export function StoryboardPage() {
                   </p>
                 </div>
                 <div className="card-actions">
+                  {sceneHasVideo(scene) && scene.video?.publicUrl ? (
+                    <button
+                      className="btn"
+                      onClick={() =>
+                        setPreviewSceneId(previewSceneId === scene.id ? null : scene.id)
+                      }
+                    >
+                      {previewSceneId === scene.id ? 'Show still' : 'Play clip'}
+                    </button>
+                  ) : null}
                   <button className="btn btn-primary" onClick={() => setSelectedId(scene.id)}>
                     Edit
                   </button>
@@ -176,7 +201,8 @@ export function StoryboardPage() {
                   </div>
                 </div>
               </article>
-            ))}
+              );
+            })}
           </div>
         )}
         <button
