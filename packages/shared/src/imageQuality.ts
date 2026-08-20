@@ -1,4 +1,9 @@
-export type ImageQualityId = 'low-fast' | 'good' | 'high' | 'highest';
+export type ImageQualityId = 'low-fast' | 'good' | 'high';
+
+/** @deprecated Stored on older projects — maps to `high`. */
+export type LegacyImageQualityId = 'highest';
+
+export type StoredImageQualityId = ImageQualityId | LegacyImageQualityId;
 
 export type FalImageSize =
   | 'landscape_16_9'
@@ -59,7 +64,7 @@ export const IMAGE_QUALITY_PRESETS: ImageQualityPreset[] = [
   {
     id: 'high',
     name: 'High quality',
-    description: 'Sharper, more faithful stills for polished scenes.',
+    description: 'Sharpest stills for final scenes — slowest and most expensive tier.',
     falEndpoint: 'fal-ai/flux-2',
     falOptions: {
       image_size: { width: 1536, height: 1024 },
@@ -68,39 +73,47 @@ export const IMAGE_QUALITY_PRESETS: ImageQualityPreset[] = [
     accent: '#E8B86D',
     secondary: '#8B6F47',
   },
-  {
-    id: 'highest',
-    name: 'Highest quality',
-    description: 'Best detail and prompt following — slowest and most expensive.',
-    falEndpoint: 'fal-ai/flux-2-pro',
-    falOptions: {
-      image_size: { width: 1536, height: 1024 },
-    },
-    expectedSecondsPerStill: 12,
-    accent: '#D4A574',
-    secondary: '#5C4A6E',
-  },
 ];
 
 export const DEFAULT_IMAGE_QUALITY_ID: ImageQualityId = 'low-fast';
 
-export function getImageQuality(id: string | undefined): ImageQualityPreset {
-  return IMAGE_QUALITY_PRESETS.find((preset) => preset.id === id) ?? IMAGE_QUALITY_PRESETS[0]!;
+const LEGACY_IMAGE_QUALITY_MAP: Record<LegacyImageQualityId, ImageQualityId> = {
+  highest: 'high',
+};
+
+export function normalizeImageQualityId(id: string | undefined): ImageQualityId {
+  if (!id) return DEFAULT_IMAGE_QUALITY_ID;
+  if (id in LEGACY_IMAGE_QUALITY_MAP) {
+    return LEGACY_IMAGE_QUALITY_MAP[id as LegacyImageQualityId];
+  }
+  if (IMAGE_QUALITY_PRESETS.some((preset) => preset.id === id)) {
+    return id as ImageQualityId;
+  }
+  return DEFAULT_IMAGE_QUALITY_ID;
 }
 
-export function resolveProjectImageQualityId(project: { imageQualityId?: ImageQualityId }): ImageQualityId {
-  return project.imageQualityId ?? DEFAULT_IMAGE_QUALITY_ID;
+export function getImageQuality(id: string | undefined): ImageQualityPreset {
+  return (
+    IMAGE_QUALITY_PRESETS.find((preset) => preset.id === normalizeImageQualityId(id)) ??
+    IMAGE_QUALITY_PRESETS[0]!
+  );
+}
+
+export function resolveProjectImageQualityId(project: {
+  imageQualityId?: StoredImageQualityId;
+}): ImageQualityId {
+  return normalizeImageQualityId(project.imageQualityId);
 }
 
 export function effectiveGeneratedImageQualityId(project: {
-  generatedImageQualityId?: ImageQualityId;
+  generatedImageQualityId?: StoredImageQualityId;
 }): ImageQualityId {
-  return project.generatedImageQualityId ?? DEFAULT_IMAGE_QUALITY_ID;
+  return normalizeImageQualityId(project.generatedImageQualityId);
 }
 
 export function imagesNeedQualityRegenerate(project: {
-  imageQualityId?: ImageQualityId;
-  generatedImageQualityId?: ImageQualityId;
+  imageQualityId?: StoredImageQualityId;
+  generatedImageQualityId?: StoredImageQualityId;
   scenes: Array<{ currentAssetId?: string; image?: unknown }>;
 }): boolean {
   const hasImages = project.scenes.some((scene) => Boolean(scene.currentAssetId || scene.image));

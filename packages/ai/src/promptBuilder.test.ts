@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { StoryboardScene, VisualBible, VisualStylePreset } from '@music-video/shared';
+import { getVisualStyle, type StoryboardScene, type VisualBible, type VisualStylePreset } from '@music-video/shared';
 import { buildCharacterReferencePrompt, buildSceneImagePrompt } from './promptBuilder.js';
 
 const style: VisualStylePreset = {
@@ -12,6 +12,8 @@ const style: VisualStylePreset = {
   accent: '#fff',
   secondary: '#000',
 };
+
+const storybook = getVisualStyle('illustrated-storybook');
 
 const bible: VisualBible = {
   projectTitle: 'Test',
@@ -95,9 +97,37 @@ describe('buildSceneImagePrompt', () => {
     expect(negativePrompt).toContain('photorealism');
   });
 
-  it('leads with the frozen visual moment for Flux', () => {
+  it('leads with the style lock so Flux keeps the chosen look', () => {
     const { prompt } = buildSceneImagePrompt({ style, bible, scene });
-    expect(prompt.startsWith('Frozen visual moment: Jens frozen mid-slip')).toBe(true);
+    expect(prompt.startsWith('STYLE LOCK — Cartoon Slapstick:')).toBe(true);
+  });
+
+  it('adds anti-photoreal negatives for illustrated storybook', () => {
+    const { prompt, negativePrompt } = buildSceneImagePrompt({
+      style: storybook,
+      bible: {
+        ...bible,
+        masterPrompt: 'A painted storybook music video world.',
+        overallStyle: {
+          visualMedium: 'Illustrated Storybook',
+          mood: 'soft watercolor warmth',
+          renderingStyle: storybook.promptInstructions,
+          cameraLanguage: 'gentle',
+          animationLanguage: 'still',
+        },
+      },
+      scene: {
+        ...scene,
+        title: 'Endless Roads',
+        description: 'Three friends laughing in the back seat of a car on an open road',
+        action: 'frozen mid-laugh',
+      },
+    });
+    expect(prompt.startsWith('STYLE LOCK — Illustrated Storybook:')).toBe(true);
+    expect(prompt).toContain('NOT a photograph');
+    expect(prompt).toContain('illustrated story frame');
+    expect(negativePrompt).toContain('photorealistic');
+    expect(negativePrompt).toContain('stock photo');
   });
 });
 
@@ -107,7 +137,7 @@ describe('buildCharacterReferencePrompt', () => {
     expect(prompt).toContain('Jens');
     expect(prompt).toContain('striped apron');
     expect(prompt).toContain('adult');
-    expect(prompt).toContain('Family-friendly');
+    expect(prompt).toContain('illustrated');
     expect(prompt).not.toMatch(/\bchild\b/i);
   });
 });

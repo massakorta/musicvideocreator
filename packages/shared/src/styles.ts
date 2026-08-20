@@ -9,6 +9,24 @@ export interface VisualStylePreset {
   secondary: string;
 }
 
+/** How strictly the image model must avoid photoreal drift. */
+export type StyleRenderMode = 'illustrated' | 'photoreal' | 'stylized';
+
+export function styleRenderMode(style: VisualStylePreset): StyleRenderMode {
+  switch (style.id) {
+    case 'cartoon-slapstick':
+    case 'illustrated-storybook':
+    case 'comic-book':
+    case 'stop-motion':
+      return 'illustrated';
+    case 'cinematic':
+    case 'dark-noir':
+      return 'photoreal';
+    default:
+      return 'stylized';
+  }
+}
+
 export const VISUAL_STYLE_PRESETS: VisualStylePreset[] = [
   {
     id: 'cartoon-slapstick',

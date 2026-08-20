@@ -1,13 +1,20 @@
 import { z } from 'zod';
 import { MOTION_PRESETS, TRANSITION_PRESETS } from '../motion.js';
 import { ASSET_SOURCES, ASSET_TYPES, MEDIA_TYPES, PROJECT_STATUSES, SHOT_TYPES, SONG_SECTIONS } from '../status.js';
-import { IMAGE_QUALITY_PRESETS } from '../imageQuality.js';
+import { IMAGE_QUALITY_PRESETS, normalizeImageQualityId } from '../imageQuality.js';
 import { VIDEO_PRESETS } from '../videoConfig.js';
 
 const imageQualityIds = IMAGE_QUALITY_PRESETS.map((p) => p.id) as [
   (typeof IMAGE_QUALITY_PRESETS)[number]['id'],
   ...(typeof IMAGE_QUALITY_PRESETS)[number]['id'][],
 ];
+
+const storedImageQualityIds = [...imageQualityIds, 'highest'] as const;
+
+const imageQualityField = z
+  .enum(storedImageQualityIds)
+  .optional()
+  .transform((id) => (id === undefined ? undefined : normalizeImageQualityId(id)));
 
 export const hexColorSchema = z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
 
@@ -160,8 +167,8 @@ export const projectSchema = z.object({
   songTitle: z.string(),
   status: z.enum(PROJECT_STATUSES),
   styleId: z.string().optional(),
-  imageQualityId: z.enum(imageQualityIds).optional(),
-  generatedImageQualityId: z.enum(imageQualityIds).optional(),
+  imageQualityId: imageQualityField,
+  generatedImageQualityId: imageQualityField,
   audio: audioInfoSchema.optional(),
   durationSeconds: z.number().nonnegative(),
   lyrics: z.string(),

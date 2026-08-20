@@ -9,7 +9,7 @@ import {
   sleep,
 } from '@music-video/shared';
 import { fal } from '@fal-ai/client';
-import { buildCharacterReferencePrompt, buildSceneImagePrompt } from './promptBuilder.js';
+import { buildCharacterImageNegative, buildCharacterReferencePrompt, buildSceneImagePrompt } from './promptBuilder.js';
 
 export interface SceneImageGenerationRequest {
   scene: StoryboardScene;
@@ -89,7 +89,8 @@ export class FalImageProvider implements ImageGenerationProvider {
 
   async generateCharacterReference(request: CharacterReferenceRequest): Promise<GeneratedImageBytes> {
     const prompt = buildCharacterReferencePrompt(request.character, request.bible, request.style);
-    return this.generate(prompt, 'text, extra characters, collage labels');
+    const negativePrompt = buildCharacterImageNegative(request.style, request.bible);
+    return this.generate(prompt, negativePrompt);
   }
 
   private async generate(prompt: string, negativePrompt: string): Promise<GeneratedImageBytes> {
