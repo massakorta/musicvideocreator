@@ -1,6 +1,7 @@
 import type { StoryboardScene, VisualBible, VisualStylePreset } from '@music-video/shared';
 import {
   errorText,
+  isBillingOrQuotaError,
   isRetryableProviderError,
   MAX_IMAGE_ATTEMPTS,
   providerRetryDelayMs,
@@ -175,7 +176,7 @@ function humanizeVideoError(error: unknown): string {
   if (/timed out|timeout|ETIMEDOUT|AbortError/i.test(message)) {
     return 'The video provider took too long to respond. Try again.';
   }
-  if (/billing|quota|insufficient|credit/i.test(message)) {
+  if (isBillingOrQuotaError(error)) {
     return 'fal.ai video generation is blocked by billing or quota. Add credit, then retry.';
   }
   if (/content.?policy|safety|nsfw/i.test(message)) {

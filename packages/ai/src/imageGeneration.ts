@@ -1,6 +1,8 @@
 import type { CharacterDefinition, GeneratedAsset, ImageQualityPreset, VisualBible, VisualStylePreset } from '@music-video/shared';
 import type { StoryboardScene } from '@music-video/shared';
 import {
+  errorText,
+  isBillingOrQuotaError,
   isContentPolicyError,
   isRetryableProviderError,
   MAX_IMAGE_ATTEMPTS,
@@ -164,17 +166,11 @@ export class FalImageProvider implements ImageGenerationProvider {
 }
 
 function humanizeImageError(error: unknown): string {
-  if (!error || typeof error !== 'object') return 'The image provider returned an error.';
-  const record = error as {
-    message?: string;
-    status?: number;
-    body?: { detail?: string };
-  };
-  const message = record.body?.detail ?? record.message ?? String(error);
+  const message = errorText(error);
   if (/timed out|timeout|ETIMEDOUT|AbortError/i.test(message)) {
     return 'The image provider took too long to respond. Try again.';
   }
-  if (/billing|quota|insufficient|credit/i.test(message)) {
+  if (isBillingOrQuotaError(error)) {
     return 'fal.ai image generation is blocked by billing or quota. Add credit, then retry.';
   }
   if (/content.?policy|safety|nsfw/i.test(message)) {

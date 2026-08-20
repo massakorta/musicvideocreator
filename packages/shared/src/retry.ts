@@ -62,9 +62,17 @@ export function isContentPolicyError(error: unknown): boolean {
   return /content.?policy|safety|moderation|refus(?:ed|al)/i.test(errorText(error));
 }
 
+/** fal billing lock (TOP_UP) clears after the account is topped up — retry, do not treat as permanent. */
+export function isBillingOrQuotaError(error: unknown): boolean {
+  const text = errorText(error);
+  return (
+    /billing|quota|insufficient|credit|top.?up|user is locked|account is locked|locked.*reason/i.test(text) ||
+    /reason:\s*top_up/i.test(text)
+  );
+}
+
 export function isPermanentProviderError(error: unknown): boolean {
   const text = errorText(error);
-  if (/billing|quota|insufficient/i.test(text)) return true;
   if (/api key|unauthorized|incorrect api/i.test(text)) return true;
   const status = typeof error === 'object' && error && 'status' in error ? Number(error.status) : undefined;
   return status === 401;
@@ -72,6 +80,7 @@ export function isPermanentProviderError(error: unknown): boolean {
 
 export function isRetryableProviderError(error: unknown): boolean {
   if (isPermanentProviderError(error)) return false;
+  if (isBillingOrQuotaError(error)) return true;
   const text = errorText(error);
   if (
     /timed out|timeout|ETIMEDOUT|AbortError|ECONNRESET|fetch failed|overloaded|rate.?limit|too many requests|server.?error|try again|temporarily|429|EAI_AGAIN|ENOTFOUND|socket/i.test(

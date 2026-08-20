@@ -91,6 +91,17 @@ describe('FalImageProvider', () => {
     expect(subscribe).toHaveBeenCalledTimes(2);
   });
 
+  it('retries fal TOP_UP billing lock and then succeeds', async () => {
+    mockFetchImage(Buffer.from('ok'));
+    subscribe
+      .mockRejectedValueOnce(new Error('User is locked. Reason: TOP_UP.'))
+      .mockResolvedValueOnce({ data: { images: [{ url: 'https://example.com/topup.jpg' }] } });
+
+    const image = await provider().generateCharacterReference({ character, bible, style });
+    expect(image.bytes.toString()).toBe('ok');
+    expect(subscribe).toHaveBeenCalledTimes(2);
+  });
+
   it('retries a content-policy refusal with a safer prompt', async () => {
     mockFetchImage(Buffer.from('safe'));
     subscribe

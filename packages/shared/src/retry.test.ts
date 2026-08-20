@@ -20,9 +20,15 @@ describe('isRetryableProviderError', () => {
     expect(isRetryableProviderError(new Error('fetch failed'))).toBe(true);
   });
 
-  it('does not retry billing or API key failures', () => {
+  it('retries billing lock errors such as fal TOP_UP', () => {
+    expect(isRetryableProviderError(new Error('User is locked. Reason: TOP_UP.'))).toBe(true);
+    expect(isPermanentProviderError(new Error('User is locked. Reason: TOP_UP.'))).toBe(false);
+    expect(isRetryableProviderError(new Error('fal.ai image generation is blocked by billing or quota.'))).toBe(true);
+    expect(isPermanentProviderError(new Error('fal.ai image generation is blocked by billing or quota.'))).toBe(false);
+  });
+
+  it('does not retry API key failures', () => {
     expect(isRetryableProviderError(new Error('OpenAI rejected the API key.'))).toBe(false);
-    expect(isRetryableProviderError(new Error('OpenAI image generation is blocked by billing or quota.'))).toBe(false);
     expect(isPermanentProviderError(new Error('OpenAI rejected the API key.'))).toBe(true);
   });
 });
@@ -62,6 +68,7 @@ describe('pipeline requeue markers', () => {
   it('requeues transient errors until the cap', () => {
     expect(shouldRequeuePipeline(new Error('The character reference for Jens could not be generated.'), 0)).toBe(true);
     expect(shouldRequeuePipeline(new Error('The character reference for Jens could not be generated.'), 5)).toBe(false);
+    expect(shouldRequeuePipeline(new Error('User is locked. Reason: TOP_UP.'), 0)).toBe(true);
     expect(shouldRequeuePipeline(new Error('OpenAI rejected the API key.'), 0)).toBe(false);
   });
 });
