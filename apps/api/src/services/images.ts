@@ -12,7 +12,9 @@ import {
   updateProjectDocument,
 } from './projects.js';
 import {
+  acquireSceneImageSlot,
   releaseSceneGeneration,
+  releaseSceneImageSlot,
   tryAcquireSceneGeneration,
 } from './sceneGenerationLock.js';
 import { replaceScenes, touch } from './projectUtils.js';
@@ -118,7 +120,10 @@ export async function generateSceneImage(projectId: string, sceneId: string, for
   if (scene.currentAssetId && !force) {
     return { project, asset: scene.image, demo: scene.image?.source === 'demo' };
   }
+
+  await acquireSceneImageSlot();
   if (!tryAcquireSceneGeneration(projectId, sceneId)) {
+    releaseSceneImageSlot();
     throw new AppError(
       ERROR_CODES.CONFLICT,
       'This scene is already being generated. Wait a moment, then retry.',
@@ -220,6 +225,7 @@ export async function generateSceneImage(projectId: string, sceneId: string, for
     );
   } finally {
     releaseSceneGeneration(projectId, sceneId);
+    releaseSceneImageSlot();
   }
 }
 

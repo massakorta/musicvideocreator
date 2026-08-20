@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { GENERATION_STATE_LABELS, IMAGE_GENERATION_EXPECTED_SECONDS_PER_STILL, VIDEO_GENERATION_EXPECTED_SECONDS, missingCharacterReferences, motionPresetLabel, sceneHasStill, sceneHasVideo } from '@music-video/shared';
+import { GENERATION_STATE_LABELS, IMAGE_GENERATION_CONCURRENCY, IMAGE_GENERATION_EXPECTED_SECONDS_PER_STILL, VIDEO_GENERATION_EXPECTED_SECONDS, missingCharacterReferences, motionPresetLabel, sceneHasStill, sceneHasVideo } from '@music-video/shared';
 import { useProject } from '../hooks/useProject';
 import { api, ApiClientError } from '../lib/api';
 import { formatClockShort } from '../lib/time';
@@ -10,8 +10,8 @@ import { SceneEditor } from '../components/SceneEditor';
 import { CardWaitOverlay, WaitCard } from '../components/WaitCard';
 import { SceneCardMedia } from '../components/SceneCardMedia';
 import { mergeProjectFromServer, scenesMissingImages, scenesNeedingAnimation } from '../lib/mergeProject';
+import { generateSceneImageWithRetry } from '../lib/sceneImageGeneration';
 
-const IMAGE_GENERATION_CONCURRENCY = 6;
 const VIDEO_GENERATION_CONCURRENCY = 1;
 
 export function ImagesPage() {
@@ -132,7 +132,7 @@ export function ImagesPage() {
         setPaintingIds((ids) => [...ids, scene.id]);
         setBatch((current) => ({ ...current, title: scene.title }));
         try {
-          const data = await api.generateSceneImage(project.id, scene.id);
+          const data = await generateSceneImageWithRetry(project.id, scene.id);
           applyProjectUpdate(data.project);
         } catch (err) {
           failures += 1;
@@ -379,7 +379,7 @@ export function ImagesPage() {
                         setPaintingIds([scene.id]);
                         setError(null);
                         try {
-                          const data = await api.generateSceneImage(
+                          const data = await generateSceneImageWithRetry(
                             project.id,
                             scene.id,
                             sceneHasStill(scene),

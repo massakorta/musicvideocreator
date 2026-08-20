@@ -1,4 +1,22 @@
+import { config } from '../config.js';
+
 const activeGenerations = new Set<string>();
+let activeSceneImageSlots = 0;
+
+function sceneImageSlotLimit(): number {
+  return Math.max(1, config.imageConcurrency);
+}
+
+export async function acquireSceneImageSlot(): Promise<void> {
+  while (activeSceneImageSlots >= sceneImageSlotLimit()) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  activeSceneImageSlots += 1;
+}
+
+export function releaseSceneImageSlot(): void {
+  activeSceneImageSlots = Math.max(0, activeSceneImageSlots - 1);
+}
 
 export function sceneGenerationKey(projectId: string, sceneId: string): string {
   return `${projectId}:${sceneId}`;

@@ -37,7 +37,7 @@ projects:
               - key: MAX_AUDIO_MB
                 value: "50"
               - key: IMAGE_GENERATION_CONCURRENCY
-                value: "6"
+                value: "2"
               - key: AI_RATE_LIMIT_PER_MINUTE
                 value: "80"
               - key: NODE_OPTIONS
