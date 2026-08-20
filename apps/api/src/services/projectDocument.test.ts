@@ -48,6 +48,40 @@ describe('mergeSceneState', () => {
     expect(merged.generationState).toBe('complete');
   });
 
+  it('allows regenerate in progress when the still is kept', () => {
+    const previous = scene({
+      id: 'a',
+      currentAssetId: 'asset-a',
+      generationState: 'complete',
+    });
+    const incoming = scene({
+      id: 'a',
+      currentAssetId: 'asset-a',
+      generationState: 'generating',
+    });
+
+    const merged = mergeSceneState(previous, incoming);
+    expect(merged.generationState).toBe('generating');
+  });
+
+  it('preserves failed regenerate errors when the still remains', () => {
+    const previous = scene({
+      id: 'a',
+      currentAssetId: 'asset-a',
+      generationState: 'generating',
+    });
+    const incoming = scene({
+      id: 'a',
+      currentAssetId: 'asset-a',
+      generationState: 'failed',
+      generationError: 'fal.ai flagged this scene as unsafe.',
+    });
+
+    const merged = mergeSceneState(previous, incoming);
+    expect(merged.generationState).toBe('failed');
+    expect(merged.generationError).toContain('unsafe');
+  });
+
   it('preserves both completed stills when two scenes finish concurrently', () => {
     const currentScenes = [
       scene({ id: 'a', currentAssetId: 'asset-a', generationState: 'complete' }),

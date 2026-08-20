@@ -81,6 +81,27 @@ const GENERATION_RANK: Record<GenerationState, number> = {
 
 /** Prefer the scene row that already has a finished still attached. */
 export function mergeSceneState(previous: StoryboardScene, incoming: StoryboardScene): StoryboardScene {
+  if (incoming.generationState === 'failed') {
+    return {
+      ...incoming,
+      currentAssetId: incoming.currentAssetId ?? previous.currentAssetId,
+      image: incoming.image ?? previous.image,
+      previousAssetIds:
+        previous.previousAssetIds.length >= incoming.previousAssetIds.length
+          ? previous.previousAssetIds
+          : incoming.previousAssetIds,
+      imageFingerprint: incoming.imageFingerprint ?? previous.imageFingerprint,
+    };
+  }
+
+  if (
+    incoming.generationState === 'generating' &&
+    previous.currentAssetId &&
+    incoming.currentAssetId === previous.currentAssetId
+  ) {
+    return incoming;
+  }
+
   const previousComplete = Boolean(previous.currentAssetId) || previous.generationState === 'complete';
   const incomingComplete = Boolean(incoming.currentAssetId) || incoming.generationState === 'complete';
 

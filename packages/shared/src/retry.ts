@@ -110,7 +110,9 @@ export function sanitizeImagePromptForSafety(prompt: string): string {
     .replace(/\bblood(y)?\b/gi, 'cartoon paint splatter')
     .replace(/\b(guns?|rifle|pistol|knives|knife|weapons?|sword)\b/gi, 'cartoon prop')
     .replace(/\b(kill(?:ed|ing)?|murder(?:ed|ing)?|death|dying|corpse|dead body)\b/gi, 'comedy tumble')
-    .replace(/\b(nude|naked|nsfw|sexy|seductive|erotic)\b/gi, 'fully clothed');
+    .replace(/\b(nude|naked|nsfw|sexy|seductive|erotic)\b/gi, 'fully clothed')
+    .replace(/\b(smoking|smoke|smoldering|charred|burnt|burned|brända|bränskrot)\b/gi, 'cartoon steam')
+    .replace(/\b(black lump|crispy black|carbonized)\b/gi, 'overcooked cartoon food');
   const suffix =
     'Family-friendly illustrated cartoon. Every person shown is a clearly adult character. No minors, no suggestive content, no realistic violence, no text, letters, captions, labels, or logos.';
   const extra = 'Safe illustrated character design only. Neutral pose, fully clothed, slapstick comedy tone, no celebrity likeness.';

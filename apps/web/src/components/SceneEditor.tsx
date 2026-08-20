@@ -251,7 +251,7 @@ export function SceneEditor({
   };
 
   return (
-    <div className="sheet-backdrop" onClick={() => (!busy ? onClose() : undefined)}>
+    <div className="sheet-backdrop sheet-backdrop-modal" onClick={() => (!busy ? onClose() : undefined)}>
       <aside
         className="sheet side-panel"
         role="dialog"

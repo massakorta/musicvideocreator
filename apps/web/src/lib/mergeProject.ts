@@ -35,8 +35,7 @@ function mergeSceneFromServer(current: StoryboardScene, incoming: StoryboardScen
 
   if (
     incoming.generationState === 'failed' &&
-    incoming.generationError &&
-    (!merged.generationError || merged.generationState !== 'failed')
+    incoming.generationError
   ) {
     merged = {
       ...merged,

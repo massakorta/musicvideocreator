@@ -187,7 +187,8 @@ export function ImagesPage() {
   }, [project.scenes]);
 
   return (
-    <div className="page editor-layout">
+    <>
+      <div className="page editor-layout">
       <div>
         {missingRefs.length > 0 ? (
           <div className="banner warning">
@@ -402,10 +403,9 @@ export function ImagesPage() {
                           setError(
                             err instanceof ApiClientError
                               ? err.message
-                              : `Scene ${scene.order} could not be generated. The image provider returned an error.`,
+                              : `Scene ${scene.order} could not be queued. The image provider returned an error.`,
                           );
                           await reload();
-                        } finally {
                           setSingleTitle(null);
                           setPaintingIds([]);
                         }
@@ -545,18 +545,19 @@ export function ImagesPage() {
       </div>
       <div className="editor-sidebar">
         <HealthPanel health={health} />
-        {selected ? (
-          <SceneEditor
-            key={selected.id}
-            scene={selected}
-            onClose={() => setSelectedId(null)}
-            onSaved={async () => {
-              await reload();
-              setSelectedId(null);
-            }}
-          />
-        ) : null}
       </div>
     </div>
+    {selected ? (
+      <SceneEditor
+        key={selected.id}
+        scene={selected}
+        onClose={() => setSelectedId(null)}
+        onSaved={async () => {
+          await reload();
+          setSelectedId(null);
+        }}
+      />
+    ) : null}
+    </>
   );
 }

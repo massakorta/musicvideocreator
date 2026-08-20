@@ -1245,6 +1245,29 @@ h3 {
   }
 }
 
+.sheet-backdrop-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.sheet-backdrop-modal .sheet {
+  width: min(560px, 100%);
+  max-height: min(92dvh, 720px);
+  overflow-y: auto;
+  border-radius: var(--radius);
+  padding: 16px 18px max(18px, env(safe-area-inset-bottom));
+  box-shadow: var(--shadow);
+}
+
+.sheet-backdrop-modal .sheet-handle {
+  display: none;
+}
+
 /* ── Banners ── */
 
 .banner {
