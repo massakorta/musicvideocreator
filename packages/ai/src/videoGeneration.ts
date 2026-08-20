@@ -16,14 +16,14 @@ export interface SceneVideoGenerationRequest {
   scene: StoryboardScene;
   bible: VisualBible;
   style: VisualStylePreset;
-  sourceImageBytes: Buffer;
-  sourceImageMimeType: string;
+  sourceImageBytes?: Buffer;
+  sourceImageMimeType?: string;
   /** When set, fal fetches the still directly instead of re-uploading bytes. */
   sourceImageUrl?: string;
 }
 
-export interface GeneratedVideoBytes {
-  bytes: Buffer;
+export interface GeneratedVideoResult {
+  videoUrl: string;
   mimeType: string;
   prompt: string;
   model: string;
@@ -78,7 +78,7 @@ export class FalVideoProvider {
     }
   }
 
-  async generateSceneVideo(request: SceneVideoGenerationRequest): Promise<GeneratedVideoBytes> {
+  async generateSceneVideo(request: SceneVideoGenerationRequest): Promise<GeneratedVideoResult> {
     const { prompt, negativePrompt } = buildSceneVideoPrompt({
       style: request.style,
       bible: request.bible,
@@ -94,6 +94,9 @@ export class FalVideoProvider {
     if (request.sourceImageUrl && isPublicHttpsUrl(request.sourceImageUrl)) {
       return request.sourceImageUrl;
     }
+    if (!request.sourceImageBytes || !request.sourceImageMimeType) {
+      throw new Error('A source still is required for video generation.');
+    }
     return this.uploadSourceImage(request.sourceImageBytes, request.sourceImageMimeType);
   }
 
@@ -101,7 +104,7 @@ export class FalVideoProvider {
     fullPrompt: string,
     startImageUrl: string,
     durationSeconds: 5 | 10,
-  ): Promise<GeneratedVideoBytes> {
+  ): Promise<GeneratedVideoResult> {
     try {
       return await this.requestVideoWithRetry(fullPrompt, startImageUrl, durationSeconds);
     } catch (error) {
@@ -114,7 +117,7 @@ export class FalVideoProvider {
     startImageUrl: string,
     durationSeconds: 5 | 10,
     attempt = 0,
-  ): Promise<GeneratedVideoBytes> {
+  ): Promise<GeneratedVideoResult> {
     try {
       return await this.requestVideo(fullPrompt, startImageUrl, durationSeconds);
     } catch (error) {
@@ -141,7 +144,7 @@ export class FalVideoProvider {
     fullPrompt: string,
     startImageUrl: string,
     durationSeconds: 5 | 10,
-  ): Promise<GeneratedVideoBytes> {
+  ): Promise<GeneratedVideoResult> {
     const duration = durationSeconds === 10 ? '10' : '5';
     const result = (await fal.subscribe(KLING_I2V_ENDPOINT, {
       input: {
@@ -157,14 +160,9 @@ export class FalVideoProvider {
       throw new Error('Video provider returned no clip.');
     }
 
-    const response = await fetch(videoUrl, { signal: AbortSignal.timeout(this.requestTimeoutMs) });
-    if (!response.ok) {
-      throw new Error('Failed to download generated video.');
-    }
-    const mimeType = contentType ?? response.headers.get('content-type') ?? 'video/mp4';
     return {
-      bytes: Buffer.from(await response.arrayBuffer()),
-      mimeType,
+      videoUrl,
+      mimeType: contentType ?? 'video/mp4',
       prompt: fullPrompt,
       model: KLING_I2V_ENDPOINT,
       durationSeconds,

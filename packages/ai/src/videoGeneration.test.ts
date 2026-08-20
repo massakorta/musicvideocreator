@@ -71,14 +71,6 @@ const scene: StoryboardScene = {
   approved: false,
 };
 
-function mockFetchVideo(bytes: Buffer) {
-  global.fetch = vi.fn().mockResolvedValue({
-    ok: true,
-    headers: { get: () => 'video/mp4' },
-    arrayBuffer: async () => bytes,
-  }) as typeof fetch;
-}
-
 describe('FalVideoProvider', () => {
   beforeEach(() => {
     subscribe.mockReset();
@@ -87,7 +79,6 @@ describe('FalVideoProvider', () => {
   });
 
   it('uploads the still and calls Kling i2v with audio disabled', async () => {
-    mockFetchVideo(Buffer.from('clip'));
     upload.mockResolvedValue('https://fal.media/still.jpg');
     subscribe.mockResolvedValue({ data: { video: { url: 'https://example.com/clip.mp4' } } });
 
@@ -110,12 +101,11 @@ describe('FalVideoProvider', () => {
         }),
       }),
     );
-    expect(result.bytes.toString()).toBe('clip');
+    expect(result.videoUrl).toBe('https://example.com/clip.mp4');
     expect(result.durationSeconds).toBe(10);
   });
 
   it('uses a public still URL without re-uploading to fal storage', async () => {
-    mockFetchVideo(Buffer.from('clip'));
     subscribe.mockResolvedValue({ data: { video: { url: 'https://example.com/clip.mp4' } } });
 
     await new FalVideoProvider({ retryDelayMs: () => 0 }).generateSceneVideo({
@@ -123,8 +113,6 @@ describe('FalVideoProvider', () => {
       bible,
       style,
       sourceImageUrl: 'https://cdn.example.com/still.jpg',
-      sourceImageBytes: Buffer.from('still'),
-      sourceImageMimeType: 'image/jpeg',
     });
 
     expect(upload).not.toHaveBeenCalled();
@@ -139,7 +127,6 @@ describe('FalVideoProvider', () => {
   });
 
   it('retries a rate limit and then succeeds', async () => {
-    mockFetchVideo(Buffer.from('clip'));
     upload.mockResolvedValue('https://fal.media/still.jpg');
     subscribe
       .mockRejectedValueOnce({ status: 429, message: 'Rate limit exceeded' })

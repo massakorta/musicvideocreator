@@ -6,7 +6,7 @@ projects:
           - type: web
             name: music-video-api
             runtime: node
-            plan: starter
+            plan: standard
             region: frankfurt
             buildCommand: npm install --include=dev && npm run build -w @music-video/shared && npm run build -w @music-video/ai && npm run build -w @music-video/api
             startCommand: npm run start -w @music-video/api
@@ -40,6 +40,8 @@ projects:
                 value: "6"
               - key: AI_RATE_LIMIT_PER_MINUTE
                 value: "80"
+              - key: NODE_OPTIONS
+                value: --max-old-space-size=768
 
           - type: worker
             name: music-video-worker

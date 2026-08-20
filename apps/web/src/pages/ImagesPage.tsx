@@ -12,7 +12,7 @@ import { CardWaitOverlay, WaitCard } from '../components/WaitCard';
 import { mergeProjectFromServer, scenesMissingImages, scenesNeedingAnimation } from '../lib/mergeProject';
 
 const IMAGE_GENERATION_CONCURRENCY = 6;
-const VIDEO_GENERATION_CONCURRENCY = 2;
+const VIDEO_GENERATION_CONCURRENCY = 1;
 
 export function ImagesPage() {
   const { project, setProject, health, reload, stale } = useProject();

@@ -3,7 +3,7 @@ import { createVideoProvider, requireFalOrDemo } from './aiService.js';
 import {
   attachVideoToScene,
   getProjectOrThrow,
-  storeGeneratedFile,
+  storeGeneratedFileFromPath,
   styleOrThrow,
   updateProjectDocument,
 } from './projects.js';
@@ -15,9 +15,11 @@ import { replaceScenes } from './projectUtils.js';
 import { getObjectStorage } from '../storage/index.js';
 import { getRepositories } from '../repositories/index.js';
 import {
+  downloadUrlToFile,
   isPublicRemoteUrl,
   prepareStillForFalUpload,
-  prepareVideoForStorage,
+  prepareVideoFileForStorage,
+  removeTempFile,
 } from './mediaPrepare.js';
 
 export async function generateSceneVideo(projectId: string, sceneId: string, force = false) {
@@ -85,6 +87,7 @@ export async function generateSceneVideo(projectId: string, sceneId: string, for
 async function executeSceneVideoGeneration(projectId: string, sceneId: string): Promise<void> {
   const startedAt = Date.now();
   let sceneOrder = 0;
+  let readyPath: string | undefined;
   try {
     const project = await getProjectOrThrow(projectId);
     const scene = project.scenes.find((s) => s.id === sceneId);
@@ -110,34 +113,43 @@ async function executeSceneVideoGeneration(projectId: string, sceneId: string): 
     if (!imageAsset) {
       throw new AppError(ERROR_CODES.NOT_FOUND, 'The scene still could not be found.', 404);
     }
-    const stored = await getObjectStorage().get(imageAsset.storagePath);
-    if (!stored) {
-      throw new AppError(ERROR_CODES.NOT_FOUND, 'The scene still file could not be loaded.', 404);
-    }
-    const stillForFal = await prepareStillForFalUpload(stored.body, stored.mimeType);
+
     const sourceImageUrl = isPublicRemoteUrl(imageAsset.publicUrl) ? imageAsset.publicUrl : undefined;
+    let sourceImageBytes: Buffer | undefined;
+    let sourceImageMimeType: string | undefined;
+    if (!sourceImageUrl) {
+      const stored = await getObjectStorage().get(imageAsset.storagePath);
+      if (!stored) {
+        throw new AppError(ERROR_CODES.NOT_FOUND, 'The scene still file could not be loaded.', 404);
+      }
+      const stillForFal = await prepareStillForFalUpload(stored.body, stored.mimeType);
+      sourceImageBytes = stillForFal.body;
+      sourceImageMimeType = stillForFal.mimeType;
+    }
 
     const video = await provider.generateSceneVideo({
       scene,
       bible: project.visualBible,
       style,
       sourceImageUrl,
-      sourceImageBytes: stillForFal.body,
-      sourceImageMimeType: stillForFal.mimeType,
+      sourceImageBytes,
+      sourceImageMimeType,
     });
 
-    const videoBody = await prepareVideoForStorage(video.bytes);
+    const rawPath = await downloadUrlToFile(video.videoUrl);
+    readyPath = await prepareVideoFileForStorage(rawPath);
 
-    const asset = await storeGeneratedFile({
+    const asset = await storeGeneratedFileFromPath({
       projectId,
       type: 'scene_video',
       source: 'ai',
       filename: `${scene.id}.mp4`,
-      body: videoBody,
+      filePath: readyPath,
       mimeType: video.mimeType,
       durationSeconds: video.durationSeconds,
       metadata: { sceneId, sourceImageAssetId: imageAssetId, prompt: video.prompt, model: video.model },
     });
+    readyPath = undefined;
 
     await attachVideoToScene(await getProjectOrThrow(projectId), sceneId, asset);
     console.log(
@@ -166,6 +178,7 @@ async function executeSceneVideoGeneration(projectId: string, sceneId: string): 
       ),
     ).catch(() => undefined);
   } finally {
+    await removeTempFile(readyPath);
     releaseSceneVideoGeneration(projectId, sceneId);
   }
 }
