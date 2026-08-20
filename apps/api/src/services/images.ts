@@ -242,14 +242,14 @@ async function executeSceneImageGeneration(projectId: string, sceneId: string): 
       replaceScenes(
         latest,
         latest.scenes.map((s) =>
-          s.id === sceneId && !s.currentAssetId
+          s.id === sceneId && s.generationState === 'generating'
             ? {
                 ...s,
                 generationState: 'failed',
                 generationError:
                   error instanceof AppError
                     ? error.message
-                    : `Scene ${sceneOrder || s.order} could not be generated. The image provider returned an error.`,
+                    : `Scene ${sceneOrder || s.order} could not be generated. ${message}`,
               }
             : s,
         ),

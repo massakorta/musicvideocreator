@@ -8,8 +8,11 @@ export function sleep(ms: number): Promise<void> {
 
 export function errorText(error: unknown): string {
   if (error instanceof Error) {
+    const record = error as Error & { body?: unknown; details?: string };
+    const fromBody = formatProviderBody(record.body);
+    if (fromBody) return fromBody;
     const details =
-      'details' in error && typeof error.details === 'string' && error.details.trim() ? ` (${error.details})` : '';
+      typeof record.details === 'string' && record.details.trim() ? ` (${record.details})` : '';
     return `${error.message}${details}`;
   }
   if (!error || typeof error !== 'object') return String(error);

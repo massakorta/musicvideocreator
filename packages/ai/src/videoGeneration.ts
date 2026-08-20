@@ -8,6 +8,7 @@ import {
   sceneClipDurationSeconds,
   sleep,
 } from '@music-video/shared';
+import { ensureFalConfigured } from './falClient.js';
 import { fal } from '@fal-ai/client';
 import { buildSceneVideoPrompt } from './promptBuilder.js';
 
@@ -75,7 +76,7 @@ export class FalVideoProvider {
     this.requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_VIDEO_TIMEOUT_MS;
     this.retryDelayMs = options.retryDelayMs ?? ((attempt) => providerRetryDelayMs(attempt));
     if (options.credentials) {
-      fal.config({ credentials: options.credentials });
+      ensureFalConfigured(options.credentials);
     }
   }
 

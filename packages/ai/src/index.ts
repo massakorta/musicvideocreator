@@ -4,5 +4,6 @@ export * from './promptBuilder.js';
 export * from './visualBible.js';
 export * from './storyboard.js';
 export * from './transcription.js';
+export * from './falClient.js';
 export * from './imageGeneration.js';
 export * from './videoGeneration.js';

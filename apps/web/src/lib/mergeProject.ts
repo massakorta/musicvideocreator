@@ -18,6 +18,33 @@ function mergeSceneFromServer(current: StoryboardScene, incoming: StoryboardScen
     };
   }
 
+  if (
+    incoming.generationState === 'generating' ||
+    (current.generationState === 'generating' &&
+      incoming.generationState === 'complete' &&
+      sceneHasStill(incoming) &&
+      sceneHasStill(current) &&
+      current.currentAssetId === incoming.currentAssetId)
+  ) {
+    merged = {
+      ...merged,
+      generationState: 'generating',
+      generationError: undefined,
+    };
+  }
+
+  if (
+    incoming.generationState === 'failed' &&
+    incoming.generationError &&
+    (!merged.generationError || merged.generationState !== 'failed')
+  ) {
+    merged = {
+      ...merged,
+      generationState: 'failed',
+      generationError: incoming.generationError,
+    };
+  }
+
   if (sceneHasVideo(current) && !sceneHasVideo(incoming)) {
     merged = {
       ...merged,

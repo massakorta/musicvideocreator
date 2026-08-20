@@ -42,6 +42,24 @@ describe('scenesMissingImages', () => {
 });
 
 describe('mergeProjectFromServer', () => {
+  it('keeps image generating state during regenerate', () => {
+    const current = scene({
+      id: 'a',
+      currentAssetId: 'asset-a',
+      generationState: 'complete',
+    });
+    const incoming = scene({
+      id: 'a',
+      currentAssetId: 'asset-a',
+      generationState: 'generating',
+    });
+    const merged = mergeProjectFromServer(
+      { id: 'p1', scenes: [current] } as MusicVideoProject,
+      { id: 'p1', scenes: [incoming] } as MusicVideoProject,
+    );
+    expect(merged.scenes[0]?.generationState).toBe('generating');
+  });
+
   it('keeps generating state during re-animate when a clip already exists', () => {
     const current = scene({
       id: 'a',

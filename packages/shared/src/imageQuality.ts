@@ -84,7 +84,10 @@ export const IMAGE_GENERATION_EXPECTED_SECONDS_PER_STILL =
   IMAGE_QUALITY_PRESETS.find((preset) => preset.id === FIXED_IMAGE_QUALITY_ID)?.expectedSecondsPerStill ?? 8;
 
 /** How many stills the browser queues at once. Fal work runs async on the API. */
-export const IMAGE_GENERATION_CONCURRENCY = 4;
+export const IMAGE_GENERATION_CONCURRENCY = 2;
+
+/** Max concurrent fal still jobs per API instance. */
+export const IMAGE_GENERATION_API_CONCURRENCY = 1;
 
 const LEGACY_IMAGE_QUALITY_MAP: Record<LegacyImageQualityId, ImageQualityId> = {
   highest: 'high',

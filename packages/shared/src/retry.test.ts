@@ -103,4 +103,12 @@ describe('errorText', () => {
       }),
     ).toBe('prompt too long');
   });
+
+  it('formats fal ApiError-style bodies on Error instances', () => {
+    const error = Object.assign(new Error('Unprocessable Entity'), {
+      status: 422,
+      body: { detail: [{ msg: 'value is not a valid enumeration member', type: 'value_error' }] },
+    });
+    expect(errorText(error)).toBe('value is not a valid enumeration member');
+  });
 });

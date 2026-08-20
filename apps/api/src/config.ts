@@ -35,7 +35,7 @@ export const config = {
   supabaseServiceRoleKey: env('SUPABASE_SERVICE_ROLE_KEY'),
   supabaseBucket: env('SUPABASE_STORAGE_BUCKET', 'music-video-assets'),
   maxAudioMb: envNumber('MAX_AUDIO_MB', 50),
-  imageConcurrency: envNumber('IMAGE_GENERATION_CONCURRENCY', 2),
+  imageConcurrency: envNumber('IMAGE_GENERATION_CONCURRENCY', 1),
   aiRateLimitPerMinute: envNumber('AI_RATE_LIMIT_PER_MINUTE', 80),
   workerPollMs: envNumber('WORKER_POLL_MS', 3000),
   workerId: env('WORKER_ID', `worker-${process.pid}`),

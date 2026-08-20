@@ -11,6 +11,7 @@ import {
   sleep,
 } from '@music-video/shared';
 import { fal } from '@fal-ai/client';
+import { ensureFalConfigured } from './falClient.js';
 import { buildCharacterImageNegative, buildCharacterReferencePrompt, buildSceneImagePrompt } from './promptBuilder.js';
 
 export interface SceneImageGenerationRequest {
@@ -75,7 +76,7 @@ export class FalImageProvider implements ImageGenerationProvider {
     this.requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_IMAGE_TIMEOUT_MS;
     this.retryDelayMs = options.retryDelayMs ?? ((attempt) => providerRetryDelayMs(attempt));
     if (options.credentials) {
-      fal.config({ credentials: options.credentials });
+      ensureFalConfigured(options.credentials);
     }
   }
 
@@ -179,7 +180,10 @@ function humanizeImageError(error: unknown): string {
   if (/api key|unauthorized|401|403/i.test(message)) {
     return 'fal.ai rejected the API key.';
   }
-  return message;
+  if (/422|unprocessable|validation|value_error|enum/i.test(message)) {
+    return `fal.ai rejected this prompt (${message}). Edit the scene prompt and retry.`;
+  }
+  return message || 'The image provider returned an error.';
 }
 
 function referenceHint(refs?: Array<{ characterId: string; url: string }>): string {

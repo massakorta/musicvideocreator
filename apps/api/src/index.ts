@@ -1,6 +1,11 @@
 import { createApp } from './app.js';
 import { config, falConfigured, openaiConfigured } from './config.js';
+import { ensureFalConfigured } from '@music-video/ai';
 import { removeLegacyDemoProjects } from './seed/removeLegacyDemoProjects.js';
+
+if (falConfigured()) {
+  ensureFalConfigured(config.falKey);
+}
 
 const app = createApp();
 
