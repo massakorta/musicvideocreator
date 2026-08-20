@@ -17,6 +17,15 @@ function extensionFromUrl(url: string): string {
   return '.jpg';
 }
 
+function extensionFromMime(mimeType: string): string {
+  if (mimeType.includes('svg')) return '.svg';
+  if (mimeType.includes('webp')) return '.webp';
+  if (mimeType.includes('png')) return '.png';
+  if (mimeType.includes('gif')) return '.gif';
+  if (mimeType.includes('jpeg') || mimeType.includes('jpg')) return '.jpg';
+  return extensionFromUrl('');
+}
+
 function mimeForExtension(ext: string): string {
   switch (ext.toLowerCase()) {
     case '.png':
@@ -25,6 +34,8 @@ function mimeForExtension(ext: string): string {
       return 'image/webp';
     case '.gif':
       return 'image/gif';
+    case '.svg':
+      return 'image/svg+xml';
     case '.mp4':
       return 'video/mp4';
     case '.webm':
@@ -38,21 +49,25 @@ async function loadSceneImageBody(
   project: MusicVideoProject,
   sceneId: string,
   imageUrl: string,
-): Promise<Buffer | null> {
+): Promise<{ body: Buffer; mimeType: string } | null> {
   const projectScene = project.scenes.find((s) => s.id === sceneId);
   const assetId = projectScene?.currentAssetId ?? projectScene?.image?.id;
   if (assetId) {
     const asset = await getRepositories().assets.get(assetId);
     if (asset) {
       const file = await getObjectStorage().get(asset.storagePath);
-      if (file) return file.body;
+      if (file) {
+        return { body: file.body, mimeType: asset.mimeType || file.mimeType };
+      }
     }
   }
   if (!imageUrl) return null;
   try {
     const response = await fetch(imageUrl);
     if (!response.ok) return null;
-    return Buffer.from(await response.arrayBuffer());
+    const body = Buffer.from(await response.arrayBuffer());
+    const mimeType = response.headers.get('content-type')?.split(';')[0]?.trim() || 'image/jpeg';
+    return { body, mimeType };
   } catch {
     return null;
   }
@@ -145,12 +160,12 @@ export async function prefetchCompositionStills(
   const scenes = await Promise.all(
     base.scenes.map(async (scene) => {
       let next = scene;
-      const imageBody = await loadSceneImageBody(project, scene.id, scene.imageUrl);
-      if (imageBody) {
-        const ext = extensionFromUrl(scene.imageUrl);
+      const image = await loadSceneImageBody(project, scene.id, scene.imageUrl);
+      if (image) {
+        const ext = extensionFromMime(image.mimeType) || extensionFromUrl(scene.imageUrl);
         const filename = `${scene.id}${ext}`;
         const dest = path.join(stillsDir, filename);
-        await writeFile(dest, imageBody);
+        await writeFile(dest, image.body);
         prefetched += 1;
         next = { ...next, imageUrl: `${assetsBaseUrl}/${filename}` };
       }

@@ -1,19 +1,12 @@
-import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import {
   AbsoluteFill,
   Img,
-  cancelRender,
-  continueRender,
+  OffthreadVideo,
   useCurrentFrame,
-  useDelayRender,
   useVideoConfig,
 } from 'remotion';
 import { sceneVideoSourceSeconds } from '@music-video/shared';
-
-function offthreadVideoFrameUrl(src: string, currentTime: number): string {
-  const port = typeof window !== 'undefined' ? window.remotion_proxyPort : 3000;
-  return `http://localhost:${port}/proxy?src=${encodeURIComponent(src)}&time=${encodeURIComponent(Math.max(0, currentTime))}&transparent=false&toneMapped=true`;
-}
 
 function seekVideo(video: HTMLVideoElement, sourceTime: number) {
   if (Math.abs(video.currentTime - sourceTime) <= 0.08) return;
@@ -102,43 +95,29 @@ function PingPongSceneVideoRender({
   fallbackImageUrl: string;
   style?: React.CSSProperties;
 }) {
-  const frameUrl = useMemo(() => offthreadVideoFrameUrl(src, sourceTime), [src, sourceTime]);
-  const [imageSrc, setImageSrc] = useState<string | null>(null);
-  const { delayRender: delay, continueRender: continueRenderFn } = useDelayRender();
+  const { fps } = useVideoConfig();
+  const frameInClip = Math.max(0, Math.round(sourceTime * fps));
+  const fillStyle: React.CSSProperties = {
+    ...style,
+    position: 'absolute',
+    inset: 0,
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+  };
 
-  useLayoutEffect(() => {
-    if (!window.remotion_videoEnabled) return;
-    setImageSrc(null);
-    const controller = new AbortController();
-    const handle = delay(`Fetching clip frame at ${sourceTime.toFixed(2)}s`);
-    void (async () => {
-      try {
-        const response = await fetch(frameUrl, { signal: controller.signal, cache: 'no-store' });
-        if (!response.ok) {
-          throw new Error(`Failed to fetch clip frame (${response.status})`);
-        }
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        setImageSrc(url);
-        continueRenderFn(handle);
-      } catch (error) {
-        if (controller.signal.aborted) {
-          continueRenderFn(handle);
-          return;
-        }
-        cancelRender(error instanceof Error ? error : new Error(String(error)));
-      }
-    })();
-    return () => {
-      controller.abort();
-    };
-  }, [continueRenderFn, delay, frameUrl, sourceTime]);
-
-  if (!imageSrc || !window.remotion_videoEnabled) {
-    return <Img src={fallbackImageUrl} style={style} />;
-  }
-
-  return <Img src={imageSrc} style={style} />;
+  return (
+    <AbsoluteFill>
+      <Img src={fallbackImageUrl} style={fillStyle} />
+      <OffthreadVideo
+        src={src}
+        muted
+        trimBefore={frameInClip}
+        trimAfter={frameInClip + 1}
+        style={{ ...fillStyle, zIndex: 1 }}
+      />
+    </AbsoluteFill>
+  );
 }
 
 export function PingPongSceneVideo({
