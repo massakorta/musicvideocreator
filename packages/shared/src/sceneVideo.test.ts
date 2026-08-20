@@ -36,14 +36,11 @@ function scene(partial: Partial<StoryboardScene>): StoryboardScene {
 }
 
 describe('sceneClipDurationSeconds', () => {
-  it('uses 5 seconds for short scenes', () => {
+  it('always uses the fast 5 second clip duration', () => {
     expect(sceneClipDurationSeconds(3)).toBe(5);
     expect(sceneClipDurationSeconds(7)).toBe(5);
-  });
-
-  it('uses 10 seconds for longer scenes', () => {
-    expect(sceneClipDurationSeconds(8)).toBe(10);
-    expect(sceneClipDurationSeconds(12)).toBe(10);
+    expect(sceneClipDurationSeconds(8)).toBe(5);
+    expect(sceneClipDurationSeconds(12)).toBe(5);
   });
 });
 

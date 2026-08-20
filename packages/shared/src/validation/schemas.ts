@@ -200,7 +200,6 @@ export const patchProjectBodySchema = z.object({
   songTitle: z.string().max(160).optional(),
   lyrics: z.string().max(20000).optional(),
   styleId: z.string().optional(),
-  imageQualityId: z.enum(imageQualityIds).optional(),
   status: z.enum(PROJECT_STATUSES).optional(),
   captionsEnabled: z.boolean().optional(),
   formatId: z.enum(Object.keys(VIDEO_PRESETS) as [keyof typeof VIDEO_PRESETS, ...Array<keyof typeof VIDEO_PRESETS>]).optional(),

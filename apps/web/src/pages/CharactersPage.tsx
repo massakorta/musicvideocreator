@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { IMAGE_GENERATION_EXPECTED_SECONDS_PER_STILL } from '@music-video/shared';
 import { useProject } from '../hooks/useProject';
 import { api, ApiClientError } from '../lib/api';
 import { EmptyState } from '../components/EmptyState';
-import { ImageQualityPicker, imageQualitySecondsPerStill } from '../components/ImageQualityPicker';
 import { CardWaitOverlay, WaitCard } from '../components/WaitCard';
 
 export function CharactersPage() {
@@ -13,8 +13,7 @@ export function CharactersPage() {
   const [progress, setProgress] = useState({ current: 0, total: 0, name: '' });
   const navigate = useNavigate();
   const characters = project.visualBible?.characters ?? [];
-  const perStillSeconds = imageQualitySecondsPerStill(project);
-  const generationBusy = Boolean(busyId);
+  const perStillSeconds = IMAGE_GENERATION_EXPECTED_SECONDS_PER_STILL;
 
   if (!project.visualBibleApproved) {
     return (
@@ -104,12 +103,6 @@ export function CharactersPage() {
               stages={['Painting full-body references…']}
             />
           ) : null}
-          <ImageQualityPicker
-            project={project}
-            setProject={setProject}
-            disabled={generationBusy}
-            variant="compact"
-          />
           <div className="actions">
             <button className="btn btn-primary" disabled={Boolean(busyId)} onClick={() => void generateAll()}>
               {busyId === 'all' ? 'Generating sheets…' : 'Generate all character sheets'}

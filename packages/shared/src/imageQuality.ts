@@ -75,7 +75,13 @@ export const IMAGE_QUALITY_PRESETS: ImageQualityPreset[] = [
   },
 ];
 
-export const DEFAULT_IMAGE_QUALITY_ID: ImageQualityId = 'low-fast';
+export const DEFAULT_IMAGE_QUALITY_ID: ImageQualityId = 'high';
+
+/** Stills always generate at high quality — no user-facing tier picker. */
+export const FIXED_IMAGE_QUALITY_ID: ImageQualityId = 'high';
+
+export const IMAGE_GENERATION_EXPECTED_SECONDS_PER_STILL =
+  IMAGE_QUALITY_PRESETS.find((preset) => preset.id === FIXED_IMAGE_QUALITY_ID)?.expectedSecondsPerStill ?? 8;
 
 const LEGACY_IMAGE_QUALITY_MAP: Record<LegacyImageQualityId, ImageQualityId> = {
   highest: 'high',
@@ -99,10 +105,10 @@ export function getImageQuality(id: string | undefined): ImageQualityPreset {
   );
 }
 
-export function resolveProjectImageQualityId(project: {
+export function resolveProjectImageQualityId(_project?: {
   imageQualityId?: StoredImageQualityId;
 }): ImageQualityId {
-  return normalizeImageQualityId(project.imageQualityId);
+  return FIXED_IMAGE_QUALITY_ID;
 }
 
 export function effectiveGeneratedImageQualityId(project: {
@@ -111,14 +117,10 @@ export function effectiveGeneratedImageQualityId(project: {
   return normalizeImageQualityId(project.generatedImageQualityId);
 }
 
-export function imagesNeedQualityRegenerate(project: {
+export function imagesNeedQualityRegenerate(_project: {
   imageQualityId?: StoredImageQualityId;
   generatedImageQualityId?: StoredImageQualityId;
   scenes: Array<{ currentAssetId?: string; image?: unknown }>;
 }): boolean {
-  const hasImages = project.scenes.some((scene) => Boolean(scene.currentAssetId || scene.image));
-  if (!hasImages) return false;
-  return (
-    resolveProjectImageQualityId(project) !== effectiveGeneratedImageQualityId(project)
-  );
+  return false;
 }

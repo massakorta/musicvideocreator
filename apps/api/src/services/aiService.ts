@@ -1,5 +1,5 @@
 import { createOpenAiClient, FalImageProvider, FalVideoProvider, generateStoryboard, generateVisualBible, isOpenAiConfigured } from '@music-video/ai';
-import { AppError, ERROR_CODES, getImageQuality, visualBibleSchema, type AiUsageLog, type ImageQualityId, type VisualBible } from '@music-video/shared';
+import { AppError, ERROR_CODES, FIXED_IMAGE_QUALITY_ID, getImageQuality, visualBibleSchema, type AiUsageLog, type ImageQualityId, type VisualBible } from '@music-video/shared';
 import { config, falConfigured, openaiConfigured } from '../config.js';
 import { getRepositories } from '../repositories/index.js';
 import { demoStoryboard, demoVisualBible } from './demo.js';
@@ -123,7 +123,7 @@ export async function generateProjectStoryboard(projectId: string) {
   }
 }
 
-export function createImageProvider(imageQualityId?: ImageQualityId): FalImageProvider | null {
+export function createImageProvider(imageQualityId: ImageQualityId = FIXED_IMAGE_QUALITY_ID): FalImageProvider | null {
   if (!falConfigured()) return null;
   const preset = getImageQuality(imageQualityId);
   return new FalImageProvider(preset, {

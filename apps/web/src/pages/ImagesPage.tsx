@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { GENERATION_STATE_LABELS, MOTION_PRESET_LABELS, VIDEO_GENERATION_EXPECTED_SECONDS, getImageQuality, imagesNeedQualityRegenerate, missingCharacterReferences, effectiveGeneratedImageQualityId, resolveProjectImageQualityId, sceneHasStill, sceneHasVideo } from '@music-video/shared';
+import { GENERATION_STATE_LABELS, IMAGE_GENERATION_EXPECTED_SECONDS_PER_STILL, MOTION_PRESET_LABELS, VIDEO_GENERATION_EXPECTED_SECONDS, missingCharacterReferences, sceneHasStill, sceneHasVideo } from '@music-video/shared';
 import { useProject } from '../hooks/useProject';
 import { api, ApiClientError } from '../lib/api';
 import { formatClockShort } from '../lib/time';
 import { HealthPanel } from '../components/HealthPanel';
 import { EmptyState } from '../components/EmptyState';
-import { ImageQualityPicker, imageQualitySecondsPerStill } from '../components/ImageQualityPicker';
 import { SceneEditor } from '../components/SceneEditor';
 import { CardWaitOverlay, WaitCard } from '../components/WaitCard';
 import { SceneCardMedia } from '../components/SceneCardMedia';
@@ -43,19 +42,11 @@ export function ImagesPage() {
   ).length;
   const completeCount = project.scenes.filter((s) => sceneHasStill(s)).length;
   const animatedCount = project.scenes.filter((s) => sceneHasVideo(s)).length;
-  const perStillSeconds = imageQualitySecondsPerStill(project);
-  const generationBusy = busy || generatingCount > 0 || Boolean(singleTitle);
+  const perStillSeconds = IMAGE_GENERATION_EXPECTED_SECONDS_PER_STILL;
   const animatingCount = project.scenes.filter(
     (s) => s.videoGenerationState === 'generating' && !sceneHasVideo(s),
   ).length;
   const videoGenerationBusy = videoBusy || animatingCount > 0 || Boolean(singleVideoTitle);
-  const qualityRegenerateNeeded = imagesNeedQualityRegenerate(project);
-  const currentQuality = getImageQuality(resolveProjectImageQualityId(project));
-  const generatedQuality = getImageQuality(effectiveGeneratedImageQualityId(project));
-
-  function scenesWithImages() {
-    return project.scenes.filter((scene) => sceneHasStill(scene));
-  }
 
   function sceneIsActivelyAnimating(scene: (typeof project.scenes)[number]): boolean {
     return (
@@ -175,55 +166,6 @@ export function ImagesPage() {
     setQueuedIds([]);
   }
 
-  async function regenerateAllImages() {
-    const existing = scenesWithImages();
-    if (existing.length === 0) return;
-    setBusy(true);
-    setError(null);
-    setQueuedIds(existing.map((scene) => scene.id));
-    setPaintingIds([]);
-    setBatch({ done: 0, total: existing.length, title: existing[0]?.title ?? '' });
-    let cursor = 0;
-    let failures = 0;
-    async function worker() {
-      while (cursor < existing.length) {
-        const index = cursor;
-        cursor += 1;
-        const scene = existing[index];
-        if (!scene) return;
-        setQueuedIds((ids) => ids.filter((id) => id !== scene.id));
-        setPaintingIds((ids) => [...ids, scene.id]);
-        setBatch((current) => ({ ...current, title: scene.title }));
-        try {
-          const data = await api.generateSceneImage(project.id, scene.id, true);
-          applyProjectUpdate(data.project);
-        } catch (err) {
-          failures += 1;
-          setError(
-            err instanceof ApiClientError
-              ? err.message
-              : `Scene ${scene.order} could not be regenerated. The rest will keep going.`,
-          );
-          await reload();
-        } finally {
-          setPaintingIds((ids) => ids.filter((id) => id !== scene.id));
-        }
-        setBatch((current) => ({ ...current, done: current.done + 1 }));
-      }
-    }
-    await Promise.all(
-      Array.from({ length: Math.min(IMAGE_GENERATION_CONCURRENCY, existing.length) }, () => worker()),
-    );
-    await reload();
-    if (failures > 0) {
-      setError(`${failures} still${failures === 1 ? '' : 's'} failed. Retry those cards, or regenerate again.`);
-    }
-    setBusy(false);
-    setBatch({ done: 0, total: 0, title: '' });
-    setPaintingIds([]);
-    setQueuedIds([]);
-  }
-
   useEffect(() => {
     if (generatingCount === 0 && animatingCount === 0) return;
     const timer = window.setInterval(() => {
@@ -242,21 +184,9 @@ export function ImagesPage() {
           </div>
         ) : null}
         {error ? <div className="banner error">{error}</div> : null}
-        {qualityRegenerateNeeded ? (
-          <div className="banner warning" style={{ marginBottom: 14 }}>
-            You changed still quality. Existing stills use {generatedQuality.name}. Regenerate to apply{' '}
-            {currentQuality.name}.
-          </div>
-        ) : null}
         {busy || generatingCount > 0 || singleTitle ? (
           <WaitCard
-            title={
-              qualityRegenerateNeeded && busy
-                ? 'Repainting stills at new quality'
-                : singleTitle && !busy
-                  ? 'Painting one still'
-                  : 'Painting scene stills'
-            }
+            title={singleTitle && !busy ? 'Painting one still' : 'Painting scene stills'}
             current={busy ? batch.done : singleTitle ? undefined : completeCount}
             total={busy ? batch.total : singleTitle ? undefined : project.scenes.length}
             expectedSeconds={
@@ -307,31 +237,14 @@ export function ImagesPage() {
             stages={['Each clip can take up to a minute. Keep this tab open.']}
           />
         ) : null}
-        <ImageQualityPicker
-          project={project}
-          setProject={setProject}
-          disabled={generationBusy}
-          variant="compact"
-        />
         <div className="actions">
-          {qualityRegenerateNeeded ? (
-            <button
-              className="btn btn-primary"
-              disabled={generationBusy || project.scenes.length === 0}
-              onClick={() => void regenerateAllImages()}
-            >
-              {busy ? 'Regenerating stills…' : `Regenerate all at ${currentQuality.name}`}
-            </button>
-          ) : null}
-          {!qualityRegenerateNeeded || completeCount < project.scenes.length ? (
-            <button
-              className={`btn ${qualityRegenerateNeeded ? '' : 'btn-primary'}`}
-              disabled={busy || project.scenes.length === 0 || completeCount === project.scenes.length}
-              onClick={() => void generateMissing()}
-            >
-              {busy && !qualityRegenerateNeeded ? 'Generating stills…' : 'Generate Missing Images'}
-            </button>
-          ) : null}
+          <button
+            className="btn btn-primary"
+            disabled={busy || project.scenes.length === 0 || completeCount === project.scenes.length}
+            onClick={() => void generateMissing()}
+          >
+            {busy ? 'Generating stills…' : 'Generate Missing Images'}
+          </button>
           {stale && stale.staleSceneIds.length > 0 ? (
             <button
               className="btn"

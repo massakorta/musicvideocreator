@@ -1,6 +1,9 @@
 import type { StoryboardScene } from './storyboard.js';
 
-export const VIDEO_GENERATION_EXPECTED_SECONDS = 60;
+/** Clips use the shortest Kling duration for speed and cost. */
+export const FIXED_SCENE_CLIP_DURATION_SECONDS = 5 as const;
+
+export const VIDEO_GENERATION_EXPECTED_SECONDS = 45;
 
 export function sceneHasStill(scene: Pick<StoryboardScene, 'currentAssetId' | 'image'>): boolean {
   return Boolean(scene.currentAssetId || scene.image);
@@ -16,8 +19,8 @@ export function sceneNeedsAnimation(scene: StoryboardScene): boolean {
   return sceneHasStill(scene) && !sceneHasVideo(scene);
 }
 
-export function sceneClipDurationSeconds(sceneDuration: number): 5 | 10 {
-  return sceneDuration <= 7 ? 5 : 10;
+export function sceneClipDurationSeconds(_sceneDuration: number): typeof FIXED_SCENE_CLIP_DURATION_SECONDS {
+  return FIXED_SCENE_CLIP_DURATION_SECONDS;
 }
 
 export function sceneVideoPlaybackRate(clipDurationSeconds: number, sceneDurationSeconds: number): number {

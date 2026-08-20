@@ -96,13 +96,13 @@ describe('FalVideoProvider', () => {
       expect.objectContaining({
         input: expect.objectContaining({
           start_image_url: 'https://fal.media/still.jpg',
-          duration: '10',
+          duration: '5',
           generate_audio: false,
         }),
       }),
     );
     expect(result.videoUrl).toBe('https://example.com/clip.mp4');
-    expect(result.durationSeconds).toBe(10);
+    expect(result.durationSeconds).toBe(5);
   });
 
   it('uses a public still URL without re-uploading to fal storage', async () => {

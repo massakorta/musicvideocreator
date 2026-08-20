@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { VISUAL_STYLE_PRESETS } from '@music-video/shared';
 import { useProject } from '../hooks/useProject';
 import { api, ApiClientError } from '../lib/api';
-import { ImageQualityPicker } from '../components/ImageQualityPicker';
 import { WaitCard } from '../components/WaitCard';
 
 export function StylePage() {
@@ -92,12 +91,6 @@ export function StylePage() {
           </button>
         ))}
       </div>
-      <ImageQualityPicker
-        project={project}
-        setProject={setProject}
-        disabled={Boolean(busyId) || generatingAll}
-        variant="cards"
-      />
       {project.styleId ? (
         <div className="actions" style={{ marginTop: 18 }}>
           <button
