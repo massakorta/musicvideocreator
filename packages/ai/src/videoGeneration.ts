@@ -18,6 +18,8 @@ export interface SceneVideoGenerationRequest {
   style: VisualStylePreset;
   sourceImageBytes: Buffer;
   sourceImageMimeType: string;
+  /** When set, fal fetches the still directly instead of re-uploading bytes. */
+  sourceImageUrl?: string;
 }
 
 export interface GeneratedVideoBytes {
@@ -84,17 +86,24 @@ export class FalVideoProvider {
     });
     const duration = sceneClipDurationSeconds(request.scene.duration);
     const fullPrompt = `${prompt}\nAvoid: ${negativePrompt}`.slice(0, 2500);
-    return this.generate(fullPrompt, request.sourceImageBytes, request.sourceImageMimeType, duration);
+    const startImageUrl = await this.resolveStartImageUrl(request);
+    return this.generate(fullPrompt, startImageUrl, duration);
+  }
+
+  private async resolveStartImageUrl(request: SceneVideoGenerationRequest): Promise<string> {
+    if (request.sourceImageUrl && isPublicHttpsUrl(request.sourceImageUrl)) {
+      return request.sourceImageUrl;
+    }
+    return this.uploadSourceImage(request.sourceImageBytes, request.sourceImageMimeType);
   }
 
   private async generate(
     fullPrompt: string,
-    sourceImageBytes: Buffer,
-    sourceImageMimeType: string,
+    startImageUrl: string,
     durationSeconds: 5 | 10,
   ): Promise<GeneratedVideoBytes> {
     try {
-      return await this.requestVideoWithRetry(fullPrompt, sourceImageBytes, sourceImageMimeType, durationSeconds);
+      return await this.requestVideoWithRetry(fullPrompt, startImageUrl, durationSeconds);
     } catch (error) {
       throw new Error(humanizeVideoError(error));
     }
@@ -102,23 +111,16 @@ export class FalVideoProvider {
 
   private async requestVideoWithRetry(
     fullPrompt: string,
-    sourceImageBytes: Buffer,
-    sourceImageMimeType: string,
+    startImageUrl: string,
     durationSeconds: 5 | 10,
     attempt = 0,
   ): Promise<GeneratedVideoBytes> {
     try {
-      return await this.requestVideo(fullPrompt, sourceImageBytes, sourceImageMimeType, durationSeconds);
+      return await this.requestVideo(fullPrompt, startImageUrl, durationSeconds);
     } catch (error) {
       if (attempt < MAX_IMAGE_ATTEMPTS - 1 && isRetryableProviderError(error)) {
         await sleep(this.retryDelayMs(attempt));
-        return this.requestVideoWithRetry(
-          fullPrompt,
-          sourceImageBytes,
-          sourceImageMimeType,
-          durationSeconds,
-          attempt + 1,
-        );
+        return this.requestVideoWithRetry(fullPrompt, startImageUrl, durationSeconds, attempt + 1);
       }
       throw error;
     }
@@ -137,11 +139,9 @@ export class FalVideoProvider {
 
   private async requestVideo(
     fullPrompt: string,
-    sourceImageBytes: Buffer,
-    sourceImageMimeType: string,
+    startImageUrl: string,
     durationSeconds: 5 | 10,
   ): Promise<GeneratedVideoBytes> {
-    const startImageUrl = await this.uploadSourceImage(sourceImageBytes, sourceImageMimeType);
     const duration = durationSeconds === 10 ? '10' : '5';
     const result = (await fal.subscribe(KLING_I2V_ENDPOINT, {
       input: {
@@ -187,4 +187,14 @@ function humanizeVideoError(error: unknown): string {
     return 'fal.ai rejected the API key.';
   }
   return message || 'The video provider returned an error.';
+}
+
+function isPublicHttpsUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:') return false;
+    return !['localhost', '127.0.0.1'].includes(parsed.hostname);
+  } catch {
+    return false;
+  }
 }

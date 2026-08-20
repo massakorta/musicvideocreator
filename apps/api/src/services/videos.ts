@@ -14,6 +14,11 @@ import {
 import { replaceScenes } from './projectUtils.js';
 import { getObjectStorage } from '../storage/index.js';
 import { getRepositories } from '../repositories/index.js';
+import {
+  isPublicRemoteUrl,
+  prepareStillForFalUpload,
+  prepareVideoForStorage,
+} from './mediaPrepare.js';
 
 export async function generateSceneVideo(projectId: string, sceneId: string, force = false) {
   const project = await getProjectOrThrow(projectId);
@@ -109,21 +114,26 @@ async function executeSceneVideoGeneration(projectId: string, sceneId: string): 
     if (!stored) {
       throw new AppError(ERROR_CODES.NOT_FOUND, 'The scene still file could not be loaded.', 404);
     }
+    const stillForFal = await prepareStillForFalUpload(stored.body, stored.mimeType);
+    const sourceImageUrl = isPublicRemoteUrl(imageAsset.publicUrl) ? imageAsset.publicUrl : undefined;
 
     const video = await provider.generateSceneVideo({
       scene,
       bible: project.visualBible,
       style,
-      sourceImageBytes: stored.body,
-      sourceImageMimeType: stored.mimeType,
+      sourceImageUrl,
+      sourceImageBytes: stillForFal.body,
+      sourceImageMimeType: stillForFal.mimeType,
     });
+
+    const videoBody = await prepareVideoForStorage(video.bytes);
 
     const asset = await storeGeneratedFile({
       projectId,
       type: 'scene_video',
       source: 'ai',
       filename: `${scene.id}.mp4`,
-      body: video.bytes,
+      body: videoBody,
       mimeType: video.mimeType,
       durationSeconds: video.durationSeconds,
       metadata: { sceneId, sourceImageAssetId: imageAssetId, prompt: video.prompt, model: video.model },

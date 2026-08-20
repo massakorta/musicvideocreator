@@ -114,6 +114,30 @@ describe('FalVideoProvider', () => {
     expect(result.durationSeconds).toBe(10);
   });
 
+  it('uses a public still URL without re-uploading to fal storage', async () => {
+    mockFetchVideo(Buffer.from('clip'));
+    subscribe.mockResolvedValue({ data: { video: { url: 'https://example.com/clip.mp4' } } });
+
+    await new FalVideoProvider({ retryDelayMs: () => 0 }).generateSceneVideo({
+      scene,
+      bible,
+      style,
+      sourceImageUrl: 'https://cdn.example.com/still.jpg',
+      sourceImageBytes: Buffer.from('still'),
+      sourceImageMimeType: 'image/jpeg',
+    });
+
+    expect(upload).not.toHaveBeenCalled();
+    expect(subscribe).toHaveBeenCalledWith(
+      KLING_I2V_ENDPOINT,
+      expect.objectContaining({
+        input: expect.objectContaining({
+          start_image_url: 'https://cdn.example.com/still.jpg',
+        }),
+      }),
+    );
+  });
+
   it('retries a rate limit and then succeeds', async () => {
     mockFetchVideo(Buffer.from('clip'));
     upload.mockResolvedValue('https://fal.media/still.jpg');
