@@ -1,11 +1,5 @@
-import React, { useLayoutEffect, useRef, useState } from 'react';
-import {
-  AbsoluteFill,
-  Img,
-  OffthreadVideo,
-  useCurrentFrame,
-  useVideoConfig,
-} from 'remotion';
+import React from 'react';
+import { AbsoluteFill, Img, OffthreadVideo, useCurrentFrame, useVideoConfig } from 'remotion';
 import { sceneVideoSourceSeconds } from '@music-video/shared';
 
 function seekVideo(video: HTMLVideoElement, sourceTime: number) {
@@ -34,10 +28,10 @@ function PingPongSceneVideoPreview({
   playbackActive: boolean;
   style?: React.CSSProperties;
 }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [videoReady, setVideoReady] = useState(false);
+  const videoRef = React.useRef<HTMLVideoElement>(null);
+  const [videoReady, setVideoReady] = React.useState(false);
 
-  useLayoutEffect(() => {
+  React.useLayoutEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
@@ -86,17 +80,19 @@ function PingPongSceneVideoPreview({
 
 function PingPongSceneVideoRender({
   src,
-  sourceTime,
+  clipDurationSeconds,
+  sceneDurationSeconds,
   fallbackImageUrl,
   style,
 }: {
   src: string;
-  sourceTime: number;
+  clipDurationSeconds: number;
+  sceneDurationSeconds: number;
   fallbackImageUrl: string;
   style?: React.CSSProperties;
 }) {
-  const { fps } = useVideoConfig();
-  const frameInClip = Math.max(0, Math.round(sourceTime * fps));
+  const playbackRate =
+    clipDurationSeconds > sceneDurationSeconds ? clipDurationSeconds / sceneDurationSeconds : 1;
   const fillStyle: React.CSSProperties = {
     ...style,
     position: 'absolute',
@@ -112,8 +108,7 @@ function PingPongSceneVideoRender({
       <OffthreadVideo
         src={src}
         muted
-        trimBefore={frameInClip}
-        trimAfter={frameInClip + 1}
+        playbackRate={playbackRate}
         style={{ ...fillStyle, zIndex: 1 }}
       />
     </AbsoluteFill>
@@ -144,7 +139,8 @@ export function PingPongSceneVideo({
     return (
       <PingPongSceneVideoRender
         src={src}
-        sourceTime={sourceTime}
+        clipDurationSeconds={clipDurationSeconds}
+        sceneDurationSeconds={sceneDurationSeconds}
         fallbackImageUrl={fallbackImageUrl}
         style={style}
       />

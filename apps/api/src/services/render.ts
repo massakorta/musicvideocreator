@@ -1,4 +1,4 @@
-import { AppError, ERROR_CODES, computeProjectHealth, type RenderJob } from '@music-video/shared';
+import { AppError, ERROR_CODES, computeProjectHealth, exportDurationFrames, estimateRenderTimeoutMs, type RenderJob } from '@music-video/shared';
 import { getRepositories } from '../repositories/index.js';
 import { getProjectOrThrow, saveProject } from './projects.js';
 import { newId, nowIso } from './projectUtils.js';
@@ -17,7 +17,22 @@ export async function enqueueRender(projectId: string): Promise<{ project: Await
     job.status === 'queued' || job.status === 'preparing' || job.status === 'rendering' || job.status === 'uploading',
   );
   if (active) {
-    return { project, job: active };
+    const exportFrames = exportDurationFrames(
+      project.audio?.durationSeconds ?? project.durationSeconds,
+      project.formatId,
+    );
+    const staleAfterMs = estimateRenderTimeoutMs(exportFrames) + 5 * 60 * 1000;
+    const startedAt = active.startedAt ?? active.createdAt;
+    if (Date.now() - Date.parse(startedAt) > staleAfterMs) {
+      await getRepositories().renderJobs.save({
+        ...active,
+        status: 'failed',
+        error: 'Render timed out. Start a new export.',
+        completedAt: new Date().toISOString(),
+      });
+    } else {
+      return { project, job: active };
+    }
   }
   const job: RenderJob = {
     id: newId(),

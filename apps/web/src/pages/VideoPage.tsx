@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { compositionDurationFrames, projectToComposition } from '@music-video/video';
-import { getVideoPreset, RENDER_JOB_STATUS_LABELS, type RenderJob } from '@music-video/shared';
+import { getVideoPreset, exportDurationFrames, estimateRenderExpectedSeconds, RENDER_JOB_STATUS_LABELS, type RenderJob } from '@music-video/shared';
 import { Link, useNavigate } from 'react-router-dom';
 import { useProject } from '../hooks/useProject';
 import { api, ApiClientError } from '../lib/api';
@@ -21,10 +21,14 @@ export function VideoPage() {
   const [renderJob, setRenderJob] = useState<RenderJob | null>(null);
   const [renderBusy, setRenderBusy] = useState(false);
   const [shareLinks, setShareLinks] = useState<{ url: string; videoFileUrl?: string } | null>(null);
+  const [lastRenderProgress, setLastRenderProgress] = useState<number | null>(null);
+  const [lastRenderProgressAt, setLastRenderProgressAt] = useState<number>(Date.now());
   const navigate = useNavigate();
   const composition = useMemo(() => projectToComposition(project), [project]);
   const preset = getVideoPreset(project.formatId);
   const durationInFrames = compositionDurationFrames(composition);
+  const exportFrames = exportDurationFrames(project.durationSeconds, project.formatId);
+  const exportEtaMinutes = Math.max(2, Math.ceil(estimateRenderExpectedSeconds(exportFrames) / 60));
   const selected = project.scenes.find((s) => s.id === selectedId);
   const currentSeconds = frame / preset.fps;
   const currentScene = project.scenes.find(
@@ -70,7 +74,13 @@ export function VideoPage() {
     if (!renderJob || renderJob.status === 'complete' || renderJob.status === 'failed') return;
     const timer = window.setInterval(() => {
       void api.job(renderJob.id).then(({ job }) => {
-        setRenderJob(job);
+        setRenderJob((current) => {
+          if (current && job.progress !== current.progress) {
+            setLastRenderProgress(job.progress);
+            setLastRenderProgressAt(Date.now());
+          }
+          return job;
+        });
         if (job.status === 'complete' || job.status === 'failed') {
           setRenderBusy(false);
         }
@@ -78,6 +88,12 @@ export function VideoPage() {
     }, 2500);
     return () => window.clearInterval(timer);
   }, [renderJob?.id, renderJob?.status]);
+
+  const renderProgressStale =
+    renderActive &&
+    lastRenderProgress !== null &&
+    renderJob?.progress === lastRenderProgress &&
+    Date.now() - lastRenderProgressAt > 3 * 60 * 1000;
 
   async function startRender() {
     setRenderBusy(true);
@@ -223,8 +239,15 @@ export function VideoPage() {
             <h3 style={{ marginTop: 0 }}>MP4 export</h3>
             <p className="muted" style={{ marginTop: 0 }}>
               Renders one finished H.264 file with Remotion. Share links use the MP4 when it exists, so phones play it
-              natively instead of the live preview player.
+              natively instead of the live preview player. A {formatClock(project.durationSeconds)} film usually takes
+              about {exportEtaMinutes} minutes on the export worker.
             </p>
+            {renderProgressStale ? (
+              <p className="banner warning" style={{ marginBottom: 12 }}>
+                Progress has not moved for a few minutes. The worker may still be busy, or the current export may have
+                stalled — check worker logs, then try Generate MP4 again after redeploying the worker.
+              </p>
+            ) : null}
             {stale?.videoStale ? (
               <p className="banner warning" style={{ marginBottom: 12 }}>
                 The cut changed since the last export. Generate a fresh MP4 before sharing.

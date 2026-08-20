@@ -2,10 +2,14 @@ import { createReadStream } from 'node:fs';
 import { mkdir, stat, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { projectToComposition, type CompositionProject } from '@music-video/video';
 import type { MusicVideoProject } from '@music-video/shared';
 import { getRepositories } from '../../api/src/repositories/index.js';
 import { getObjectStorage } from '../../api/src/storage/index.js';
+
+const execFileAsync = promisify(execFile);
 
 function extensionFromUrl(url: string): string {
   try {
@@ -97,6 +101,67 @@ async function loadSceneVideoBody(
   }
 }
 
+function buildPingPongFilter(clipDurationSeconds: number, sceneDurationSeconds: number): string {
+  const clip = Math.max(0.1, clipDurationSeconds);
+  const scene = Math.max(0.1, sceneDurationSeconds);
+
+  if (scene <= clip + 0.01) {
+    return `[0:v]trim=end=${scene},setpts=PTS-STARTPTS[out]`;
+  }
+
+  const reverseLen = Math.min(clip, scene - clip);
+  const cycleLen = clip + reverseLen;
+  if (scene <= cycleLen + 0.01) {
+    return [
+      `[0:v]trim=end=${clip},setpts=PTS-STARTPTS[fwd]`,
+      `[0:v]trim=end=${clip},reverse,trim=end=${reverseLen},setpts=PTS-STARTPTS[rev]`,
+      `[fwd][rev]concat=n=2:v=1:a=0,setpts=PTS-STARTPTS[out]`,
+    ].join(';');
+  }
+
+  const extraForward = scene - cycleLen;
+  return [
+    `[0:v]trim=end=${clip},setpts=PTS-STARTPTS[fwd]`,
+    `[0:v]trim=end=${clip},reverse,trim=end=${reverseLen},setpts=PTS-STARTPTS[rev]`,
+    `[0:v]trim=end=${clip},setpts=PTS-STARTPTS[fwd2]`,
+    `[fwd][rev]concat=n=2:v=1:a=0[cycle]`,
+    `[fwd2]trim=end=${extraForward},setpts=PTS-STARTPTS[extra]`,
+    `[cycle][extra]concat=n=2:v=1:a=0,setpts=PTS-STARTPTS[out]`,
+  ].join(';');
+}
+
+/** Bake ping-pong timing into a single forward clip so Remotion can render it normally. */
+export async function buildPingPongClip(
+  inputPath: string,
+  outputPath: string,
+  clipDurationSeconds: number,
+  sceneDurationSeconds: number,
+): Promise<void> {
+  await execFileAsync(
+    'ffmpeg',
+    [
+      '-y',
+      '-i',
+      inputPath,
+      '-filter_complex',
+      buildPingPongFilter(clipDurationSeconds, sceneDurationSeconds),
+      '-map',
+      '[out]',
+      '-an',
+      '-c:v',
+      'libx264',
+      '-preset',
+      'ultrafast',
+      '-crf',
+      '28',
+      '-movflags',
+      '+faststart',
+      outputPath,
+    ],
+    { timeout: 1000 * 60 * 5 },
+  );
+}
+
 /** Serves prefetched stills and clips over HTTP — headless Chromium blocks file:// URLs. */
 export async function startStillsServer(
   stillsDir: string,
@@ -172,11 +237,34 @@ export async function prefetchCompositionStills(
       if (scene.videoUrl) {
         const videoBody = await loadSceneVideoBody(project, scene.id, scene.videoUrl);
         if (videoBody) {
-          const filename = `${scene.id}-clip.mp4`;
-          const dest = path.join(stillsDir, filename);
-          await writeFile(dest, videoBody);
-          prefetched += 1;
-          next = { ...next, videoUrl: `${assetsBaseUrl}/${filename}` };
+          const projectScene = project.scenes.find((s) => s.id === scene.id);
+          const clipDurationSeconds =
+            scene.videoDurationSeconds ??
+            projectScene?.video?.durationSeconds ??
+            Math.max(0.1, scene.endTime - scene.startTime);
+          const sceneDurationSeconds = Math.max(0.1, scene.endTime - scene.startTime);
+          const rawFilename = `${scene.id}-clip.mp4`;
+          const rawDest = path.join(stillsDir, rawFilename);
+          await writeFile(rawDest, videoBody);
+
+          if (clipDurationSeconds + 0.05 < sceneDurationSeconds) {
+            const extendedFilename = `${scene.id}-clip-extended.mp4`;
+            const extendedDest = path.join(stillsDir, extendedFilename);
+            await buildPingPongClip(rawDest, extendedDest, clipDurationSeconds, sceneDurationSeconds);
+            prefetched += 1;
+            next = {
+              ...next,
+              videoUrl: `${assetsBaseUrl}/${extendedFilename}`,
+              videoDurationSeconds: sceneDurationSeconds,
+            };
+          } else {
+            prefetched += 1;
+            next = {
+              ...next,
+              videoUrl: `${assetsBaseUrl}/${rawFilename}`,
+              videoDurationSeconds: clipDurationSeconds,
+            };
+          }
         }
       }
       return next;
