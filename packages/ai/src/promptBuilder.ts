@@ -23,6 +23,8 @@ export interface SceneImagePromptInput {
     | 'environmentId'
     | 'negativePrompt'
     | 'suggestedMotion'
+    | 'songSection'
+    | 'lyricsExcerpt'
   >;
   extraInstructions?: string;
 }
@@ -31,17 +33,27 @@ export function buildSceneVideoPrompt(input: SceneImagePromptInput): {
   prompt: string;
   negativePrompt: string;
 } {
-  const { style, scene } = input;
+  const { style, bible, scene } = input;
   const motionHint = motionLanguageForVideo(scene.suggestedMotion, scene.cameraIntent);
   const imageNegative = buildSceneImagePrompt(input).negativePrompt;
+  const storyMoment = storyMomentLine(scene);
+  const characterBeat = characterBeatForVideo(bible, scene);
+  const environmentHint = environmentHintForVideo(bible, scene.environmentId);
+  const storyMotion = storyMotionDirection(scene);
 
   const prompt = [
     `${style.name} music video clip.`,
+    bible.overallStyle.mood ? `Mood: ${bible.overallStyle.mood}.` : '',
+    storyMoment,
     `Scene: ${scene.title}. ${scene.description}`,
-    `Frozen moment: ${scene.action}.`,
+    `Story beat: ${scene.action}.`,
+    scene.visualComedy ? `Visual gag: ${scene.visualComedy}.` : '',
+    characterBeat,
+    environmentHint,
+    storyMotion,
     motionHint,
     'Subtle in-place motion only. Same frame, same characters, same environment.',
-    'Natural micro-movement: fabric sway, steam, light flicker, hair drift, breathing.',
+    'Animate the story beat with natural micro-movement tied to the gag and lyric moment — fabric sway, liquid wobble, steam, light flicker, hair drift, breathing, weight shift.',
     scene.imagePrompt ? `Notes: ${scene.imagePrompt}` : '',
   ]
     .filter(Boolean)
@@ -59,6 +71,45 @@ export function buildSceneVideoPrompt(input: SceneImagePromptInput): {
     .slice(0, 1000);
 
   return { prompt, negativePrompt };
+}
+
+function storyMomentLine(
+  scene: Pick<StoryboardScene, 'songSection' | 'lyricsExcerpt'>,
+): string {
+  const section = scene.songSection.replace(/_/g, ' ');
+  if (scene.lyricsExcerpt?.trim()) {
+    return `This ${section} moment matches the lyric: "${scene.lyricsExcerpt.trim()}".`;
+  }
+  return `Instrumental ${section} passage.`;
+}
+
+function characterBeatForVideo(bible: VisualBible, scene: Pick<StoryboardScene, 'characters' | 'action'>): string {
+  const characters = scene.characters
+    .map((id) => bible.characters.find((c) => c.id === id))
+    .filter((c): c is CharacterDefinition => Boolean(c));
+  if (characters.length === 0) return '';
+  const beats = characters.map(
+    (c) => `${c.name} (${c.role}): ${c.promptDescription}. Hold the beat: ${scene.action}.`,
+  );
+  return `Characters in frame: ${beats.join(' ')}`;
+}
+
+function environmentHintForVideo(bible: VisualBible, environmentId?: string): string {
+  if (!environmentId) return '';
+  const environment = bible.environments.find((e) => e.id === environmentId);
+  if (!environment) return '';
+  return `Setting: ${environment.name} — ${environment.promptDescription}.`;
+}
+
+function storyMotionDirection(scene: Pick<StoryboardScene, 'action' | 'visualComedy'>): string {
+  const parts: string[] = [];
+  if (scene.visualComedy) {
+    parts.push(`Motion should play the gag (${scene.visualComedy}) without changing the composition.`);
+  }
+  if (scene.action) {
+    parts.push(`Sell the frozen action (${scene.action}) with subtle movement, not a new pose or cut.`);
+  }
+  return parts.join(' ');
 }
 
 function motionLanguageForVideo(

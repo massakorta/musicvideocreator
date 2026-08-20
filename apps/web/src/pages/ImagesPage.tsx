@@ -43,16 +43,11 @@ export function ImagesPage() {
   const completeCount = project.scenes.filter((s) => sceneHasStill(s)).length;
   const animatedCount = project.scenes.filter((s) => sceneHasVideo(s)).length;
   const perStillSeconds = IMAGE_GENERATION_EXPECTED_SECONDS_PER_STILL;
-  const animatingCount = project.scenes.filter(
-    (s) => s.videoGenerationState === 'generating' && !sceneHasVideo(s),
-  ).length;
+  const animatingCount = project.scenes.filter((s) => s.videoGenerationState === 'generating').length;
   const videoGenerationBusy = videoBusy || animatingCount > 0 || Boolean(singleVideoTitle);
 
   function sceneIsActivelyAnimating(scene: (typeof project.scenes)[number]): boolean {
-    return (
-      animatingIds.includes(scene.id) ||
-      (scene.videoGenerationState === 'generating' && !sceneHasVideo(scene))
-    );
+    return animatingIds.includes(scene.id) || scene.videoGenerationState === 'generating';
   }
 
   async function animateRemaining() {
@@ -173,6 +168,14 @@ export function ImagesPage() {
     }, 2500);
     return () => window.clearInterval(timer);
   }, [generatingCount, animatingCount, reload]);
+
+  useEffect(() => {
+    const stillGenerating = project.scenes.some((scene) => scene.videoGenerationState === 'generating');
+    if (!stillGenerating) {
+      setSingleVideoTitle(null);
+      setAnimatingIds([]);
+    }
+  }, [project.scenes]);
 
   return (
     <div className="page editor-layout">
@@ -347,12 +350,12 @@ export function ImagesPage() {
                   {sceneHasStill(scene) ? (
                     <div
                       className={`pill ${
-                        scene.videoGenerationState === 'failed'
-                          ? 'error'
-                          : sceneHasVideo(scene)
-                            ? 'success'
-                            : sceneIsActivelyAnimating(scene)
-                              ? 'warning'
+                        sceneIsActivelyAnimating(scene)
+                          ? 'warning'
+                          : scene.videoGenerationState === 'failed'
+                            ? 'error'
+                            : sceneHasVideo(scene)
+                              ? 'success'
                               : ''
                       }`}
                     >
@@ -411,37 +414,46 @@ export function ImagesPage() {
                         ) : null}
                         <button
                           className="btn"
-                          disabled={videoGenerationBusy || Boolean(singleVideoTitle)}
+                          disabled={
+                            videoGenerationBusy ||
+                            Boolean(singleVideoTitle) ||
+                            sceneIsActivelyAnimating(scene)
+                          }
                           onClick={async () => {
                             setPreviewSceneId(null);
                             setSingleVideoTitle(scene.title);
-                          setAnimatingIds([scene.id]);
-                          setError(null);
-                          try {
-                            const data = await api.generateSceneVideo(
-                              project.id,
-                              scene.id,
-                              sceneHasVideo(scene),
-                            );
-                            applyProjectUpdate(data.project);
-                          } catch (err) {
-                            setError(
-                              err instanceof ApiClientError
-                                ? err.message
-                                : `Scene ${scene.order} could not be animated. The video provider returned an error.`,
-                            );
-                            await reload();
-                          } finally {
-                            setSingleVideoTitle(null);
-                            setAnimatingIds([]);
-                          }
-                        }}
-                      >
-                        {scene.videoGenerationState === 'failed'
-                          ? 'Retry clip'
-                          : sceneHasVideo(scene)
-                            ? 'Re-animate'
-                            : 'Animate'}
+                            setAnimatingIds([scene.id]);
+                            setError(null);
+                            try {
+                              const data = await api.generateSceneVideo(
+                                project.id,
+                                scene.id,
+                                sceneHasVideo(scene),
+                              );
+                              applyProjectUpdate(data.project);
+                              if (!data.started) {
+                                setSingleVideoTitle(null);
+                                setAnimatingIds([]);
+                              }
+                            } catch (err) {
+                              setSingleVideoTitle(null);
+                              setAnimatingIds([]);
+                              setError(
+                                err instanceof ApiClientError
+                                  ? err.message
+                                  : `Scene ${scene.order} could not be animated. The video provider returned an error.`,
+                              );
+                              await reload();
+                            }
+                          }}
+                        >
+                          {sceneIsActivelyAnimating(scene)
+                            ? 'Animating…'
+                            : scene.videoGenerationState === 'failed'
+                              ? 'Retry clip'
+                              : sceneHasVideo(scene)
+                                ? 'Re-animate'
+                                : 'Animate'}
                         </button>
                       </>
                     ) : null}

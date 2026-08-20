@@ -74,6 +74,9 @@ const scene: Pick<
   | 'characters'
   | 'environmentId'
   | 'negativePrompt'
+  | 'suggestedMotion'
+  | 'songSection'
+  | 'lyricsExcerpt'
 > = {
   title: 'Slip',
   description: 'Jens frozen mid-slip',
@@ -85,6 +88,8 @@ const scene: Pick<
   characters: ['jens'],
   environmentId: 'galley',
   suggestedMotion: 'slowZoomIn',
+  songSection: 'verse',
+  lyricsExcerpt: 'soup goes flying',
 };
 
 describe('buildSceneImagePrompt', () => {
@@ -133,14 +138,30 @@ describe('buildSceneImagePrompt', () => {
 });
 
 describe('buildSceneVideoPrompt', () => {
-  it('adds in-place motion language and forbids new shots', () => {
+  it('adds story, lyric, character, and gag-aware motion language', () => {
     const { prompt, negativePrompt } = buildSceneVideoPrompt({ style, bible, scene });
     expect(prompt).toContain('Subtle in-place motion only');
     expect(prompt).toContain('slow push-in');
     expect(prompt).toContain('Scene: Slip');
+    expect(prompt).toContain('soup goes flying');
+    expect(prompt).toContain('Visual gag: herring underfoot');
+    expect(prompt).toContain('Jens');
+    expect(prompt).toContain('striped apron');
+    expect(prompt).toContain('Galley');
+    expect(prompt).toContain('play the gag');
     expect(negativePrompt).toContain('scene change');
     expect(negativePrompt).toContain('face morphing');
     expect(prompt.length).toBeLessThanOrEqual(2000);
+  });
+
+  it('handles instrumental passages without lyrics', () => {
+    const { prompt } = buildSceneVideoPrompt({
+      style,
+      bible,
+      scene: { ...scene, lyricsExcerpt: undefined, songSection: 'bridge' },
+    });
+    expect(prompt).toContain('Instrumental bridge passage');
+    expect(prompt).not.toContain('matches the lyric');
   });
 });
 

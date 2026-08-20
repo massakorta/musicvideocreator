@@ -36,6 +36,21 @@ function mergeSceneFromServer(current: StoryboardScene, incoming: StoryboardScen
   }
 
   if (
+    incoming.videoGenerationState === 'generating' ||
+    (current.videoGenerationState === 'generating' &&
+      incoming.videoGenerationState === 'complete' &&
+      sceneHasVideo(current) &&
+      sceneHasVideo(incoming) &&
+      current.currentVideoAssetId === incoming.currentVideoAssetId)
+  ) {
+    merged = {
+      ...merged,
+      videoGenerationState: 'generating',
+      videoGenerationError: undefined,
+    };
+  }
+
+  if (
     incoming.videoGenerationState === 'failed' &&
     incoming.videoGenerationError &&
     (!merged.videoGenerationError || merged.videoGenerationState !== 'failed')

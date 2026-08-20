@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { StoryboardScene } from '@music-video/shared';
-import { scenesMissingImages } from './mergeProject.js';
+import type { MusicVideoProject, StoryboardScene } from '@music-video/shared';
+import { mergeProjectFromServer, scenesMissingImages } from './mergeProject.js';
 
 function scene(overrides: Partial<StoryboardScene> & Pick<StoryboardScene, 'id'>): StoryboardScene {
   return {
@@ -38,5 +38,25 @@ describe('scenesMissingImages', () => {
       scene({ id: 'b', currentAssetId: 'asset-b', generationState: 'complete', approved: true }),
     ];
     expect(scenesMissingImages(scenes).map((s) => s.id)).toEqual(['a']);
+  });
+});
+
+describe('mergeProjectFromServer', () => {
+  it('keeps generating state during re-animate when a clip already exists', () => {
+    const current = scene({
+      id: 'a',
+      currentVideoAssetId: 'vid-1',
+      videoGenerationState: 'complete',
+    });
+    const incoming = scene({
+      id: 'a',
+      currentVideoAssetId: 'vid-1',
+      videoGenerationState: 'generating',
+    });
+    const merged = mergeProjectFromServer(
+      { id: 'p1', scenes: [current] } as MusicVideoProject,
+      { id: 'p1', scenes: [incoming] } as MusicVideoProject,
+    );
+    expect(merged.scenes[0]?.videoGenerationState).toBe('generating');
   });
 });

@@ -164,7 +164,7 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ force }) },
     ),
   generateSceneVideo: (id: string, sceneId: string, force = false) =>
-    request<{ project: import('@music-video/shared').MusicVideoProject; demo: boolean }>(
+    request<{ project: import('@music-video/shared').MusicVideoProject; demo: boolean; started: boolean }>(
       `/api/projects/${id}/scenes/${sceneId}/video`,
       { method: 'POST', body: JSON.stringify({ force }) },
     ),
