@@ -9,6 +9,7 @@ import { EmptyState } from '../components/EmptyState';
 import { ImageQualityPicker, imageQualitySecondsPerStill } from '../components/ImageQualityPicker';
 import { SceneEditor } from '../components/SceneEditor';
 import { CardWaitOverlay, WaitCard } from '../components/WaitCard';
+import { SceneCardMedia } from '../components/SceneCardMedia';
 import { mergeProjectFromServer, scenesMissingImages, scenesNeedingAnimation } from '../lib/mergeProject';
 
 const IMAGE_GENERATION_CONCURRENCY = 6;
@@ -29,6 +30,7 @@ export function ImagesPage() {
   const [singleVideoTitle, setSingleVideoTitle] = useState<string | null>(null);
   const [animatingIds, setAnimatingIds] = useState<string[]>([]);
   const [videoQueuedIds, setVideoQueuedIds] = useState<string[]>([]);
+  const [previewSceneId, setPreviewSceneId] = useState<string | null>(null);
   const navigate = useNavigate();
   const projectRef = useRef(project);
   useEffect(() => {
@@ -379,21 +381,29 @@ export function ImagesPage() {
           <div className="grid-cards">
             {project.scenes.map((scene) => (
               <article className="card" key={scene.id}>
-                <div className="card-media" style={{ position: 'relative' }}>
-                  {scene.image?.publicUrl ? (
-                    <img src={scene.image.publicUrl} alt={scene.title} />
-                  ) : null}
-                  {sceneIsActivelyPainting(scene) ? (
-                    <CardWaitOverlay label="Painting now" ticking />
-                  ) : queuedIds.includes(scene.id) ? (
-                    <CardWaitOverlay label="In queue" />
-                  ) : sceneIsActivelyAnimating(scene) ? (
-                    <CardWaitOverlay label="Animating now" ticking />
-                  ) : videoQueuedIds.includes(scene.id) ? (
-                    <CardWaitOverlay label="Clip queue" />
-                  ) : null}
-                  {sceneHasVideo(scene) ? <div className="pill success" style={{ position: 'absolute', top: 8, right: 8 }}>Clip</div> : null}
-                </div>
+                <SceneCardMedia
+                  scene={scene}
+                  previewing={previewSceneId === scene.id}
+                  onPreviewChange={(previewing) => setPreviewSceneId(previewing ? scene.id : null)}
+                  overlays={
+                    <>
+                      {sceneIsActivelyPainting(scene) ? (
+                        <CardWaitOverlay label="Painting now" ticking />
+                      ) : queuedIds.includes(scene.id) ? (
+                        <CardWaitOverlay label="In queue" />
+                      ) : sceneIsActivelyAnimating(scene) ? (
+                        <CardWaitOverlay label="Animating now" ticking />
+                      ) : videoQueuedIds.includes(scene.id) ? (
+                        <CardWaitOverlay label="Clip queue" />
+                      ) : null}
+                      {sceneHasVideo(scene) ? (
+                        <div className="pill success" style={{ position: 'absolute', top: 8, right: 8 }}>
+                          Clip
+                        </div>
+                      ) : null}
+                    </>
+                  }
+                />
                 <div className="card-body">
                   <h3>{scene.title}</h3>
                   <div className="mono faint">
@@ -475,11 +485,23 @@ export function ImagesPage() {
                       {scene.generationState === 'failed' ? 'Retry' : sceneHasStill(scene) ? 'Regenerate' : 'Generate'}
                     </button>
                     {sceneHasStill(scene) ? (
-                      <button
-                        className="btn"
-                        disabled={videoGenerationBusy || Boolean(singleVideoTitle)}
-                        onClick={async () => {
-                          setSingleVideoTitle(scene.title);
+                      <>
+                        {sceneHasVideo(scene) && scene.video?.publicUrl ? (
+                          <button
+                            className="btn"
+                            onClick={() =>
+                              setPreviewSceneId(previewSceneId === scene.id ? null : scene.id)
+                            }
+                          >
+                            {previewSceneId === scene.id ? 'Show still' : 'Play clip'}
+                          </button>
+                        ) : null}
+                        <button
+                          className="btn"
+                          disabled={videoGenerationBusy || Boolean(singleVideoTitle)}
+                          onClick={async () => {
+                            setPreviewSceneId(null);
+                            setSingleVideoTitle(scene.title);
                           setAnimatingIds([scene.id]);
                           setError(null);
                           try {
@@ -507,7 +529,8 @@ export function ImagesPage() {
                           : sceneHasVideo(scene)
                             ? 'Re-animate'
                             : 'Animate'}
-                      </button>
+                        </button>
+                      </>
                     ) : null}
                     <div className="card-actions-secondary">
                       <button className="btn" onClick={() => setSelectedId(scene.id)}>

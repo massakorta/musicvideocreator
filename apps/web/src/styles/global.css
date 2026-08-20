@@ -331,6 +331,45 @@ h3 {
   display: block;
 }
 
+.card-media-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  background: #000;
+}
+
+.card-media-play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border-radius: 999px;
+  font-size: 1.1rem;
+  line-height: 1;
+  background: rgba(9, 8, 12, 0.72);
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.card-media-play:hover {
+  background: rgba(9, 8, 12, 0.88);
+}
+
+.card-media-toggle {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  padding: 4px 10px;
+  font-size: 0.82rem;
+  background: rgba(9, 8, 12, 0.72);
+}
+
 .card-body {
   padding: 16px 18px 18px;
 }
