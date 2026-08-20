@@ -22,8 +22,62 @@ export interface SceneImagePromptInput {
     | 'characters'
     | 'environmentId'
     | 'negativePrompt'
+    | 'suggestedMotion'
   >;
   extraInstructions?: string;
+}
+
+export function buildSceneVideoPrompt(input: SceneImagePromptInput): {
+  prompt: string;
+  negativePrompt: string;
+} {
+  const { style, bible, scene } = input;
+  const motionHint = motionLanguageForVideo(scene.suggestedMotion, scene.cameraIntent);
+  const imagePrompt = buildSceneImagePrompt(input);
+
+  const prompt = [
+    imagePrompt.prompt,
+    'Animate this exact still frame with subtle in-place motion only.',
+    motionHint,
+    'Keep the same composition, characters, costumes, and environment. No new shots, no scene changes, no walking into new rooms.',
+    'Add natural micro-movement: breathing, fabric sway, steam, light flicker, hair drift, gentle environmental motion.',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const negativePrompt = [
+    imagePrompt.negativePrompt,
+    'face morphing, identity change, extra limbs, new characters, scene change, cut, zoom to different location, on-screen text, subtitles, watermark, logo',
+  ]
+    .filter(Boolean)
+    .join(', ');
+
+  return { prompt, negativePrompt };
+}
+
+function motionLanguageForVideo(
+  motion: StoryboardScene['suggestedMotion'],
+  cameraIntent: string,
+): string {
+  const map: Partial<Record<StoryboardScene['suggestedMotion'], string>> = {
+    static: 'Hold the frame steady with only ambient environmental motion.',
+    slowZoomIn: 'Very slow push-in on the same subject, barely perceptible.',
+    slowZoomOut: 'Very slow pull-back while keeping the same framing.',
+    panLeft: 'Gentle horizontal drift left across the same scene.',
+    panRight: 'Gentle horizontal drift right across the same scene.',
+    panUp: 'Subtle upward drift within the same composition.',
+    panDown: 'Subtle downward drift within the same composition.',
+    zoomPanLeft: 'Slow zoom with a slight left drift, same scene.',
+    zoomPanRight: 'Slow zoom with a slight right drift, same scene.',
+    subtleRotateClockwise: 'Barely perceptible clockwise drift, same scene.',
+    subtleRotateCounterClockwise: 'Barely perceptible counter-clockwise drift, same scene.',
+    gentleDrift: 'Soft floating camera drift within the same frame.',
+    dramaticZoom: 'Cinematic slow push-in, same subject and scene.',
+    punchZoom: 'Quick but controlled punch-in on the same subject.',
+    lightShake: 'Subtle handheld tremor, same composition.',
+    heavyShake: 'Stronger handheld shake, same composition, no scene change.',
+  };
+  return `Camera motion: ${map[motion] ?? 'Gentle cinematic drift.'} Director intent: ${cameraIntent}.`;
 }
 
 export function buildSceneImagePrompt(input: SceneImagePromptInput): {

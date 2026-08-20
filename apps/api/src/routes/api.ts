@@ -21,6 +21,7 @@ import {
   generateMissingImages,
   generateSceneImage,
 } from '../services/images.js';
+import { generateSceneVideo } from '../services/videos.js';
 import {
   addScene,
   createProject,
@@ -313,6 +314,15 @@ apiRouter.post(
   asyncHandler(async (req, res) => {
     const force = req.body?.force === true;
     const result = await generateSceneImage(param(req, 'id'), param(req, 'sceneId'), force);
+    res.json(result);
+  }),
+);
+
+apiRouter.post(
+  '/projects/:id/scenes/:sceneId/video',
+  asyncHandler(async (req, res) => {
+    const force = req.body?.force === true;
+    const result = await generateSceneVideo(param(req, 'id'), param(req, 'sceneId'), force);
     res.json(result);
   }),
 );

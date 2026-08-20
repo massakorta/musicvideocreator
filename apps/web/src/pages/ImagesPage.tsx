@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { GENERATION_STATE_LABELS, MOTION_PRESET_LABELS, getImageQuality, imagesNeedQualityRegenerate, missingCharacterReferences, effectiveGeneratedImageQualityId, resolveProjectImageQualityId } from '@music-video/shared';
+import { GENERATION_STATE_LABELS, MOTION_PRESET_LABELS, VIDEO_GENERATION_EXPECTED_SECONDS, getImageQuality, imagesNeedQualityRegenerate, missingCharacterReferences, effectiveGeneratedImageQualityId, resolveProjectImageQualityId, sceneHasStill, sceneHasVideo } from '@music-video/shared';
 import { useProject } from '../hooks/useProject';
 import { api, ApiClientError } from '../lib/api';
 import { formatClockShort } from '../lib/time';
@@ -9,9 +9,10 @@ import { EmptyState } from '../components/EmptyState';
 import { ImageQualityPicker, imageQualitySecondsPerStill } from '../components/ImageQualityPicker';
 import { SceneEditor } from '../components/SceneEditor';
 import { CardWaitOverlay, WaitCard } from '../components/WaitCard';
-import { mergeProjectFromServer, scenesMissingImages } from '../lib/mergeProject';
+import { mergeProjectFromServer, scenesMissingImages, scenesNeedingAnimation } from '../lib/mergeProject';
 
 const IMAGE_GENERATION_CONCURRENCY = 6;
+const VIDEO_GENERATION_CONCURRENCY = 2;
 
 export function ImagesPage() {
   const { project, setProject, health, reload, stale } = useProject();
@@ -23,6 +24,11 @@ export function ImagesPage() {
   const [paintingIds, setPaintingIds] = useState<string[]>([]);
   const [queuedIds, setQueuedIds] = useState<string[]>([]);
   const [regenerating, setRegenerating] = useState(false);
+  const [videoBusy, setVideoBusy] = useState(false);
+  const [videoBatch, setVideoBatch] = useState({ done: 0, total: 0, title: '' });
+  const [singleVideoTitle, setSingleVideoTitle] = useState<string | null>(null);
+  const [animatingIds, setAnimatingIds] = useState<string[]>([]);
+  const [videoQueuedIds, setVideoQueuedIds] = useState<string[]>([]);
   const navigate = useNavigate();
   const projectRef = useRef(project);
   useEffect(() => {
@@ -33,15 +39,76 @@ export function ImagesPage() {
   const generatingCount = project.scenes.filter(
     (s) => s.generationState === 'generating' && !s.currentAssetId && !s.image,
   ).length;
-  const completeCount = project.scenes.filter((s) => s.currentAssetId || s.image).length;
+  const completeCount = project.scenes.filter((s) => sceneHasStill(s)).length;
+  const animatedCount = project.scenes.filter((s) => sceneHasVideo(s)).length;
   const perStillSeconds = imageQualitySecondsPerStill(project);
   const generationBusy = busy || generatingCount > 0 || Boolean(singleTitle);
+  const animatingCount = project.scenes.filter(
+    (s) => s.videoGenerationState === 'generating' && !sceneHasVideo(s),
+  ).length;
+  const videoGenerationBusy = videoBusy || animatingCount > 0 || Boolean(singleVideoTitle);
   const qualityRegenerateNeeded = imagesNeedQualityRegenerate(project);
   const currentQuality = getImageQuality(resolveProjectImageQualityId(project));
   const generatedQuality = getImageQuality(effectiveGeneratedImageQualityId(project));
 
   function scenesWithImages() {
-    return project.scenes.filter((scene) => scene.currentAssetId || scene.image);
+    return project.scenes.filter((scene) => sceneHasStill(scene));
+  }
+
+  function sceneIsActivelyAnimating(scene: (typeof project.scenes)[number]): boolean {
+    return (
+      animatingIds.includes(scene.id) ||
+      (scene.videoGenerationState === 'generating' && !sceneHasVideo(scene))
+    );
+  }
+
+  async function animateRemaining() {
+    const remaining = scenesNeedingAnimation(project.scenes);
+    if (remaining.length === 0) return;
+    setVideoBusy(true);
+    setError(null);
+    setVideoQueuedIds(remaining.map((scene) => scene.id));
+    setAnimatingIds([]);
+    setVideoBatch({ done: 0, total: remaining.length, title: remaining[0]?.title ?? '' });
+    let cursor = 0;
+    let failures = 0;
+    async function worker() {
+      while (cursor < remaining.length) {
+        const index = cursor;
+        cursor += 1;
+        const scene = remaining[index];
+        if (!scene) return;
+        setVideoQueuedIds((ids) => ids.filter((id) => id !== scene.id));
+        setAnimatingIds((ids) => [...ids, scene.id]);
+        setVideoBatch((current) => ({ ...current, title: scene.title }));
+        try {
+          const data = await api.generateSceneVideo(project.id, scene.id);
+          applyProjectUpdate(data.project);
+        } catch (err) {
+          failures += 1;
+          setError(
+            err instanceof ApiClientError
+              ? err.message
+              : `Scene ${scene.order} could not be animated. The rest will keep going.`,
+          );
+          await reload();
+        } finally {
+          setAnimatingIds((ids) => ids.filter((id) => id !== scene.id));
+        }
+        setVideoBatch((current) => ({ ...current, done: current.done + 1 }));
+      }
+    }
+    await Promise.all(
+      Array.from({ length: Math.min(VIDEO_GENERATION_CONCURRENCY, remaining.length) }, () => worker()),
+    );
+    await reload();
+    if (failures > 0) {
+      setError(`${failures} clip${failures === 1 ? '' : 's'} failed. Retry those cards, or animate remaining again.`);
+    }
+    setVideoBusy(false);
+    setVideoBatch({ done: 0, total: 0, title: '' });
+    setAnimatingIds([]);
+    setVideoQueuedIds([]);
   }
 
   function applyProjectUpdate(incoming: typeof project) {
@@ -156,12 +223,12 @@ export function ImagesPage() {
   }
 
   useEffect(() => {
-    if (generatingCount === 0) return;
+    if (generatingCount === 0 && animatingCount === 0) return;
     const timer = window.setInterval(() => {
       void reload();
     }, 2500);
     return () => window.clearInterval(timer);
-  }, [generatingCount, reload]);
+  }, [generatingCount, animatingCount, reload]);
 
   return (
     <div className="page editor-layout">
@@ -210,6 +277,34 @@ export function ImagesPage() {
             stages={['Each still takes a few seconds. Keep this tab open.']}
           />
         ) : null}
+        {videoBusy || animatingCount > 0 || singleVideoTitle ? (
+          <WaitCard
+            title={
+              singleVideoTitle && !videoBusy ? 'Animating one scene' : 'Animating scene clips'
+            }
+            current={videoBusy ? videoBatch.done : singleVideoTitle ? undefined : animatedCount}
+            total={videoBusy ? videoBatch.total : singleVideoTitle ? undefined : completeCount}
+            expectedSeconds={
+              singleVideoTitle && !videoBusy
+                ? VIDEO_GENERATION_EXPECTED_SECONDS
+                : Math.max(
+                    VIDEO_GENERATION_EXPECTED_SECONDS,
+                    (videoBusy ? videoBatch.total - videoBatch.done : completeCount - animatedCount) *
+                      VIDEO_GENERATION_EXPECTED_SECONDS,
+                  )
+            }
+            detail={
+              videoBatch.title
+                ? `Animating “${videoBatch.title}”…`
+                : singleVideoTitle
+                  ? `Animating “${singleVideoTitle}”…`
+                  : animatingCount > 0
+                    ? `${animatingCount} clips in flight`
+                    : 'Starting the first clip…'
+            }
+            stages={['Each clip can take up to a minute. Keep this tab open.']}
+          />
+        ) : null}
         <ImageQualityPicker
           project={project}
           setProject={setProject}
@@ -256,9 +351,20 @@ export function ImagesPage() {
             </button>
           ) : null}
           <span className="muted">
-            {completeCount} / {project.scenes.length} ready
+            {completeCount} / {project.scenes.length} stills · {animatedCount} / {completeCount} animated
           </span>
         </div>
+        {completeCount > 0 ? (
+          <div className="actions" style={{ marginBottom: 14 }}>
+            <button
+              className="btn btn-primary"
+              disabled={videoGenerationBusy || completeCount === animatedCount}
+              onClick={() => void animateRemaining()}
+            >
+              {videoBusy ? 'Animating clips…' : 'Animate remaining'}
+            </button>
+          </div>
+        ) : null}
         {project.scenes.length === 0 ? (
           <EmptyState
             title="No scenes to illustrate"
@@ -273,7 +379,7 @@ export function ImagesPage() {
           <div className="grid-cards">
             {project.scenes.map((scene) => (
               <article className="card" key={scene.id}>
-                <div className="card-media">
+                <div className="card-media" style={{ position: 'relative' }}>
                   {scene.image?.publicUrl ? (
                     <img src={scene.image.publicUrl} alt={scene.title} />
                   ) : null}
@@ -281,7 +387,12 @@ export function ImagesPage() {
                     <CardWaitOverlay label="Painting now" ticking />
                   ) : queuedIds.includes(scene.id) ? (
                     <CardWaitOverlay label="In queue" />
+                  ) : sceneIsActivelyAnimating(scene) ? (
+                    <CardWaitOverlay label="Animating now" ticking />
+                  ) : videoQueuedIds.includes(scene.id) ? (
+                    <CardWaitOverlay label="Clip queue" />
                   ) : null}
+                  {sceneHasVideo(scene) ? <div className="pill success" style={{ position: 'absolute', top: 8, right: 8 }}>Clip</div> : null}
                 </div>
                 <div className="card-body">
                   <h3>{scene.title}</h3>
@@ -323,7 +434,7 @@ export function ImagesPage() {
                           const data = await api.generateSceneImage(
                             project.id,
                             scene.id,
-                            Boolean(scene.currentAssetId || scene.image),
+                            sceneHasStill(scene),
                           );
                           applyProjectUpdate(data.project);
                         } catch (err) {
@@ -339,8 +450,43 @@ export function ImagesPage() {
                         }
                       }}
                     >
-                      {scene.generationState === 'failed' ? 'Retry' : scene.image ? 'Regenerate' : 'Generate'}
+                      {scene.generationState === 'failed' ? 'Retry' : sceneHasStill(scene) ? 'Regenerate' : 'Generate'}
                     </button>
+                    {sceneHasStill(scene) ? (
+                      <button
+                        className="btn"
+                        disabled={videoGenerationBusy || Boolean(singleVideoTitle)}
+                        onClick={async () => {
+                          setSingleVideoTitle(scene.title);
+                          setAnimatingIds([scene.id]);
+                          setError(null);
+                          try {
+                            const data = await api.generateSceneVideo(
+                              project.id,
+                              scene.id,
+                              sceneHasVideo(scene),
+                            );
+                            applyProjectUpdate(data.project);
+                          } catch (err) {
+                            setError(
+                              err instanceof ApiClientError
+                                ? err.message
+                                : `Scene ${scene.order} could not be animated. The video provider returned an error.`,
+                            );
+                            await reload();
+                          } finally {
+                            setSingleVideoTitle(null);
+                            setAnimatingIds([]);
+                          }
+                        }}
+                      >
+                        {scene.videoGenerationState === 'failed'
+                          ? 'Retry clip'
+                          : sceneHasVideo(scene)
+                            ? 'Re-animate'
+                            : 'Animate'}
+                      </button>
+                    ) : null}
                     <div className="card-actions-secondary">
                       <button className="btn" onClick={() => setSelectedId(scene.id)}>
                         Edit

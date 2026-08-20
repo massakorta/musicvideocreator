@@ -23,7 +23,9 @@ function scene(overrides: Partial<StoryboardScene> & Pick<StoryboardScene, 'id'>
     transitionOut: 'cut',
     mediaType: 'image',
     previousAssetIds: [],
+    previousVideoAssetIds: [],
     generationState: 'pending',
+    videoGenerationState: 'pending',
     approved: false,
     ...overrides,
   };

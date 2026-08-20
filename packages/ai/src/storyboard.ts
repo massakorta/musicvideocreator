@@ -214,7 +214,9 @@ function mapAiScene(
     transitionOut: scene.transitionOut || selectTransition(songSection),
     mediaType: 'image',
     previousAssetIds: [],
+    previousVideoAssetIds: [],
     generationState: 'pending',
+    videoGenerationState: 'pending',
     approved: false,
   };
   const built = buildSceneImagePrompt({

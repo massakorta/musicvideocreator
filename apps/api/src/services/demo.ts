@@ -167,7 +167,9 @@ export function demoStoryboard(
       transitionOut: selectTransition(slot.songSection, nextSection),
       mediaType: 'image',
       previousAssetIds: [],
+      previousVideoAssetIds: [],
       generationState: 'pending',
+      videoGenerationState: 'pending',
       approved: false,
     });
   });

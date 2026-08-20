@@ -1,16 +1,12 @@
 import type { MusicVideoProject, StoryboardScene } from '@music-video/shared';
-
-function sceneHasImage(scene: StoryboardScene): boolean {
-  return Boolean(scene.currentAssetId || scene.image);
-}
+import { sceneHasStill, sceneHasVideo } from '@music-video/shared';
 
 function mergeSceneFromServer(current: StoryboardScene, incoming: StoryboardScene): StoryboardScene {
-  const currentHasImage = sceneHasImage(current);
-  const incomingHasImage = sceneHasImage(incoming);
+  let merged = incoming;
 
-  if (currentHasImage && !incomingHasImage) {
-    return {
-      ...incoming,
+  if (sceneHasStill(current) && !sceneHasStill(incoming)) {
+    merged = {
+      ...merged,
       currentAssetId: current.currentAssetId ?? incoming.currentAssetId,
       image: current.image ?? incoming.image,
       previousAssetIds:
@@ -22,7 +18,24 @@ function mergeSceneFromServer(current: StoryboardScene, incoming: StoryboardScen
     };
   }
 
-  return incoming;
+  if (sceneHasVideo(current) && !sceneHasVideo(incoming)) {
+    merged = {
+      ...merged,
+      currentVideoAssetId: current.currentVideoAssetId ?? incoming.currentVideoAssetId,
+      video: current.video ?? incoming.video,
+      previousVideoAssetIds:
+        current.previousVideoAssetIds.length >= incoming.previousVideoAssetIds.length
+          ? current.previousVideoAssetIds
+          : incoming.previousVideoAssetIds,
+      mediaType: current.mediaType === 'video' ? 'video' : merged.mediaType,
+      videoGenerationState:
+        current.videoGenerationState === 'complete' ? 'complete' : incoming.videoGenerationState,
+      videoGenerationError:
+        current.videoGenerationState === 'complete' ? undefined : incoming.videoGenerationError,
+    };
+  }
+
+  return merged;
 }
 
 /** Keep locally completed stills when a stale API response arrives during batch generation. */
@@ -36,5 +49,9 @@ export function mergeProjectFromServer(current: MusicVideoProject, incoming: Mus
 }
 
 export function scenesMissingImages(scenes: StoryboardScene[]): StoryboardScene[] {
-  return scenes.filter((scene) => !scene.approved && !scene.currentAssetId && !scene.image);
+  return scenes.filter((scene) => !scene.approved && !sceneHasStill(scene));
+}
+
+export function scenesNeedingAnimation(scenes: StoryboardScene[]): StoryboardScene[] {
+  return scenes.filter((scene) => sceneHasStill(scene) && !sceneHasVideo(scene));
 }

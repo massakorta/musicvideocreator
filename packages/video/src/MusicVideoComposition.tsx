@@ -1,5 +1,5 @@
 import React from 'react';
-import { AbsoluteFill, Audio, Img, Sequence, useCurrentFrame, useVideoConfig } from 'remotion';
+import { AbsoluteFill, Audio, Img, OffthreadVideo, Sequence, useCurrentFrame, useVideoConfig } from 'remotion';
 import { secondsToFrames } from '@music-video/shared';
 import type { CompositionScene, MusicVideoCompositionProps } from './compositionTypes.js';
 import { TRANSITION_FRAMES } from './compositionTypes.js';
@@ -48,9 +48,24 @@ const SceneLayer: React.FC<{ scene: CompositionScene; durationInFrames: number }
     transitionOut: scene.transitionOut,
   });
 
+  const mediaStyle: React.CSSProperties = {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+  };
+
   return (
     <AbsoluteFill style={{ overflow: 'hidden', opacity: transition.opacity, transform: transition.transform }}>
-      <Img src={scene.imageUrl} style={motion} />
+      {scene.videoUrl ? (
+        <OffthreadVideo
+          src={scene.videoUrl}
+          muted
+          playbackRate={scene.playbackRate ?? 1}
+          style={mediaStyle}
+        />
+      ) : (
+        <Img src={scene.imageUrl} style={motion} />
+      )}
       {transition.overlayOpacity > 0 ? (
         <AbsoluteFill
           style={{

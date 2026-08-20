@@ -23,7 +23,9 @@ function scene(id: string, start: number, end: number): StoryboardScene {
     transitionOut: 'cut',
     mediaType: 'image',
     previousAssetIds: [],
+    previousVideoAssetIds: [],
     generationState: 'pending',
+    videoGenerationState: 'pending',
     approved: false,
   };
 }

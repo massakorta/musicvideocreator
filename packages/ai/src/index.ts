@@ -5,3 +5,4 @@ export * from './visualBible.js';
 export * from './storyboard.js';
 export * from './transcription.js';
 export * from './imageGeneration.js';
+export * from './videoGeneration.js';

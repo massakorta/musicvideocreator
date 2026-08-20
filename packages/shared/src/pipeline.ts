@@ -72,6 +72,8 @@ export function renderCompositionFingerprint(project: MusicVideoProject): string
     project.scenes.map((scene) => ({
       id: scene.id,
       assetId: scene.currentAssetId,
+      videoAssetId: scene.currentVideoAssetId,
+      mediaType: scene.mediaType,
       motion: scene.motion,
       transitionIn: scene.transitionIn,
       transitionOut: scene.transitionOut,

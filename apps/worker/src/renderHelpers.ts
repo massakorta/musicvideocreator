@@ -25,6 +25,10 @@ function mimeForExtension(ext: string): string {
       return 'image/webp';
     case '.gif':
       return 'image/gif';
+    case '.mp4':
+      return 'video/mp4';
+    case '.webm':
+      return 'video/webm';
     default:
       return 'image/jpeg';
   }
@@ -54,7 +58,31 @@ async function loadSceneImageBody(
   }
 }
 
-/** Serves prefetched stills over HTTP — headless Chromium blocks file:// image URLs. */
+async function loadSceneVideoBody(
+  project: MusicVideoProject,
+  sceneId: string,
+  videoUrl: string,
+): Promise<Buffer | null> {
+  const projectScene = project.scenes.find((s) => s.id === sceneId);
+  const assetId = projectScene?.currentVideoAssetId ?? projectScene?.video?.id;
+  if (assetId) {
+    const asset = await getRepositories().assets.get(assetId);
+    if (asset) {
+      const file = await getObjectStorage().get(asset.storagePath);
+      if (file) return file.body;
+    }
+  }
+  if (!videoUrl) return null;
+  try {
+    const response = await fetch(videoUrl);
+    if (!response.ok) return null;
+    return Buffer.from(await response.arrayBuffer());
+  } catch {
+    return null;
+  }
+}
+
+/** Serves prefetched stills and clips over HTTP — headless Chromium blocks file:// URLs. */
 export async function startStillsServer(
   stillsDir: string,
 ): Promise<{ baseUrl: string; close: () => Promise<void> }> {
@@ -116,14 +144,27 @@ export async function prefetchCompositionStills(
   let prefetched = 0;
   const scenes = await Promise.all(
     base.scenes.map(async (scene) => {
-      const body = await loadSceneImageBody(project, scene.id, scene.imageUrl);
-      if (!body) return scene;
-      const ext = extensionFromUrl(scene.imageUrl);
-      const filename = `${scene.id}${ext}`;
-      const dest = path.join(stillsDir, filename);
-      await writeFile(dest, body);
-      prefetched += 1;
-      return { ...scene, imageUrl: `${assetsBaseUrl}/${filename}` };
+      let next = scene;
+      const imageBody = await loadSceneImageBody(project, scene.id, scene.imageUrl);
+      if (imageBody) {
+        const ext = extensionFromUrl(scene.imageUrl);
+        const filename = `${scene.id}${ext}`;
+        const dest = path.join(stillsDir, filename);
+        await writeFile(dest, imageBody);
+        prefetched += 1;
+        next = { ...next, imageUrl: `${assetsBaseUrl}/${filename}` };
+      }
+      if (scene.videoUrl) {
+        const videoBody = await loadSceneVideoBody(project, scene.id, scene.videoUrl);
+        if (videoBody) {
+          const filename = `${scene.id}-clip.mp4`;
+          const dest = path.join(stillsDir, filename);
+          await writeFile(dest, videoBody);
+          prefetched += 1;
+          next = { ...next, videoUrl: `${assetsBaseUrl}/${filename}` };
+        }
+      }
+      return next;
     }),
   );
   return { composition: { ...base, scenes }, prefetched, total: base.scenes.length };

@@ -1,11 +1,14 @@
 import type { MotionPresetId, MusicVideoProject, TransitionPresetId, VideoFormatId } from '@music-video/shared';
-import { getVideoPreset, secondsToFrames } from '@music-video/shared';
+import { getVideoPreset, sceneHasVideo, sceneVideoPlaybackRate, secondsToFrames } from '@music-video/shared';
 
 export interface CompositionScene {
   id: string;
   startTime: number;
   endTime: number;
   imageUrl: string;
+  videoUrl?: string;
+  videoDurationSeconds?: number;
+  playbackRate?: number;
   motion: MotionPresetId;
   transitionIn: TransitionPresetId;
   transitionOut: TransitionPresetId;
@@ -40,15 +43,26 @@ export function projectToComposition(project: MusicVideoProject): CompositionPro
     formatId: project.formatId,
     scenes: project.scenes
       .filter((scene) => scene.image?.publicUrl || scene.currentAssetId)
-      .map((scene) => ({
-        id: scene.id,
-        startTime: scene.startTime,
-        endTime: scene.endTime,
-        imageUrl: scene.image?.publicUrl ?? '',
-        motion: scene.motion,
-        transitionIn: scene.transitionIn,
-        transitionOut: scene.transitionOut,
-      }))
+      .map((scene) => {
+        const sceneDuration = scene.endTime - scene.startTime;
+        const clipDuration = scene.video?.durationSeconds;
+        const useVideo = sceneHasVideo(scene) && Boolean(scene.video?.publicUrl);
+        return {
+          id: scene.id,
+          startTime: scene.startTime,
+          endTime: scene.endTime,
+          imageUrl: scene.image?.publicUrl ?? '',
+          videoUrl: useVideo ? scene.video!.publicUrl : undefined,
+          videoDurationSeconds: useVideo ? clipDuration ?? scene.duration : undefined,
+          playbackRate:
+            useVideo && clipDuration
+              ? sceneVideoPlaybackRate(clipDuration, sceneDuration)
+              : undefined,
+          motion: scene.motion,
+          transitionIn: scene.transitionIn,
+          transitionOut: scene.transitionOut,
+        };
+      })
       .filter((scene) => scene.imageUrl.length > 0),
   };
 }

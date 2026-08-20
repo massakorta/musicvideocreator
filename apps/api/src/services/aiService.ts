@@ -1,4 +1,4 @@
-import { createOpenAiClient, FalImageProvider, generateStoryboard, generateVisualBible, isOpenAiConfigured } from '@music-video/ai';
+import { createOpenAiClient, FalImageProvider, FalVideoProvider, generateStoryboard, generateVisualBible, isOpenAiConfigured } from '@music-video/ai';
 import { AppError, ERROR_CODES, getImageQuality, visualBibleSchema, type AiUsageLog, type ImageQualityId, type VisualBible } from '@music-video/shared';
 import { config, falConfigured, openaiConfigured } from '../config.js';
 import { getRepositories } from '../repositories/index.js';
@@ -128,6 +128,14 @@ export function createImageProvider(imageQualityId?: ImageQualityId): FalImagePr
   const preset = getImageQuality(imageQualityId);
   return new FalImageProvider(preset, {
     requestTimeoutMs: 180_000,
+    credentials: config.falKey,
+  });
+}
+
+export function createVideoProvider(): FalVideoProvider | null {
+  if (!falConfigured()) return null;
+  return new FalVideoProvider({
+    requestTimeoutMs: 300_000,
     credentials: config.falKey,
   });
 }

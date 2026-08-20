@@ -79,6 +79,7 @@ export const ASSET_TYPES = [
   'audio',
   'character_reference',
   'scene_image',
+  'scene_video',
   'final_video',
 ] as const;
 export type AssetType = (typeof ASSET_TYPES)[number];

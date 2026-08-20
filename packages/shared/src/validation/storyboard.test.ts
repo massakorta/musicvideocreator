@@ -27,7 +27,9 @@ function scene(partial: Partial<StoryboardScene> & Pick<StoryboardScene, 'id' | 
     transitionOut: 'cut',
     mediaType: 'image',
     previousAssetIds: [],
+    previousVideoAssetIds: [],
     generationState: 'pending',
+    videoGenerationState: 'pending',
     approved: false,
     ...partial,
   };

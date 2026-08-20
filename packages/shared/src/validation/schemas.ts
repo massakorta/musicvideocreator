@@ -126,6 +126,11 @@ export const storyboardSceneSchema = z.object({
   previousAssetIds: z.array(z.string()).default([]),
   generationState: z.enum(['pending', 'generating', 'complete', 'failed']),
   generationError: z.string().optional(),
+  video: generatedAssetSchema.optional(),
+  currentVideoAssetId: z.string().optional(),
+  previousVideoAssetIds: z.array(z.string()).default([]),
+  videoGenerationState: z.enum(['pending', 'generating', 'complete', 'failed']).default('pending'),
+  videoGenerationError: z.string().optional(),
   approved: z.boolean().default(false),
   captionsEnabled: z.boolean().optional(),
   imageFingerprint: z.string().optional(),
@@ -215,6 +220,9 @@ export const patchSceneBodySchema = storyboardSceneSchema.partial().omit({
   image: true,
   previousAssetIds: true,
   generationState: true,
+  video: true,
+  previousVideoAssetIds: true,
+  videoGenerationState: true,
 });
 
 export const createSceneBodySchema = z.object({

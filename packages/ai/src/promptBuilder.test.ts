@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getVisualStyle, type StoryboardScene, type VisualBible, type VisualStylePreset } from '@music-video/shared';
-import { buildCharacterReferencePrompt, buildSceneImagePrompt } from './promptBuilder.js';
+import { buildCharacterReferencePrompt, buildSceneImagePrompt, buildSceneVideoPrompt } from './promptBuilder.js';
 
 const style: VisualStylePreset = {
   id: 'cartoon-slapstick',
@@ -84,6 +84,7 @@ const scene: Pick<
   imagePrompt: 'soup arc',
   characters: ['jens'],
   environmentId: 'galley',
+  suggestedMotion: 'slowZoomIn',
 };
 
 describe('buildSceneImagePrompt', () => {
@@ -128,6 +129,17 @@ describe('buildSceneImagePrompt', () => {
     expect(prompt).toContain('illustrated story frame');
     expect(negativePrompt).toContain('photorealistic');
     expect(negativePrompt).toContain('stock photo');
+  });
+});
+
+describe('buildSceneVideoPrompt', () => {
+  it('adds in-place motion language and forbids new shots', () => {
+    const { prompt, negativePrompt } = buildSceneVideoPrompt({ style, bible, scene });
+    expect(prompt).toContain('subtle in-place motion');
+    expect(prompt).toContain('Same character design');
+    expect(prompt).toContain('slow push-in');
+    expect(negativePrompt).toContain('scene change');
+    expect(negativePrompt).toContain('face morphing');
   });
 });
 

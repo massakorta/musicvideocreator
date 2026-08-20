@@ -163,6 +163,11 @@ export const api = {
       `/api/projects/${id}/scenes/${sceneId}/image`,
       { method: 'POST', body: JSON.stringify({ force }) },
     ),
+  generateSceneVideo: (id: string, sceneId: string, force = false) =>
+    request<{ project: import('@music-video/shared').MusicVideoProject; demo: boolean }>(
+      `/api/projects/${id}/scenes/${sceneId}/video`,
+      { method: 'POST', body: JSON.stringify({ force }) },
+    ),
   uploadSceneImage: (id: string, sceneId: string, file: File) => {
     const body = new FormData();
     body.append('file', file);

@@ -5,6 +5,7 @@ export * from './flow.js';
 export * from './motion.js';
 export * from './styles.js';
 export * from './imageQuality.js';
+export * from './sceneVideo.js';
 export * from './visualBible.js';
 export * from './storyboard.js';
 export * from './lyrics.js';

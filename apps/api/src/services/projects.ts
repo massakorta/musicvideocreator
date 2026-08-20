@@ -210,7 +210,9 @@ export async function addScene(projectId: string, afterSceneId?: string): Promis
     transitionOut: 'cut' as const,
     mediaType: 'image' as const,
     previousAssetIds: [],
+    previousVideoAssetIds: [],
     generationState: 'pending' as const,
+    videoGenerationState: 'pending' as const,
     approved: false,
   };
   const scenes = [...project.scenes];
@@ -270,6 +272,10 @@ export async function attachAssetToScene(
       const previous = scene.currentAssetId
         ? [...new Set([...scene.previousAssetIds, scene.currentAssetId])]
         : scene.previousAssetIds;
+      const previousVideos =
+        scene.currentVideoAssetId && asset.type === 'scene_image'
+          ? [...new Set([...scene.previousVideoAssetIds, scene.currentVideoAssetId])]
+          : scene.previousVideoAssetIds;
       return {
         ...scene,
         image: generated,
@@ -277,6 +283,57 @@ export async function attachAssetToScene(
         previousAssetIds: previous,
         generationState: 'complete' as const,
         generationError: undefined,
+        ...(asset.type === 'scene_image'
+          ? {
+              video: undefined,
+              currentVideoAssetId: undefined,
+              previousVideoAssetIds: previousVideos,
+              mediaType: 'image' as const,
+              videoGenerationState: 'pending' as const,
+              videoGenerationError: undefined,
+            }
+          : {}),
+      };
+    });
+    return replaceScenes(latest, scenes);
+  });
+  return hydrateAssets(attached);
+}
+
+export async function attachVideoToScene(
+  project: MusicVideoProject,
+  sceneId: string,
+  asset: AssetRecord,
+): Promise<MusicVideoProject> {
+  const attached = await updateProjectDocument(project.id, (latest) => {
+    const generated: GeneratedAsset = {
+      id: asset.id,
+      projectId: asset.projectId,
+      type: asset.type,
+      source: asset.source,
+      storagePath: asset.storagePath,
+      publicUrl: asset.publicUrl,
+      mimeType: asset.mimeType,
+      width: asset.width,
+      height: asset.height,
+      durationSeconds: asset.durationSeconds,
+      fileSizeBytes: asset.fileSizeBytes,
+      metadata: asset.metadata,
+      createdAt: asset.createdAt,
+    };
+    const scenes = latest.scenes.map((scene) => {
+      if (scene.id !== sceneId) return scene;
+      const previous = scene.currentVideoAssetId
+        ? [...new Set([...scene.previousVideoAssetIds, scene.currentVideoAssetId])]
+        : scene.previousVideoAssetIds;
+      return {
+        ...scene,
+        video: generated,
+        currentVideoAssetId: asset.id,
+        previousVideoAssetIds: previous,
+        mediaType: 'video' as const,
+        videoGenerationState: 'complete' as const,
+        videoGenerationError: undefined,
       };
     });
     return replaceScenes(latest, scenes);
@@ -371,25 +428,49 @@ async function hydrateAssets(project: MusicVideoProject): Promise<MusicVideoProj
   const byId = new Map(assets.map((a) => [a.id, a]));
   const scenes = project.scenes.map((scene) => {
     const current = scene.currentAssetId ? byId.get(scene.currentAssetId) : undefined;
-    if (!current) return scene;
-    return {
-      ...scene,
-      image: {
-        id: current.id,
-        projectId: current.projectId,
-        type: current.type,
-        source: current.source,
-        storagePath: current.storagePath,
-        publicUrl: current.publicUrl,
-        mimeType: current.mimeType,
-        width: current.width,
-        height: current.height,
-        durationSeconds: current.durationSeconds,
-        fileSizeBytes: current.fileSizeBytes,
-        metadata: current.metadata,
-        createdAt: current.createdAt,
-      },
-    };
+    const currentVideo = scene.currentVideoAssetId ? byId.get(scene.currentVideoAssetId) : undefined;
+    let next = scene;
+    if (current) {
+      next = {
+        ...next,
+        image: {
+          id: current.id,
+          projectId: current.projectId,
+          type: current.type,
+          source: current.source,
+          storagePath: current.storagePath,
+          publicUrl: current.publicUrl,
+          mimeType: current.mimeType,
+          width: current.width,
+          height: current.height,
+          durationSeconds: current.durationSeconds,
+          fileSizeBytes: current.fileSizeBytes,
+          metadata: current.metadata,
+          createdAt: current.createdAt,
+        },
+      };
+    }
+    if (currentVideo) {
+      next = {
+        ...next,
+        video: {
+          id: currentVideo.id,
+          projectId: currentVideo.projectId,
+          type: currentVideo.type,
+          source: currentVideo.source,
+          storagePath: currentVideo.storagePath,
+          publicUrl: currentVideo.publicUrl,
+          mimeType: currentVideo.mimeType,
+          width: currentVideo.width,
+          height: currentVideo.height,
+          durationSeconds: currentVideo.durationSeconds,
+          fileSizeBytes: currentVideo.fileSizeBytes,
+          metadata: currentVideo.metadata,
+          createdAt: currentVideo.createdAt,
+        },
+      };
+    }
+    return next;
   });
   if (project.visualBible) {
     project.visualBible.characters = project.visualBible.characters.map((character) => {

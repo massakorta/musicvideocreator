@@ -4,7 +4,7 @@ import type { GenerationState, MediaType, ShotType, SongSection } from './status
 export interface GeneratedAsset {
   id: string;
   projectId: string;
-  type: 'audio' | 'character_reference' | 'scene_image' | 'final_video';
+  type: 'audio' | 'character_reference' | 'scene_image' | 'scene_video' | 'final_video';
   source: 'ai' | 'upload' | 'demo';
   storagePath: string;
   publicUrl: string;
@@ -45,6 +45,11 @@ export interface StoryboardScene {
   previousAssetIds: string[];
   generationState: GenerationState;
   generationError?: string;
+  video?: GeneratedAsset;
+  currentVideoAssetId?: string;
+  previousVideoAssetIds: string[];
+  videoGenerationState: GenerationState;
+  videoGenerationError?: string;
   approved: boolean;
   captionsEnabled?: boolean;
   imageFingerprint?: string;
