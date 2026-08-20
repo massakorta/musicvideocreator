@@ -139,6 +139,9 @@ describe('FalImageProvider', () => {
       .mockRejectedValueOnce(
         new Error('The content could not be processed because it contained material flagged by a content checker.'),
       )
+      .mockRejectedValueOnce(
+        new Error('The content could not be processed because it contained material flagged by a content checker.'),
+      )
       .mockResolvedValueOnce({ data: { images: [{ url: 'https://example.com/min.jpg' }] } });
 
     const scene = {
@@ -170,8 +173,45 @@ describe('FalImageProvider', () => {
 
     const image = await provider().generateSceneImage({ scene, bible, style });
     expect(image.bytes.toString()).toBe('minimal');
-    expect(subscribe).toHaveBeenCalledTimes(3);
-    const thirdPrompt = subscribe.mock.calls[2]?.[1]?.input?.prompt as string;
-    expect(thirdPrompt).toContain('family-friendly illustrated cartoon still');
+    expect(subscribe).toHaveBeenCalledTimes(4);
+    const fourthPrompt = subscribe.mock.calls[3]?.[1]?.input?.prompt as string;
+    expect(fourthPrompt).toContain('family-friendly cartoon illustration');
+  });
+
+  it('softens soup-on-toes scenes before sending to fal', async () => {
+    mockFetchImage(Buffer.from('soup'));
+    subscribe.mockResolvedValueOnce({ data: { images: [{ url: 'https://example.com/soup.jpg' }] } });
+
+    const scene = {
+      id: 's2',
+      order: 2,
+      startTime: 3,
+      endTime: 6,
+      duration: 3,
+      songSection: 'verse' as const,
+      title: 'Soup Spill on Captain’s Toes',
+      description: 'Jens knocks over a pot, soup spilling directly onto Kapten Mollberg’s pristine, socked toes.',
+      action: 'Soup mid-pour, Kapten yelps, his toes comically sizzle, Jens horrified.',
+      characters: ['jens'],
+      shotType: 'medium' as const,
+      cameraIntent: 'comedy close-up',
+      visualComedy: 'Soup forms little angry faces on the captain’s toes.',
+      imagePrompt: 'hot soup spill, sizzling toes',
+      suggestedMotion: 'slowZoomIn' as const,
+      motion: 'slowZoomIn' as const,
+      transitionIn: 'cut' as const,
+      transitionOut: 'cut' as const,
+      mediaType: 'image' as const,
+      previousAssetIds: [],
+      previousVideoAssetIds: [],
+      generationState: 'pending' as const,
+      videoGenerationState: 'pending' as const,
+      approved: false,
+    };
+
+    await provider().generateSceneImage({ scene, bible, style });
+    const firstPrompt = subscribe.mock.calls[0]?.[1]?.input?.prompt as string;
+    expect(firstPrompt).not.toMatch(/\bsizzle\b/i);
+    expect(firstPrompt).not.toMatch(/\btoes\b/i);
   });
 });

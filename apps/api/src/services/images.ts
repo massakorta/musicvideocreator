@@ -1,9 +1,16 @@
 import { AppError, ERROR_CODES, resolveProjectImageQualityId, type CharacterDefinition } from '@music-video/shared';
 import { buildSceneImagePrompt } from '@music-video/ai';
-import { characterReferenceFingerprint, errorText, findRiskyPromptTerms, sceneImageFingerprint, truncateForLog } from '@music-video/shared';
+import {
+  characterReferenceFingerprint,
+  errorText,
+  findRiskyPromptTerms,
+  isContentPolicyError,
+  sceneImageFingerprint,
+  truncateForLog,
+} from '@music-video/shared';
 import { config } from '../config.js';
 import { placeholderSvg } from './demo.js';
-import { createImageProvider, requireFalOrDemo } from './aiService.js';
+import { createImageProvider, generateSafeSceneCopy, requireFalOrDemo } from './aiService.js';
 import {
   attachAssetToScene,
   getProjectOrThrow,
@@ -11,6 +18,7 @@ import {
   storeGeneratedFile,
   styleOrThrow,
   updateProjectDocument,
+  updateScene,
 } from './projects.js';
 import {
   acquireSceneImageSlot,
@@ -180,7 +188,7 @@ export async function generateSceneImage(projectId: string, sceneId: string, for
   }
 }
 
-async function executeSceneImageGeneration(projectId: string, sceneId: string): Promise<void> {
+async function executeSceneImageGeneration(projectId: string, sceneId: string, autoSafeRetry = false): Promise<void> {
   const startedAt = Date.now();
   let sceneOrder = 0;
   await acquireSceneImageSlot();
@@ -237,6 +245,27 @@ async function executeSceneImageGeneration(projectId: string, sceneId: string): 
   } catch (error) {
     const message =
       error instanceof Error && error.message.trim() ? error.message : errorText(error);
+
+    if (!autoSafeRetry && isContentPolicyError(error)) {
+      try {
+        const safeCopy = await generateSafeSceneCopy(projectId, sceneId, 'all');
+        await updateScene(projectId, sceneId, {
+          description: safeCopy.description,
+          action: safeCopy.action,
+          imagePrompt: safeCopy.imagePrompt,
+          visualComedy: safeCopy.visualComedy,
+        });
+        console.warn(
+          `[image] auto-rewrote scene ${sceneId} on project ${projectId} after content policy block (${safeCopy.demo ? 'local' : 'openai'}), retrying once`,
+        );
+        return executeSceneImageGeneration(projectId, sceneId, true);
+      } catch (rewriteError) {
+        console.warn(
+          `[image] auto-rewrite failed for scene ${sceneId} on project ${projectId}: ${errorText(rewriteError)}`,
+        );
+      }
+    }
+
     let promptLog = '';
     let sceneTerms: string[] = [];
     try {

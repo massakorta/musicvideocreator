@@ -21,9 +21,11 @@ Keep the same characters, lyric beat, and visual gag. Change only wording that t
 
 Guidelines:
 - smoking, smoldering, charred, burnt, or blackened food or hair → cartoon steam, tousled hair, or overcooked silly cartoon food
+- sizzling, scalding, hot liquid on skin or toes → splashing cartoon soup, surprised reaction, no injury detail
 - blood, weapons, death, or realistic violence → slapstick cartoon equivalents
 - minors or young children → clearly adult characters only
 - suggestive or NSFW wording → neutral, fully clothed, slapstick tone
+- avoid body-part close-ups (toes, feet) — describe shoes, boots, or full-body slapstick instead
 
 Write concise director notes, not full image prompts. Do not add on-image text, logos, or captions.
 Return every schema field. Use null for visualComedy when there is no visual gag.`;

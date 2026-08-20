@@ -60,6 +60,14 @@ describe('findRiskyPromptTerms', () => {
       'child/minor terms',
       'violence/weapons',
     ]);
+    expect(findRiskyPromptTerms('toes comically sizzle from hot soup')).toEqual([
+      'smoking/smoke/charred',
+      'heat/injury wording',
+    ]);
+  });
+
+  it('ignores safety allow phrases such as no children', () => {
+    expect(findRiskyPromptTerms('No children. Adult characters only.')).toEqual([]);
   });
 });
 
@@ -76,6 +84,22 @@ describe('softenSceneTextForSafety', () => {
     const result = softenSceneTextForSafety('hair smoking over burnt bränskrot');
     expect(result).toContain('cartoon steam');
     expect(result).not.toContain('Family-friendly illustrated cartoon');
+  });
+
+  it('softens soup-on-toes slapstick without sounding like injury', () => {
+    const result = softenSceneTextForSafety(
+      'Soup spilling onto socked toes, toes comically sizzle, angry faces on the soup',
+    );
+    expect(result).toContain('cartoon shoes');
+    expect(result).toContain('cartoon ripple');
+    expect(result).toContain('silly cartoon faces');
+    expect(result).not.toMatch(/\bsizzle\b/i);
+  });
+
+  it('preserves adult-only cast when rewriting no children rules', () => {
+    const result = softenSceneTextForSafety('No children in frame. Keep kid proportions cartoonish.');
+    expect(result).toContain('adult-only cast');
+    expect(result).not.toMatch(/\bkid\b/i);
   });
 });
 

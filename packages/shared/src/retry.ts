@@ -105,6 +105,7 @@ export function providerRetryDelayMs(attempt: number, random: () => number = Mat
 
 export function softenSceneTextForSafety(text: string): string {
   return text
+    .replace(/\bno (?:children|child|kids|kid|minors|minor)\b/gi, 'adult-only cast')
     .replace(/\b(children|child|kids|kid|toddlers|toddler|infants|infant|babies|baby|teenagers|teenager|teens|teen|minors|minor|underage)\b/gi, 'adult')
     .replace(/\byoung (?:boy|girl|child|man|woman)\b/gi, 'adult')
     .replace(/\bblood(y)?\b/gi, 'cartoon paint splatter')
@@ -113,22 +114,36 @@ export function softenSceneTextForSafety(text: string): string {
     .replace(/\b(nude|naked|nsfw|sexy|seductive|erotic|shirtless|underwear|lingerie)\b/gi, 'fully clothed')
     .replace(/\b(smoking|smoke|smoldering|charred|burnt|burned|brända|bränskrot)\b/gi, 'cartoon steam')
     .replace(/\b(black lump|crispy black|carbonized|incinerated|scorched)\b/gi, 'overcooked cartoon food')
+    .replace(/\b(sizzle|sizzling|scalding|scalded|searing|blistering)\b/gi, 'cartoon ripple')
+    .replace(/\b(boiling (?:soup|liquid|water|pot)|hot soup)\b/gi, 'splashing cartoon soup')
+    .replace(/\b(socked toes|bare feet|barefoot|(?:his|her|their) toes)\b/gi, 'cartoon shoes')
+    .replace(/\btoes\b/gi, 'shoes')
+    .replace(/\b(angry faces|angry face)\b/gi, 'silly cartoon faces')
     .replace(/\b(drunk|drunken|intoxicated|hangover|wasted|hammered)\b/gi, 'dizzy slapstick')
     .replace(/\b(beer|wine|vodka|whiskey|whisky|liquor|alcohol|booze)\b/gi, 'cartoon soda')
     .replace(/\b(fire|flames?|explosion|exploding|detonat(?:e|ion|ing))\b/gi, 'cartoon warm glow');
 }
 
+function stripSafetyAllowPhrases(text: string): string {
+  return text
+    .replace(/\bno (?:children|child|kids|kid|minors|minor)\b/gi, '')
+    .replace(/\badult(?:-only cast| characters only| character)\b/gi, '')
+    .replace(/\bclearly adult\b/gi, '');
+}
+
 const RISKY_PROMPT_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
-  { label: 'smoking/smoke/charred', pattern: /\b(smoking|smoke|smoldering|charred|burnt|burned|brända|bränskrot|scorched)\b/i },
+  { label: 'smoking/smoke/charred', pattern: /\b(smoking|smoke|smoldering|charred|burnt|burned|brända|bränskrot|scorched|sizzle|sizzling)\b/i },
   { label: 'child/minor terms', pattern: /\b(children|child|kids|kid|teen|minor|underage|young boy|young girl)\b/i },
   { label: 'violence/weapons', pattern: /\b(blood|gun|knife|weapon|kill|murder|death|corpse)\b/i },
   { label: 'suggestive content', pattern: /\b(nude|naked|nsfw|sexy|seductive|erotic|shirtless)\b/i },
   { label: 'alcohol/intoxication', pattern: /\b(drunk|intoxicated|beer|wine|vodka|whiskey|liquor|alcohol)\b/i },
   { label: 'fire/explosion', pattern: /\b(fire|flames?|explosion|exploding|detonat)\b/i },
+  { label: 'heat/injury wording', pattern: /\b(scalding|scalded|searing|blistering|boiling soup|hot soup)\b/i },
 ];
 
 export function findRiskyPromptTerms(text: string): string[] {
-  return RISKY_PROMPT_PATTERNS.filter(({ pattern }) => pattern.test(text)).map(({ label }) => label);
+  const scanned = stripSafetyAllowPhrases(text);
+  return RISKY_PROMPT_PATTERNS.filter(({ pattern }) => pattern.test(scanned)).map(({ label }) => label);
 }
 
 export function truncateForLog(text: string, max = 400): string {

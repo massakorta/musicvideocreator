@@ -209,6 +209,23 @@ export function buildMinimalSafeSceneImagePrompt(input: SceneImagePromptInput): 
     .slice(0, 1500);
 }
 
+/** Ultra-minimal prompt when fal still rejects — drops body-contact and heat-injury detail. */
+export function buildUltraMinimalSafeSceneImagePrompt(input: SceneImagePromptInput): string {
+  const { style } = input;
+  const scene = softenSceneFields(input.scene);
+  return [
+    `${style.name} family-friendly cartoon illustration.`,
+    `Slapstick comedy kitchen moment inspired by: ${scene.title}.`,
+    'Two adult cartoon characters with exaggerated surprised expressions.',
+    'Splashing cartoon soup gag. Fully clothed. Thick ink outlines. Bright colors.',
+    'No text, logos, realistic injury, or body-focused framing.',
+  ]
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 800);
+}
+
 function softenSceneFields<T extends Pick<
   StoryboardScene,
   'title' | 'description' | 'action' | 'visualComedy' | 'imagePrompt' | 'cameraIntent' | 'lyricsExcerpt'

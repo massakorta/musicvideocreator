@@ -20,6 +20,7 @@ import {
   buildCharacterReferencePrompt,
   buildMinimalSafeSceneImagePrompt,
   buildSceneImagePrompt,
+  buildUltraMinimalSafeSceneImagePrompt,
 } from './promptBuilder.js';
 
 export interface SceneImageGenerationRequest {
@@ -97,7 +98,8 @@ export class FalImageProvider implements ImageGenerationProvider {
     };
     const { prompt, negativePrompt } = buildSceneImagePrompt(promptInput);
     const minimalPrompt = buildMinimalSafeSceneImagePrompt(promptInput);
-    return this.generateWithSafetyRetries(prompt, negativePrompt, minimalPrompt);
+    const ultraMinimalPrompt = buildUltraMinimalSafeSceneImagePrompt(promptInput);
+    return this.generateWithSafetyRetries(prompt, negativePrompt, minimalPrompt, ultraMinimalPrompt);
   }
 
   async generateCharacterReference(request: CharacterReferenceRequest): Promise<GeneratedImageBytes> {
@@ -110,13 +112,17 @@ export class FalImageProvider implements ImageGenerationProvider {
     prompt: string,
     negativePrompt: string,
     minimalPrompt?: string,
+    ultraMinimalPrompt?: string,
   ): Promise<GeneratedImageBytes> {
     const fullPrompt = `${prompt}\nAvoid: ${negativePrompt}`.slice(0, 8000);
     const saferPrompt = sanitizeImagePromptForSafety(fullPrompt);
     const minimalFullPrompt = minimalPrompt
       ? sanitizeImagePromptForSafety(`${minimalPrompt}\nAvoid: ${negativePrompt}`.slice(0, 8000))
       : undefined;
-    const candidates = [fullPrompt, saferPrompt, minimalFullPrompt].filter(
+    const ultraMinimalFullPrompt = ultraMinimalPrompt
+      ? sanitizeImagePromptForSafety(`${ultraMinimalPrompt}\nAvoid: ${negativePrompt}`.slice(0, 8000))
+      : undefined;
+    const candidates = [fullPrompt, saferPrompt, minimalFullPrompt, ultraMinimalFullPrompt].filter(
       (candidate, index, list): candidate is string =>
         Boolean(candidate) && list.indexOf(candidate) === index,
     );
