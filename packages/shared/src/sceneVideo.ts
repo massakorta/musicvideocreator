@@ -23,6 +23,31 @@ export function sceneClipDurationSeconds(_sceneDuration: number): typeof FIXED_S
   return FIXED_SCENE_CLIP_DURATION_SECONDS;
 }
 
+/** Maps scene timeline position to a position inside the source clip (ping-pong when clip is shorter than the scene). */
+export function sceneVideoPingPongSeconds(localSeconds: number, clipDurationSeconds: number): number {
+  if (clipDurationSeconds <= 0 || localSeconds <= 0) return 0;
+  const cycle = clipDurationSeconds * 2;
+  const position = localSeconds % cycle;
+  if (position <= clipDurationSeconds) return position;
+  return cycle - position;
+}
+
+/** Source timestamp for the clip at a point in the scene timeline. */
+export function sceneVideoSourceSeconds(
+  localSeconds: number,
+  clipDurationSeconds: number,
+  sceneDurationSeconds: number,
+): number {
+  if (clipDurationSeconds <= 0 || localSeconds <= 0) return 0;
+  if (sceneDurationSeconds <= 0) return 0;
+  if (clipDurationSeconds >= sceneDurationSeconds) {
+    const rate = clipDurationSeconds / sceneDurationSeconds;
+    return Math.min(localSeconds * rate, Math.max(0, clipDurationSeconds - 0.001));
+  }
+  return sceneVideoPingPongSeconds(localSeconds, clipDurationSeconds);
+}
+
+/** @deprecated Prefer sceneVideoSourceSeconds; kept for tests and legacy callers. */
 export function sceneVideoPlaybackRate(clipDurationSeconds: number, sceneDurationSeconds: number): number {
   if (sceneDurationSeconds <= 0) return 1;
   const raw = clipDurationSeconds / sceneDurationSeconds;

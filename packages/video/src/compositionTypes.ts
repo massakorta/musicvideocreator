@@ -1,5 +1,5 @@
 import type { MotionPresetId, MusicVideoProject, TransitionPresetId, VideoFormatId } from '@music-video/shared';
-import { getVideoPreset, sceneHasVideo, sceneVideoPlaybackRate, secondsToFrames } from '@music-video/shared';
+import { getVideoPreset, sceneHasVideo, secondsToFrames } from '@music-video/shared';
 
 export interface CompositionScene {
   id: string;
@@ -8,7 +8,6 @@ export interface CompositionScene {
   imageUrl: string;
   videoUrl?: string;
   videoDurationSeconds?: number;
-  playbackRate?: number;
   motion: MotionPresetId;
   transitionIn: TransitionPresetId;
   transitionOut: TransitionPresetId;
@@ -54,10 +53,6 @@ export function projectToComposition(project: MusicVideoProject): CompositionPro
           imageUrl: scene.image?.publicUrl ?? '',
           videoUrl: useVideo ? scene.video!.publicUrl : undefined,
           videoDurationSeconds: useVideo ? clipDuration ?? scene.duration : undefined,
-          playbackRate:
-            useVideo && clipDuration
-              ? sceneVideoPlaybackRate(clipDuration, sceneDuration)
-              : undefined,
           motion: scene.motion,
           transitionIn: scene.transitionIn,
           transitionOut: scene.transitionOut,

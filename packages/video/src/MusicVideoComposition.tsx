@@ -1,9 +1,10 @@
 import React from 'react';
-import { AbsoluteFill, Audio, Img, OffthreadVideo, Sequence, useCurrentFrame, useVideoConfig } from 'remotion';
+import { AbsoluteFill, Audio, Img, Sequence, useCurrentFrame, useVideoConfig } from 'remotion';
 import { secondsToFrames } from '@music-video/shared';
 import type { CompositionScene, MusicVideoCompositionProps } from './compositionTypes.js';
 import { TRANSITION_FRAMES } from './compositionTypes.js';
 import { motionStyle } from './motionStyle.js';
+import { PingPongSceneVideo } from './PingPongSceneVideo.js';
 import { transitionStyleForFrame } from './transitions.js';
 
 export const MusicVideoComposition: React.FC<MusicVideoCompositionProps> = ({
@@ -40,6 +41,7 @@ const SceneLayer: React.FC<{ scene: CompositionScene; durationInFrames: number }
   durationInFrames,
 }) => {
   const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
   const motion = motionStyle(scene.motion, frame, durationInFrames, scene.id);
   const transition = transitionStyleForFrame({
     frame,
@@ -53,14 +55,16 @@ const SceneLayer: React.FC<{ scene: CompositionScene; durationInFrames: number }
     height: '100%',
     objectFit: 'cover',
   };
+  const sceneDurationSeconds = durationInFrames / fps;
 
   return (
     <AbsoluteFill style={{ overflow: 'hidden', opacity: transition.opacity, transform: transition.transform }}>
-      {scene.videoUrl ? (
-        <OffthreadVideo
+      {scene.videoUrl && scene.videoDurationSeconds ? (
+        <PingPongSceneVideo
           src={scene.videoUrl}
-          muted
-          playbackRate={scene.playbackRate ?? 1}
+          clipDurationSeconds={scene.videoDurationSeconds}
+          sceneDurationSeconds={sceneDurationSeconds}
+          fallbackImageUrl={scene.imageUrl}
           style={mediaStyle}
         />
       ) : (

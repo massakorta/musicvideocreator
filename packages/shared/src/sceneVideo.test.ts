@@ -3,7 +3,9 @@ import type { StoryboardScene } from './storyboard.js';
 import {
   sceneClipDurationSeconds,
   sceneNeedsAnimation,
+  sceneVideoPingPongSeconds,
   sceneVideoPlaybackRate,
+  sceneVideoSourceSeconds,
 } from './sceneVideo.js';
 
 function scene(partial: Partial<StoryboardScene>): StoryboardScene {
@@ -50,6 +52,27 @@ describe('sceneNeedsAnimation', () => {
     expect(
       sceneNeedsAnimation(scene({ currentAssetId: 'img-1', currentVideoAssetId: 'vid-1', mediaType: 'video' })),
     ).toBe(false);
+  });
+});
+
+describe('sceneVideoPingPongSeconds', () => {
+  it('plays forward then backward across a longer scene slot', () => {
+    expect(sceneVideoPingPongSeconds(0, 5)).toBe(0);
+    expect(sceneVideoPingPongSeconds(3, 5)).toBe(3);
+    expect(sceneVideoPingPongSeconds(5, 5)).toBe(5);
+    expect(sceneVideoPingPongSeconds(6, 5)).toBe(4);
+    expect(sceneVideoPingPongSeconds(8, 5)).toBe(2);
+    expect(sceneVideoPingPongSeconds(10, 5)).toBe(0);
+  });
+});
+
+describe('sceneVideoSourceSeconds', () => {
+  it('speeds up when the clip is longer than the scene', () => {
+    expect(sceneVideoSourceSeconds(2.5, 10, 5)).toBe(5);
+  });
+
+  it('ping-pongs when the clip is shorter than the scene', () => {
+    expect(sceneVideoSourceSeconds(6, 5, 8)).toBe(4);
   });
 });
 

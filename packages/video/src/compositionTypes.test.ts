@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MusicVideoProject, StoryboardScene } from '@music-video/shared';
+import { sceneVideoSourceSeconds } from '@music-video/shared';
 import { projectToComposition } from './compositionTypes.js';
 
 function scene(partial: Partial<StoryboardScene>): StoryboardScene {
@@ -78,6 +79,10 @@ describe('projectToComposition', () => {
 
     const composition = projectToComposition(project);
     expect(composition.scenes[0]?.videoUrl).toBe('https://example.com/clip.mp4');
-    expect(composition.scenes[0]?.playbackRate).toBe(1);
+    expect(composition.scenes[0]?.videoDurationSeconds).toBe(5);
+  });
+
+  it('maps an 8 second scene with a 5 second clip using ping-pong timing', () => {
+    expect(sceneVideoSourceSeconds(6, 5, 8)).toBe(4);
   });
 });
