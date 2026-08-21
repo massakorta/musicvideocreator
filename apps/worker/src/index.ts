@@ -200,12 +200,28 @@ async function renderJobInner(job: RenderJob): Promise<void> {
     const stillsDir = path.join(workdir, 'stills');
     const stillsServer = await startStillsServer(stillsDir);
     try {
+      renderLog(job, project, 'prefetching scene assets', { scenes: project.scenes.length });
       const { composition: compositionProject, prefetched, total } = await prefetchCompositionStills(
         project,
         stillsDir,
         stillsServer.baseUrl,
+        {
+          onScene: ({ index, total: sceneTotal, sceneId, hasVideo }) => {
+            if (hasVideo || (index + 1) % 10 === 0 || index === 0) {
+              renderLog(job, project, 'prefetch scene', {
+                scene: `${index + 1}/${sceneTotal}`,
+                id: sceneId,
+                video: hasVideo ? 'yes' : 'no',
+              });
+              logMemory(`render ${job.id} prefetch ${index + 1}/${sceneTotal}`);
+            }
+            const progress = 2 + Math.round(((index + 1) / sceneTotal) * 5);
+            void patchRenderJob(current, { progress });
+          },
+        },
       );
       renderLog(job, project, 'prefetched stills', { prefetched, total, assetsUrl: stillsServer.baseUrl });
+      logMemory(`render ${job.id} prefetch done`);
       const inputProps = { project: compositionProject };
 
       current = await patchRenderJob(current, { status: 'rendering', progress: 8 });

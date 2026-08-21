@@ -214,62 +214,89 @@ export async function startStillsServer(
   };
 }
 
+async function prefetchSceneAssets(
+  project: MusicVideoProject,
+  scene: CompositionProject['scenes'][number],
+  stillsDir: string,
+  assetsBaseUrl: string,
+): Promise<{ scene: CompositionProject['scenes'][number]; prefetched: number }> {
+  let next = scene;
+  let prefetched = 0;
+
+  const image = await loadSceneImageBody(project, scene.id, scene.imageUrl);
+  if (image) {
+    const ext = extensionFromMime(image.mimeType) || extensionFromUrl(scene.imageUrl);
+    const filename = `${scene.id}${ext}`;
+    const dest = path.join(stillsDir, filename);
+    await writeFile(dest, image.body);
+    prefetched += 1;
+    next = { ...next, imageUrl: `${assetsBaseUrl}/${filename}` };
+  }
+
+  if (scene.videoUrl) {
+    const videoBody = await loadSceneVideoBody(project, scene.id, scene.videoUrl);
+    if (videoBody) {
+      const projectScene = project.scenes.find((s) => s.id === scene.id);
+      const clipDurationSeconds =
+        scene.videoDurationSeconds ??
+        projectScene?.video?.durationSeconds ??
+        Math.max(0.1, scene.endTime - scene.startTime);
+      const sceneDurationSeconds = Math.max(0.1, scene.endTime - scene.startTime);
+      const rawFilename = `${scene.id}-clip.mp4`;
+      const rawDest = path.join(stillsDir, rawFilename);
+      await writeFile(rawDest, videoBody);
+
+      if (clipDurationSeconds + 0.05 < sceneDurationSeconds) {
+        const extendedFilename = `${scene.id}-clip-extended.mp4`;
+        const extendedDest = path.join(stillsDir, extendedFilename);
+        await buildPingPongClip(rawDest, extendedDest, clipDurationSeconds, sceneDurationSeconds);
+        prefetched += 1;
+        next = {
+          ...next,
+          videoUrl: `${assetsBaseUrl}/${extendedFilename}`,
+          videoDurationSeconds: sceneDurationSeconds,
+        };
+      } else {
+        prefetched += 1;
+        next = {
+          ...next,
+          videoUrl: `${assetsBaseUrl}/${rawFilename}`,
+          videoDurationSeconds: clipDurationSeconds,
+        };
+      }
+    }
+  }
+
+  return { scene: next, prefetched };
+}
+
+/** Prefetch one scene at a time — parallel ffmpeg + buffers OOM 50-scene exports on 2GB workers. */
 export async function prefetchCompositionStills(
   project: MusicVideoProject,
   stillsDir: string,
   assetsBaseUrl: string,
+  options?: {
+    onScene?: (info: { index: number; total: number; sceneId: string; hasVideo: boolean }) => void;
+  },
 ): Promise<{ composition: CompositionProject; prefetched: number; total: number }> {
   await mkdir(stillsDir, { recursive: true });
   const base = projectToComposition(project);
   let prefetched = 0;
-  const scenes = await Promise.all(
-    base.scenes.map(async (scene) => {
-      let next = scene;
-      const image = await loadSceneImageBody(project, scene.id, scene.imageUrl);
-      if (image) {
-        const ext = extensionFromMime(image.mimeType) || extensionFromUrl(scene.imageUrl);
-        const filename = `${scene.id}${ext}`;
-        const dest = path.join(stillsDir, filename);
-        await writeFile(dest, image.body);
-        prefetched += 1;
-        next = { ...next, imageUrl: `${assetsBaseUrl}/${filename}` };
-      }
-      if (scene.videoUrl) {
-        const videoBody = await loadSceneVideoBody(project, scene.id, scene.videoUrl);
-        if (videoBody) {
-          const projectScene = project.scenes.find((s) => s.id === scene.id);
-          const clipDurationSeconds =
-            scene.videoDurationSeconds ??
-            projectScene?.video?.durationSeconds ??
-            Math.max(0.1, scene.endTime - scene.startTime);
-          const sceneDurationSeconds = Math.max(0.1, scene.endTime - scene.startTime);
-          const rawFilename = `${scene.id}-clip.mp4`;
-          const rawDest = path.join(stillsDir, rawFilename);
-          await writeFile(rawDest, videoBody);
+  const scenes: CompositionProject['scenes'] = [];
 
-          if (clipDurationSeconds + 0.05 < sceneDurationSeconds) {
-            const extendedFilename = `${scene.id}-clip-extended.mp4`;
-            const extendedDest = path.join(stillsDir, extendedFilename);
-            await buildPingPongClip(rawDest, extendedDest, clipDurationSeconds, sceneDurationSeconds);
-            prefetched += 1;
-            next = {
-              ...next,
-              videoUrl: `${assetsBaseUrl}/${extendedFilename}`,
-              videoDurationSeconds: sceneDurationSeconds,
-            };
-          } else {
-            prefetched += 1;
-            next = {
-              ...next,
-              videoUrl: `${assetsBaseUrl}/${rawFilename}`,
-              videoDurationSeconds: clipDurationSeconds,
-            };
-          }
-        }
-      }
-      return next;
-    }),
-  );
+  for (let index = 0; index < base.scenes.length; index += 1) {
+    const scene = base.scenes[index]!;
+    options?.onScene?.({
+      index,
+      total: base.scenes.length,
+      sceneId: scene.id,
+      hasVideo: Boolean(scene.videoUrl),
+    });
+    const result = await prefetchSceneAssets(project, scene, stillsDir, assetsBaseUrl);
+    prefetched += result.prefetched;
+    scenes.push(result.scene);
+  }
+
   return { composition: { ...base, scenes }, prefetched, total: base.scenes.length };
 }
 
