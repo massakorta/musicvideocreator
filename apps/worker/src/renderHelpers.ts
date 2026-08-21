@@ -1,5 +1,5 @@
 import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
 import { Readable } from 'node:stream';
@@ -18,104 +18,6 @@ import { getRepositories } from '../../api/src/repositories/index.js';
 import { getObjectStorage } from '../../api/src/storage/index.js';
 
 const execFileAsync = promisify(execFile);
-
-function exportFrameCount(durationSeconds: number, exportFps: number): number {
-  return Math.max(1, Math.ceil(durationSeconds * exportFps));
-}
-
-function h264CfrOutputArgs(exportFps: number, frameCount: number): string[] {
-  return [
-    '-an',
-    '-r',
-    String(exportFps),
-    '-vsync',
-    'cfr',
-    '-frames:v',
-    String(frameCount),
-    '-c:v',
-    'libx264',
-    '-preset',
-    'ultrafast',
-    '-crf',
-    '28',
-    '-pix_fmt',
-    'yuv420p',
-    '-g',
-    '1',
-    '-keyint_min',
-    '1',
-    '-sc_threshold',
-    '0',
-    '-bf',
-    '0',
-    '-movflags',
-    '+faststart',
-  ];
-}
-
-async function probeVideoFrameCount(filePath: string): Promise<number | null> {
-  try {
-    const { stdout } = await execFileAsync('ffprobe', [
-      '-v',
-      'error',
-      '-select_streams',
-      'v:0',
-      '-count_frames',
-      '-show_entries',
-      'stream=nb_read_frames',
-      '-of',
-      'default=noprint_wrappers=1:nokey=1',
-      filePath,
-    ]);
-    const value = Number.parseInt(stdout.trim(), 10);
-    return Number.isFinite(value) && value > 0 ? value : null;
-  } catch {
-    return null;
-  }
-}
-
-async function assertVideoHasFrames(
-  filePath: string,
-  expectedFrames: number,
-  exportFps: number,
-): Promise<void> {
-  const frames = await probeVideoFrameCount(filePath);
-  if (!frames || frames < Math.max(1, expectedFrames - 1)) {
-    throw new Error(`Clip has ${frames ?? 0} frames, expected about ${expectedFrames}.`);
-  }
-  await assertVideoFrameExtractable(filePath, 0);
-  await assertVideoFrameExtractable(filePath, 1 / exportFps);
-}
-
-async function assertVideoFrameExtractable(filePath: string, timeSeconds: number): Promise<void> {
-  await execFileAsync(
-    'ffmpeg',
-    ['-v', 'error', '-ss', String(timeSeconds), '-i', filePath, '-frames:v', '1', '-f', 'null', '-'],
-    { timeout: 30_000 },
-  );
-}
-
-async function transcodeToH264(inputPath: string, outputPath: string): Promise<void> {
-  await execFileAsync(
-    'ffmpeg',
-    [
-      '-y',
-      '-i',
-      inputPath,
-      '-an',
-      '-c:v',
-      'libx264',
-      '-preset',
-      'ultrafast',
-      '-crf',
-      '28',
-      '-pix_fmt',
-      'yuv420p',
-      outputPath,
-    ],
-    { timeout: 1000 * 60 * 5 },
-  );
-}
 
 function extensionFromUrl(url: string): string {
   try {
@@ -242,27 +144,38 @@ async function probeVideoDurationSeconds(filePath: string): Promise<number | nul
   }
 }
 
-/** Re-encode source clips to all-keyframe CFR H.264 for Remotion frame extraction. */
-async function normalizeVideoClip(
-  inputPath: string,
-  outputPath: string,
-  exportFps: number,
-  durationSeconds: number,
-): Promise<number> {
-  const decodedPath = `${inputPath}.decoded.mp4`;
-  await transcodeToH264(inputPath, decodedPath);
-  try {
-    const frameCount = exportFrameCount(durationSeconds, exportFps);
-    await execFileAsync(
-      'ffmpeg',
-      ['-y', '-i', decodedPath, ...h264CfrOutputArgs(exportFps, frameCount), outputPath],
-      { timeout: 1000 * 60 * 5 },
-    );
-    await assertVideoHasFrames(outputPath, frameCount, exportFps);
-    return (await probeVideoDurationSeconds(outputPath)) ?? durationSeconds;
-  } finally {
-    await unlink(decodedPath).catch(() => undefined);
+/** Extract clip frames as JPEGs so Remotion can ping-pong without HTML video or OffthreadVideo seeking. */
+async function extractClipFrames(options: {
+  inputPath: string;
+  stillsDir: string;
+  sceneId: string;
+  exportFps: number;
+  width: number;
+  height: number;
+}): Promise<number> {
+  const pattern = path.join(options.stillsDir, `${options.sceneId}-f%04d.jpg`);
+  await execFileAsync(
+    'ffmpeg',
+    [
+      '-y',
+      '-i',
+      options.inputPath,
+      '-vf',
+      `fps=${options.exportFps},scale=${options.width}:${options.height}:force_original_aspect_ratio=increase,crop=${options.width}:${options.height}`,
+      '-q:v',
+      '3',
+      pattern,
+    ],
+    { timeout: 1000 * 60 * 5 },
+  );
+  const prefix = `${options.sceneId}-f`;
+  const frames = (await readdir(options.stillsDir))
+    .filter((name) => name.startsWith(prefix) && name.endsWith('.jpg'))
+    .sort();
+  if (frames.length < 2) {
+    throw new Error(`Clip for scene ${options.sceneId} produced ${frames.length} frames.`);
   }
+  return frames.length;
 }
 
 /** Serves prefetched stills and clips over HTTP — Remotion only accepts http(s) asset URLs. */
@@ -351,7 +264,7 @@ async function prefetchSceneAssets(
   scene: CompositionProject['scenes'][number],
   stillsDir: string,
   assetsBaseUrl: string,
-  exportFps: number,
+  options: { exportFps: number; width: number; height: number },
 ): Promise<{ scene: CompositionProject['scenes'][number]; prefetched: number }> {
   let next = scene;
   let prefetched = 0;
@@ -373,23 +286,33 @@ async function prefetchSceneAssets(
   if (scene.videoUrl) {
     const rawFilename = `${scene.id}-clip.mp4`;
     const rawDest = path.join(stillsDir, rawFilename);
-    if (await downloadSceneVideo(project, scene.id, scene.videoUrl, rawDest)) {
-      const projectScene = project.scenes.find((s) => s.id === scene.id);
-      const clipDurationSeconds =
-        scene.videoDurationSeconds ??
-        projectScene?.video?.durationSeconds ??
-        Math.max(0.1, scene.endTime - scene.startTime);
-      const normalizedFilename = `${scene.id}-clip-normalized.mp4`;
-      const normalizedDest = path.join(stillsDir, normalizedFilename);
-      await normalizeVideoClip(rawDest, normalizedDest, exportFps, clipDurationSeconds);
-      await unlink(rawDest).catch(() => undefined);
-      prefetched += 1;
-      next = {
-        ...next,
-        videoUrl: `${assetsBaseUrl}/${normalizedFilename}`,
-        videoDurationSeconds: clipDurationSeconds,
-      };
+    const downloaded = await downloadSceneVideo(project, scene.id, scene.videoUrl, rawDest);
+    if (!downloaded) {
+      throw new Error(`Could not download animated clip for scene ${scene.id}.`);
     }
+    const probed = await probeVideoDurationSeconds(rawDest);
+    const clipDurationSeconds =
+      probed ??
+      scene.videoDurationSeconds ??
+      project.scenes.find((s) => s.id === scene.id)?.video?.durationSeconds ??
+      Math.max(0.1, scene.endTime - scene.startTime);
+    const videoFrameCount = await extractClipFrames({
+      inputPath: rawDest,
+      stillsDir,
+      sceneId: scene.id,
+      exportFps: options.exportFps,
+      width: options.width,
+      height: options.height,
+    });
+    await unlink(rawDest).catch(() => undefined);
+    prefetched += videoFrameCount;
+    next = {
+      ...next,
+      videoUrl: scene.videoUrl,
+      videoDurationSeconds: clipDurationSeconds,
+      videoFramePrefix: `${assetsBaseUrl}/${scene.id}-f`,
+      videoFrameCount,
+    };
   }
 
   return { scene: next, prefetched };
@@ -402,12 +325,16 @@ export async function prefetchCompositionStills(
   assetsBaseUrl: string,
   options?: {
     exportFps?: number;
+    width?: number;
+    height?: number;
     onScene?: (info: { index: number; total: number; sceneId: string; hasVideo: boolean }) => void;
   },
-): Promise<{ composition: CompositionProject; prefetched: number; total: number }> {
+): Promise<{ composition: CompositionProject; prefetched: number; total: number; videoScenes: number }> {
   await mkdir(stillsDir, { recursive: true });
   const base = projectToComposition(project);
   const exportFps = options?.exportFps ?? 15;
+  const width = options?.width ?? 854;
+  const height = options?.height ?? 480;
   let prefetched = 0;
   const scenes: CompositionProject['scenes'] = [];
 
@@ -419,12 +346,22 @@ export async function prefetchCompositionStills(
       sceneId: scene.id,
       hasVideo: Boolean(scene.videoUrl),
     });
-    const result = await prefetchSceneAssets(project, scene, stillsDir, assetsBaseUrl, exportFps);
+    const result = await prefetchSceneAssets(project, scene, stillsDir, assetsBaseUrl, {
+      exportFps,
+      width,
+      height,
+    });
     prefetched += result.prefetched;
     scenes.push(result.scene);
   }
 
-  return { composition: { ...base, scenes }, prefetched, total: base.scenes.length };
+  const videoScenes = scenes.filter((scene) => (scene.videoFrameCount ?? 0) > 1).length;
+  const expectedVideos = base.scenes.filter((scene) => scene.videoUrl).length;
+  if (expectedVideos > 0 && videoScenes === 0) {
+    throw new Error('Export would be stills only: no scene clips could be prepared.');
+  }
+
+  return { composition: { ...base, scenes }, prefetched, total: base.scenes.length, videoScenes };
 }
 
 /** Shrink the rendered MP4 so it fits Supabase Storage's default 50 MB upload limit. */

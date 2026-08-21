@@ -3,8 +3,10 @@ import type { StoryboardScene } from './storyboard.js';
 import {
   sceneClipDurationSeconds,
   sceneNeedsAnimation,
+  sceneVideoFrameUrl,
   sceneVideoPingPongSeconds,
   sceneVideoPlaybackRate,
+  sceneVideoSourceFrameIndex,
   sceneVideoSourceSeconds,
 } from './sceneVideo.js';
 
@@ -73,6 +75,22 @@ describe('sceneVideoSourceSeconds', () => {
 
   it('ping-pongs when the clip is shorter than the scene', () => {
     expect(sceneVideoSourceSeconds(6, 5, 8)).toBe(4);
+  });
+});
+
+describe('sceneVideoSourceFrameIndex', () => {
+  it('maps scene time onto extracted clip frames with ping-pong', () => {
+    expect(sceneVideoSourceFrameIndex(0, 5, 8, 75)).toBe(0);
+    expect(sceneVideoSourceFrameIndex(2.5, 5, 8, 75)).toBe(37);
+    expect(sceneVideoSourceFrameIndex(5, 5, 8, 75)).toBe(74);
+    expect(sceneVideoSourceFrameIndex(6, 5, 8, 75)).toBe(60);
+  });
+});
+
+describe('sceneVideoFrameUrl', () => {
+  it('uses 1-based ffmpeg frame numbers', () => {
+    expect(sceneVideoFrameUrl('http://127.0.0.1/scene-f', 0)).toBe('http://127.0.0.1/scene-f0001.jpg');
+    expect(sceneVideoFrameUrl('http://127.0.0.1/scene-f', 74)).toBe('http://127.0.0.1/scene-f0075.jpg');
   });
 });
 

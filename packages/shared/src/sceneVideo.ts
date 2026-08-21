@@ -47,6 +47,25 @@ export function sceneVideoSourceSeconds(
   return sceneVideoPingPongSeconds(localSeconds, clipDurationSeconds);
 }
 
+/** Zero-based frame inside an extracted clip sequence for the current scene time. */
+export function sceneVideoSourceFrameIndex(
+  localSeconds: number,
+  clipDurationSeconds: number,
+  sceneDurationSeconds: number,
+  frameCount: number,
+): number {
+  if (frameCount <= 1) return 0;
+  if (clipDurationSeconds <= 0) return 0;
+  const sourceTime = sceneVideoSourceSeconds(localSeconds, clipDurationSeconds, sceneDurationSeconds);
+  const ratio = Math.min(1, Math.max(0, sourceTime / clipDurationSeconds));
+  if (ratio >= 1) return frameCount - 1;
+  return Math.min(frameCount - 1, Math.floor(ratio * frameCount));
+}
+
+export function sceneVideoFrameUrl(prefix: string, index: number, pad = 4): string {
+  return `${prefix}${String(index + 1).padStart(pad, '0')}.jpg`;
+}
+
 /** @deprecated Prefer sceneVideoSourceSeconds; kept for tests and legacy callers. */
 export function sceneVideoPlaybackRate(clipDurationSeconds: number, sceneDurationSeconds: number): number {
   if (sceneDurationSeconds <= 0) return 1;

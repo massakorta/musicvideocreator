@@ -8,6 +8,9 @@ export interface CompositionScene {
   imageUrl: string;
   videoUrl?: string;
   videoDurationSeconds?: number;
+  /** Local HTTP prefix for extracted clip frames (`…/sceneId-f` + `0001.jpg`). Export only. */
+  videoFramePrefix?: string;
+  videoFrameCount?: number;
   motion: MotionPresetId;
   transitionIn: TransitionPresetId;
   transitionOut: TransitionPresetId;

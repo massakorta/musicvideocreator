@@ -203,12 +203,14 @@ async function renderJobInner(job: RenderJob): Promise<void> {
     const stillsServer = await startStillsServer(stillsDir);
     try {
       renderLog(job, project, 'prefetching scene assets', { scenes: project.scenes.length });
-      const { composition: compositionProject, prefetched, total } = await prefetchCompositionStills(
+      const { composition: compositionProject, prefetched, total, videoScenes } = await prefetchCompositionStills(
         project,
         stillsDir,
         stillsServer.baseUrl,
         {
           exportFps: exportPreset.fps,
+          width: exportPreset.width,
+          height: exportPreset.height,
           onScene: ({ index, total: sceneTotal, sceneId, hasVideo }) => {
             if (hasVideo || (index + 1) % 10 === 0 || index === 0) {
               renderLog(job, project, 'prefetch scene', {
@@ -223,7 +225,12 @@ async function renderJobInner(job: RenderJob): Promise<void> {
           },
         },
       );
-      renderLog(job, project, 'prefetched stills', { prefetched, total, assetsUrl: stillsServer.baseUrl });
+      renderLog(job, project, 'prefetched stills', {
+        prefetched,
+        total,
+        videoScenes,
+        assetsUrl: stillsServer.baseUrl,
+      });
       logMemory(`render ${job.id} prefetch done`);
       const inputProps = { project: compositionProject };
 

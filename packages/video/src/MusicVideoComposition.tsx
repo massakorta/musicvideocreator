@@ -68,6 +68,8 @@ const SceneLayer: React.FC<{
           sceneDurationSeconds={sceneDurationSeconds}
           fallbackImageUrl={scene.imageUrl}
           playbackActive={playbackActive}
+          videoFramePrefix={scene.videoFramePrefix}
+          videoFrameCount={scene.videoFrameCount}
           style={mediaStyle}
         />
       ) : (

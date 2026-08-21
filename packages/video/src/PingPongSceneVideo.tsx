@@ -1,6 +1,13 @@
 import React from 'react';
-import { AbsoluteFill, Img, OffthreadVideo, useCurrentFrame, useVideoConfig } from 'remotion';
-import { sceneVideoSourceSeconds } from '@music-video/shared';
+import {
+  AbsoluteFill,
+  Img,
+  OffthreadVideo,
+  useCurrentFrame,
+  useRemotionEnvironment,
+  useVideoConfig,
+} from 'remotion';
+import { sceneVideoFrameUrl, sceneVideoSourceFrameIndex, sceneVideoSourceSeconds } from '@music-video/shared';
 
 function seekVideo(video: HTMLVideoElement, sourceTime: number) {
   if (Math.abs(video.currentTime - sourceTime) <= 0.08) return;
@@ -78,23 +85,27 @@ function PingPongSceneVideoPreview({
   );
 }
 
-function PingPongSceneVideoRender({
-  src,
+function PingPongSceneVideoFrames({
+  videoFramePrefix,
+  videoFrameCount,
   clipDurationSeconds,
   sceneDurationSeconds,
-  fallbackImageUrl,
   style,
 }: {
-  src: string;
+  videoFramePrefix: string;
+  videoFrameCount: number;
   clipDurationSeconds: number;
   sceneDurationSeconds: number;
-  fallbackImageUrl: string;
   style?: React.CSSProperties;
 }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const sourceTime = sceneVideoSourceSeconds(frame / fps, clipDurationSeconds, sceneDurationSeconds);
-  const sourceFrame = Math.max(0, Math.round(sourceTime * fps));
+  const index = sceneVideoSourceFrameIndex(
+    frame / fps,
+    clipDurationSeconds,
+    sceneDurationSeconds,
+    videoFrameCount,
+  );
   const fillStyle: React.CSSProperties = {
     ...style,
     position: 'absolute',
@@ -104,18 +115,7 @@ function PingPongSceneVideoRender({
     objectFit: 'cover',
   };
 
-  return (
-    <AbsoluteFill>
-      <Img src={fallbackImageUrl} style={fillStyle} />
-      <OffthreadVideo
-        src={src}
-        muted
-        trimBefore={sourceFrame}
-        trimAfter={sourceFrame + 1}
-        style={{ ...fillStyle, zIndex: 1 }}
-      />
-    </AbsoluteFill>
-  );
+  return <Img src={sceneVideoFrameUrl(videoFramePrefix, index)} style={fillStyle} />;
 }
 
 export function PingPongSceneVideo({
@@ -124,6 +124,8 @@ export function PingPongSceneVideo({
   sceneDurationSeconds,
   fallbackImageUrl,
   playbackActive = false,
+  videoFramePrefix,
+  videoFrameCount,
   style,
 }: {
   src: string;
@@ -131,21 +133,40 @@ export function PingPongSceneVideo({
   sceneDurationSeconds: number;
   fallbackImageUrl: string;
   playbackActive?: boolean;
+  videoFramePrefix?: string;
+  videoFrameCount?: number;
   style?: React.CSSProperties;
 }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+  const { isRendering } = useRemotionEnvironment();
   const sourceTime = sceneVideoSourceSeconds(frame / fps, clipDurationSeconds, sceneDurationSeconds);
-  const isRendering = typeof window !== 'undefined' && window.remotion_videoEnabled;
+
+  if (isRendering && videoFramePrefix && (videoFrameCount ?? 0) > 1) {
+    return (
+      <PingPongSceneVideoFrames
+        videoFramePrefix={videoFramePrefix}
+        videoFrameCount={videoFrameCount!}
+        clipDurationSeconds={clipDurationSeconds}
+        sceneDurationSeconds={sceneDurationSeconds}
+        style={style}
+      />
+    );
+  }
 
   if (isRendering) {
     return (
-      <PingPongSceneVideoRender
+      <OffthreadVideo
         src={src}
-        clipDurationSeconds={clipDurationSeconds}
-        sceneDurationSeconds={sceneDurationSeconds}
-        fallbackImageUrl={fallbackImageUrl}
-        style={style}
+        muted
+        style={{
+          ...style,
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+        }}
       />
     );
   }
