@@ -24,8 +24,13 @@ export const EXPORT_PRESETS = {
   '4x5': { width: 480, height: 600, fps: 15 },
 } as const satisfies Record<VideoFormatId, { width: number; height: number; fps: number }>;
 
-export const EXPORT_CRF = 28;
+export const EXPORT_CRF = 30;
 export const EXPORT_AUDIO_BITRATE = '128k';
+/** Cap video bitrate so ~5 min exports stay under Supabase Storage's default 50 MB object limit. */
+export const EXPORT_MAX_VIDEO_BITRATE = '1200k';
+export const EXPORT_MAX_VIDEO_BUFSIZE = '2400k';
+/** Supabase global file size limit default; raise in Dashboard → Storage if needed. */
+export const EXPORT_UPLOAD_MAX_BYTES = 50 * 1024 * 1024;
 
 /** Base timeout before frame-scaled render budget kicks in. */
 export const RENDER_BASE_TIMEOUT_MS = 3 * 60 * 1000;

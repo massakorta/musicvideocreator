@@ -9,6 +9,7 @@ import {
   errorText,
   EXPORT_AUDIO_BITRATE,
   EXPORT_CRF,
+  EXPORT_UPLOAD_MAX_BYTES,
   estimateRenderTimeoutMs,
   getExportPreset,
   RENDER_STALL_TIMEOUT_MS,
@@ -25,7 +26,7 @@ import {
   isRenderBlockedByPipeline,
   setPipelineHeavy,
 } from './heavyWork.js';
-import { createRenderStallGuard, prefetchCompositionStills, startStillsServer } from './renderHelpers.js';
+import { compressExportForUpload, createRenderStallGuard, prefetchCompositionStills, startStillsServer } from './renderHelpers.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -308,19 +309,30 @@ async function renderJobInner(job: RenderJob): Promise<void> {
       }
       logMemory(`render ${job.id} encoded`);
       renderLog(job, project, 'muxing original audio');
-      const output = await muxOriginalAudio(project, workdir, silentOutput);
+      const muxed = await muxOriginalAudio(project, workdir, silentOutput);
       reportProgress(90, 'audio muxed');
+
+      const compressed = path.join(workdir, 'share.mp4');
+      renderLog(job, project, 'compressing for upload');
+      await compressExportForUpload(muxed, compressed);
+      const { stat } = await import('node:fs/promises');
+      const info = await stat(compressed);
+      const sizeMb = info.size / (1024 * 1024);
+      renderLog(job, project, 'compressed for upload', { sizeMb: `${sizeMb.toFixed(1)}MB` });
+      if (info.size > EXPORT_UPLOAD_MAX_BYTES) {
+        throw new Error(
+          `Export MP4 is ${sizeMb.toFixed(1)} MB after compression. Increase the file size limit under Supabase Dashboard → Storage, or shorten the film.`,
+        );
+      }
 
       current = await patchRenderJob(current, { status: 'uploading', progress: 92 });
       renderLog(job, project, 'uploading finished MP4');
-      const { stat } = await import('node:fs/promises');
-      const info = await stat(output);
       const asset = await storeGeneratedFileFromPath({
         projectId: project.id,
         type: 'final_video',
         source: 'upload',
         filename: 'music-video.mp4',
-        filePath: output,
+        filePath: compressed,
         mimeType: 'video/mp4',
         durationSeconds: project.durationSeconds,
       });

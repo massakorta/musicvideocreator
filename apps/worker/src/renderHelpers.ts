@@ -8,6 +8,12 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { projectToComposition, type CompositionProject } from '@music-video/video';
 import type { MusicVideoProject } from '@music-video/shared';
+import {
+  EXPORT_AUDIO_BITRATE,
+  EXPORT_CRF,
+  EXPORT_MAX_VIDEO_BITRATE,
+  EXPORT_MAX_VIDEO_BUFSIZE,
+} from '@music-video/shared';
 import { getRepositories } from '../../api/src/repositories/index.js';
 import { getObjectStorage } from '../../api/src/storage/index.js';
 
@@ -419,6 +425,36 @@ export async function prefetchCompositionStills(
   }
 
   return { composition: { ...base, scenes }, prefetched, total: base.scenes.length };
+}
+
+/** Shrink the rendered MP4 so it fits Supabase Storage's default 50 MB upload limit. */
+export async function compressExportForUpload(inputPath: string, outputPath: string): Promise<void> {
+  await execFileAsync(
+    'ffmpeg',
+    [
+      '-y',
+      '-i',
+      inputPath,
+      '-c:v',
+      'libx264',
+      '-preset',
+      'medium',
+      '-crf',
+      String(EXPORT_CRF),
+      '-maxrate',
+      EXPORT_MAX_VIDEO_BITRATE,
+      '-bufsize',
+      EXPORT_MAX_VIDEO_BUFSIZE,
+      '-c:a',
+      'aac',
+      '-b:a',
+      EXPORT_AUDIO_BITRATE,
+      '-movflags',
+      '+faststart',
+      outputPath,
+    ],
+    { timeout: 1000 * 60 * 15 },
+  );
 }
 
 export function createRenderStallGuard(options: {
