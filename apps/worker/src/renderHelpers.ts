@@ -13,6 +13,76 @@ import { getObjectStorage } from '../../api/src/storage/index.js';
 
 const execFileAsync = promisify(execFile);
 
+function pathToFileUrl(absPath: string): string {
+  return `file://${absPath}`;
+}
+
+function exportFrameCount(durationSeconds: number, exportFps: number): number {
+  return Math.max(1, Math.ceil(durationSeconds * exportFps));
+}
+
+function h264CfrOutputArgs(exportFps: number, frameCount: number): string[] {
+  return [
+    '-an',
+    '-r',
+    String(exportFps),
+    '-vsync',
+    'cfr',
+    '-frames:v',
+    String(frameCount),
+    '-c:v',
+    'libx264',
+    '-preset',
+    'ultrafast',
+    '-crf',
+    '28',
+    '-pix_fmt',
+    'yuv420p',
+    '-g',
+    String(exportFps),
+    '-keyint_min',
+    '1',
+    '-sc_threshold',
+    '0',
+    '-bf',
+    '0',
+    '-force_key_frames',
+    '0',
+    '-movflags',
+    '+faststart',
+  ];
+}
+
+async function assertVideoFrameExtractable(filePath: string, timeSeconds: number): Promise<void> {
+  await execFileAsync(
+    'ffmpeg',
+    ['-v', 'error', '-ss', String(timeSeconds), '-i', filePath, '-frames:v', '1', '-f', 'null', '-'],
+    { timeout: 30_000 },
+  );
+}
+
+async function transcodeToH264(inputPath: string, outputPath: string): Promise<void> {
+  await execFileAsync(
+    'ffmpeg',
+    [
+      '-y',
+      '-i',
+      inputPath,
+      '-an',
+      '-c:v',
+      'libx264',
+      '-preset',
+      'ultrafast',
+      '-crf',
+      '28',
+      '-pix_fmt',
+      'yuv420p',
+      outputPath,
+    ],
+    { timeout: 1000 * 60 * 5 },
+  );
+}
+
 function extensionFromUrl(url: string): string {
   try {
     const ext = path.extname(new URL(url).pathname);
@@ -168,10 +238,6 @@ function buildPingPongFilter(clipDurationSeconds: number, sceneDurationSeconds: 
   ].join(';');
 }
 
-function withExportFps(filter: string, fps: number): string {
-  return filter.replace('[out]', `[prefps];[prefps]fps=fps=${fps}[out]`);
-}
-
 /** Bake ping-pong timing into a CFR clip Remotion can seek reliably. */
 async function buildPingPongClip(
   inputPath: string,
@@ -180,36 +246,32 @@ async function buildPingPongClip(
   sceneDurationSeconds: number,
   exportFps: number,
 ): Promise<number> {
-  const filter = withExportFps(
-    buildPingPongFilter(clipDurationSeconds, sceneDurationSeconds),
-    exportFps,
-  );
-  await execFileAsync(
-    'ffmpeg',
-    [
-      '-y',
-      '-i',
-      inputPath,
-      '-filter_complex',
-      filter,
-      '-map',
-      '[out]',
-      '-an',
-      '-c:v',
-      'libx264',
-      '-preset',
-      'ultrafast',
-      '-crf',
-      '28',
-      '-pix_fmt',
-      'yuv420p',
-      '-movflags',
-      '+faststart',
-      outputPath,
-    ],
-    { timeout: 1000 * 60 * 5 },
-  );
-  return (await probeVideoDurationSeconds(outputPath)) ?? sceneDurationSeconds;
+  const decodedPath = `${inputPath}.decoded.mp4`;
+  await transcodeToH264(inputPath, decodedPath);
+  try {
+    const filter = buildPingPongFilter(clipDurationSeconds, sceneDurationSeconds);
+    const frameCount = exportFrameCount(sceneDurationSeconds, exportFps);
+    await execFileAsync(
+      'ffmpeg',
+      [
+        '-y',
+        '-i',
+        decodedPath,
+        '-filter_complex',
+        filter,
+        '-map',
+        '[out]',
+        ...h264CfrOutputArgs(exportFps, frameCount),
+        outputPath,
+      ],
+      { timeout: 1000 * 60 * 5 },
+    );
+    await assertVideoFrameExtractable(outputPath, 0);
+    await assertVideoFrameExtractable(outputPath, 1 / exportFps);
+    return (await probeVideoDurationSeconds(outputPath)) ?? sceneDurationSeconds;
+  } finally {
+    await unlink(decodedPath).catch(() => undefined);
+  }
 }
 
 /** Re-encode to constant frame rate so Remotion frame extraction stays in sync. */
@@ -217,34 +279,25 @@ async function normalizeVideoClip(
   inputPath: string,
   outputPath: string,
   exportFps: number,
+  durationSeconds: number,
 ): Promise<number> {
-  await execFileAsync(
-    'ffmpeg',
-    [
-      '-y',
-      '-i',
-      inputPath,
-      '-an',
-      '-vf',
-      `fps=fps=${exportFps}`,
-      '-c:v',
-      'libx264',
-      '-preset',
-      'ultrafast',
-      '-crf',
-      '28',
-      '-pix_fmt',
-      'yuv420p',
-      '-movflags',
-      '+faststart',
-      outputPath,
-    ],
-    { timeout: 1000 * 60 * 5 },
-  );
-  return (await probeVideoDurationSeconds(outputPath)) ?? 0;
+  const decodedPath = `${inputPath}.decoded.mp4`;
+  await transcodeToH264(inputPath, decodedPath);
+  try {
+    const frameCount = exportFrameCount(durationSeconds, exportFps);
+    await execFileAsync(
+      'ffmpeg',
+      ['-y', '-i', decodedPath, ...h264CfrOutputArgs(exportFps, frameCount), outputPath],
+      { timeout: 1000 * 60 * 5 },
+    );
+    await assertVideoFrameExtractable(outputPath, 0);
+    return (await probeVideoDurationSeconds(outputPath)) ?? durationSeconds;
+  } finally {
+    await unlink(decodedPath).catch(() => undefined);
+  }
 }
 
-/** Serves prefetched stills and clips over HTTP — headless Chromium blocks file:// URLs. */
+/** Serves prefetched stills over HTTP for local preview tooling. Export uses file:// paths. */
 export async function startStillsServer(
   stillsDir: string,
 ): Promise<{ baseUrl: string; close: () => Promise<void> }> {
@@ -300,7 +353,6 @@ async function prefetchSceneAssets(
   project: MusicVideoProject,
   scene: CompositionProject['scenes'][number],
   stillsDir: string,
-  assetsBaseUrl: string,
   exportFps: number,
 ): Promise<{ scene: CompositionProject['scenes'][number]; prefetched: number }> {
   let next = scene;
@@ -317,7 +369,7 @@ async function prefetchSceneAssets(
       await rename(imageDest, dest);
     }
     prefetched += 1;
-    next = { ...next, imageUrl: `${assetsBaseUrl}/${filename}` };
+    next = { ...next, imageUrl: pathToFileUrl(dest) };
   }
 
   if (scene.videoUrl) {
@@ -345,19 +397,26 @@ async function prefetchSceneAssets(
         prefetched += 1;
         next = {
           ...next,
-          videoUrl: `${assetsBaseUrl}/${extendedFilename}`,
+          videoUrl: pathToFileUrl(extendedDest),
           videoDurationSeconds: bakedDuration,
+          videoBaked: true,
         };
       } else {
         const normalizedFilename = `${scene.id}-clip-normalized.mp4`;
         const normalizedDest = path.join(stillsDir, normalizedFilename);
-        const bakedDuration = await normalizeVideoClip(rawDest, normalizedDest, exportFps);
+        const bakedDuration = await normalizeVideoClip(
+          rawDest,
+          normalizedDest,
+          exportFps,
+          clipDurationSeconds,
+        );
         await unlink(rawDest).catch(() => undefined);
         prefetched += 1;
         next = {
           ...next,
-          videoUrl: `${assetsBaseUrl}/${normalizedFilename}`,
+          videoUrl: pathToFileUrl(normalizedDest),
           videoDurationSeconds: bakedDuration > 0 ? bakedDuration : clipDurationSeconds,
+          videoBaked: true,
         };
       }
     }
@@ -390,7 +449,7 @@ export async function prefetchCompositionStills(
       sceneId: scene.id,
       hasVideo: Boolean(scene.videoUrl),
     });
-    const result = await prefetchSceneAssets(project, scene, stillsDir, assetsBaseUrl, exportFps);
+    const result = await prefetchSceneAssets(project, scene, stillsDir, exportFps);
     prefetched += result.prefetched;
     scenes.push(result.scene);
   }
