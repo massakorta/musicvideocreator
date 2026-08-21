@@ -13,10 +13,6 @@ import { getObjectStorage } from '../../api/src/storage/index.js';
 
 const execFileAsync = promisify(execFile);
 
-function pathToFileUrl(absPath: string): string {
-  return `file://${absPath}`;
-}
-
 function exportFrameCount(durationSeconds: number, exportFps: number): number {
   return Math.max(1, Math.ceil(durationSeconds * exportFps));
 }
@@ -297,7 +293,7 @@ async function normalizeVideoClip(
   }
 }
 
-/** Serves prefetched stills over HTTP for local preview tooling. Export uses file:// paths. */
+/** Serves prefetched stills and clips over HTTP — Remotion only accepts http(s) asset URLs. */
 export async function startStillsServer(
   stillsDir: string,
 ): Promise<{ baseUrl: string; close: () => Promise<void> }> {
@@ -319,8 +315,37 @@ export async function startStillsServer(
       try {
         const info = await stat(filePath);
         if (!info.isFile()) throw new Error('missing');
-        res.setHeader('Content-Type', mimeForExtension(path.extname(filePath)));
+        const contentType = mimeForExtension(path.extname(filePath));
+        res.setHeader('Content-Type', contentType);
         res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('Accept-Ranges', 'bytes');
+
+        const range = req.headers.range;
+        if (range) {
+          const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+          if (!match) {
+            res.statusCode = 416;
+            res.end();
+            return;
+          }
+          const size = info.size;
+          const start = match[1] ? Number.parseInt(match[1], 10) : 0;
+          const end = match[2] ? Number.parseInt(match[2], 10) : size - 1;
+          if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start >= size) {
+            res.statusCode = 416;
+            res.setHeader('Content-Range', `bytes */${size}`);
+            res.end();
+            return;
+          }
+          const chunkSize = end - start + 1;
+          res.statusCode = 206;
+          res.setHeader('Content-Range', `bytes ${start}-${end}/${size}`);
+          res.setHeader('Content-Length', chunkSize);
+          createReadStream(filePath, { start, end }).pipe(res);
+          return;
+        }
+
+        res.setHeader('Content-Length', info.size);
         createReadStream(filePath).pipe(res);
       } catch {
         res.statusCode = 404;
@@ -353,6 +378,7 @@ async function prefetchSceneAssets(
   project: MusicVideoProject,
   scene: CompositionProject['scenes'][number],
   stillsDir: string,
+  assetsBaseUrl: string,
   exportFps: number,
 ): Promise<{ scene: CompositionProject['scenes'][number]; prefetched: number }> {
   let next = scene;
@@ -369,7 +395,7 @@ async function prefetchSceneAssets(
       await rename(imageDest, dest);
     }
     prefetched += 1;
-    next = { ...next, imageUrl: pathToFileUrl(dest) };
+    next = { ...next, imageUrl: `${assetsBaseUrl}/${filename}` };
   }
 
   if (scene.videoUrl) {
@@ -397,7 +423,7 @@ async function prefetchSceneAssets(
         prefetched += 1;
         next = {
           ...next,
-          videoUrl: pathToFileUrl(extendedDest),
+          videoUrl: `${assetsBaseUrl}/${extendedFilename}`,
           videoDurationSeconds: bakedDuration,
           videoBaked: true,
         };
@@ -414,7 +440,7 @@ async function prefetchSceneAssets(
         prefetched += 1;
         next = {
           ...next,
-          videoUrl: pathToFileUrl(normalizedDest),
+          videoUrl: `${assetsBaseUrl}/${normalizedFilename}`,
           videoDurationSeconds: bakedDuration > 0 ? bakedDuration : clipDurationSeconds,
           videoBaked: true,
         };
@@ -449,7 +475,7 @@ export async function prefetchCompositionStills(
       sceneId: scene.id,
       hasVideo: Boolean(scene.videoUrl),
     });
-    const result = await prefetchSceneAssets(project, scene, stillsDir, exportFps);
+    const result = await prefetchSceneAssets(project, scene, stillsDir, assetsBaseUrl, exportFps);
     prefetched += result.prefetched;
     scenes.push(result.scene);
   }
