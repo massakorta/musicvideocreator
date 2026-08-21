@@ -32,7 +32,8 @@ const execFileAsync = promisify(execFile);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const videoEntry = path.resolve(here, '../../../packages/video/src/entry.ts');
 const IDLE_HEARTBEAT_MS = 60_000;
-const OFFTHREAD_CACHE_BYTES = 8 * 1024 * 1024;
+const OFFTHREAD_CACHE_BYTES = 2 * 1024 * 1024;
+const REMOTION_MEDIA_CACHE_BYTES = 2 * 1024 * 1024;
 
 let cachedServeUrl: string | undefined;
 let lastRenderBlockedLogAt = 0;
@@ -277,6 +278,7 @@ async function renderJobInner(job: RenderJob): Promise<void> {
           },
           disallowParallelEncoding: true,
           offthreadVideoCacheSizeInBytes: OFFTHREAD_CACHE_BYTES,
+          mediaCacheSizeInBytes: REMOTION_MEDIA_CACHE_BYTES,
           cancelSignal,
           onProgress: ({ progress }) => {
             stallGuard.touch();

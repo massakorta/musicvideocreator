@@ -1,7 +1,9 @@
-import { createReadStream } from 'node:fs';
-import { mkdir, stat, writeFile } from 'node:fs/promises';
+import { createReadStream, createWriteStream } from 'node:fs';
+import { mkdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { projectToComposition, type CompositionProject } from '@music-video/video';
@@ -49,104 +51,91 @@ function mimeForExtension(ext: string): string {
   }
 }
 
-async function loadSceneImageBody(
+async function downloadUrlToFile(url: string, dest: string): Promise<boolean> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok || !response.body) return false;
+    await pipeline(Readable.fromWeb(response.body as unknown as import('stream/web').ReadableStream), createWriteStream(dest));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function downloadSceneImage(
   project: MusicVideoProject,
   sceneId: string,
   imageUrl: string,
-): Promise<{ body: Buffer; mimeType: string } | null> {
+  dest: string,
+): Promise<{ mimeType: string } | null> {
   const projectScene = project.scenes.find((s) => s.id === sceneId);
   const assetId = projectScene?.currentAssetId ?? projectScene?.image?.id;
   if (assetId) {
     const asset = await getRepositories().assets.get(assetId);
+    if (asset?.publicUrl && (await downloadUrlToFile(asset.publicUrl, dest))) {
+      return { mimeType: asset.mimeType || 'image/jpeg' };
+    }
     if (asset) {
       const file = await getObjectStorage().get(asset.storagePath);
       if (file) {
-        return { body: file.body, mimeType: asset.mimeType || file.mimeType };
+        await writeFile(dest, file.body);
+        return { mimeType: asset.mimeType || file.mimeType };
       }
     }
   }
   if (!imageUrl) return null;
   try {
     const response = await fetch(imageUrl);
-    if (!response.ok) return null;
-    const body = Buffer.from(await response.arrayBuffer());
+    if (!response.ok || !response.body) return null;
+    await pipeline(Readable.fromWeb(response.body as unknown as import('stream/web').ReadableStream), createWriteStream(dest));
     const mimeType = response.headers.get('content-type')?.split(';')[0]?.trim() || 'image/jpeg';
-    return { body, mimeType };
+    return { mimeType };
   } catch {
     return null;
   }
 }
 
-async function loadSceneVideoBody(
+async function downloadSceneVideo(
   project: MusicVideoProject,
   sceneId: string,
   videoUrl: string,
-): Promise<Buffer | null> {
+  dest: string,
+): Promise<boolean> {
   const projectScene = project.scenes.find((s) => s.id === sceneId);
   const assetId = projectScene?.currentVideoAssetId ?? projectScene?.video?.id;
   if (assetId) {
     const asset = await getRepositories().assets.get(assetId);
+    if (asset?.publicUrl && (await downloadUrlToFile(asset.publicUrl, dest))) {
+      return true;
+    }
     if (asset) {
       const file = await getObjectStorage().get(asset.storagePath);
-      if (file) return file.body;
+      if (file) {
+        await writeFile(dest, file.body);
+        return true;
+      }
     }
   }
-  if (!videoUrl) return null;
-  try {
-    const response = await fetch(videoUrl);
-    if (!response.ok) return null;
-    return Buffer.from(await response.arrayBuffer());
-  } catch {
-    return null;
-  }
+  if (!videoUrl) return false;
+  return downloadUrlToFile(videoUrl, dest);
 }
 
-function buildPingPongFilter(clipDurationSeconds: number, sceneDurationSeconds: number): string {
-  const clip = Math.max(0.1, clipDurationSeconds);
-  const scene = Math.max(0.1, sceneDurationSeconds);
-
-  if (scene <= clip + 0.01) {
-    return `[0:v]trim=end=${scene},setpts=PTS-STARTPTS[out]`;
-  }
-
-  const reverseLen = Math.min(clip, scene - clip);
-  const cycleLen = clip + reverseLen;
-  if (scene <= cycleLen + 0.01) {
-    return [
-      `[0:v]trim=end=${clip},setpts=PTS-STARTPTS[fwd]`,
-      `[0:v]trim=end=${clip},reverse,trim=end=${reverseLen},setpts=PTS-STARTPTS[rev]`,
-      `[fwd][rev]concat=n=2:v=1:a=0,setpts=PTS-STARTPTS[out]`,
-    ].join(';');
-  }
-
-  const extraForward = scene - cycleLen;
-  return [
-    `[0:v]trim=end=${clip},setpts=PTS-STARTPTS[fwd]`,
-    `[0:v]trim=end=${clip},reverse,trim=end=${reverseLen},setpts=PTS-STARTPTS[rev]`,
-    `[0:v]trim=end=${clip},setpts=PTS-STARTPTS[fwd2]`,
-    `[fwd][rev]concat=n=2:v=1:a=0[cycle]`,
-    `[fwd2]trim=end=${extraForward},setpts=PTS-STARTPTS[extra]`,
-    `[cycle][extra]concat=n=2:v=1:a=0,setpts=PTS-STARTPTS[out]`,
-  ].join(';');
-}
-
-/** Bake ping-pong timing into a single forward clip so Remotion can render it normally. */
-export async function buildPingPongClip(
+/** Loop a short clip forward to fill the scene slot — much lighter on RAM than ping-pong filter graphs. */
+async function buildLoopedClip(
   inputPath: string,
   outputPath: string,
-  clipDurationSeconds: number,
   sceneDurationSeconds: number,
 ): Promise<void> {
   await execFileAsync(
     'ffmpeg',
     [
       '-y',
+      '-stream_loop',
+      '-1',
       '-i',
       inputPath,
-      '-filter_complex',
-      buildPingPongFilter(clipDurationSeconds, sceneDurationSeconds),
-      '-map',
-      '[out]',
+      '-t',
+      String(Math.max(0.1, sceneDurationSeconds)),
       '-an',
       '-c:v',
       'libx264',
@@ -223,33 +212,36 @@ async function prefetchSceneAssets(
   let next = scene;
   let prefetched = 0;
 
-  const image = await loadSceneImageBody(project, scene.id, scene.imageUrl);
+  const extGuess = extensionFromUrl(scene.imageUrl);
+  const imageDest = path.join(stillsDir, `${scene.id}${extGuess}`);
+  const image = await downloadSceneImage(project, scene.id, scene.imageUrl, imageDest);
   if (image) {
-    const ext = extensionFromMime(image.mimeType) || extensionFromUrl(scene.imageUrl);
+    const ext = extensionFromMime(image.mimeType) || extGuess;
     const filename = `${scene.id}${ext}`;
     const dest = path.join(stillsDir, filename);
-    await writeFile(dest, image.body);
+    if (dest !== imageDest) {
+      await rename(imageDest, dest);
+    }
     prefetched += 1;
     next = { ...next, imageUrl: `${assetsBaseUrl}/${filename}` };
   }
 
   if (scene.videoUrl) {
-    const videoBody = await loadSceneVideoBody(project, scene.id, scene.videoUrl);
-    if (videoBody) {
+    const rawFilename = `${scene.id}-clip.mp4`;
+    const rawDest = path.join(stillsDir, rawFilename);
+    if (await downloadSceneVideo(project, scene.id, scene.videoUrl, rawDest)) {
       const projectScene = project.scenes.find((s) => s.id === scene.id);
       const clipDurationSeconds =
         scene.videoDurationSeconds ??
         projectScene?.video?.durationSeconds ??
         Math.max(0.1, scene.endTime - scene.startTime);
       const sceneDurationSeconds = Math.max(0.1, scene.endTime - scene.startTime);
-      const rawFilename = `${scene.id}-clip.mp4`;
-      const rawDest = path.join(stillsDir, rawFilename);
-      await writeFile(rawDest, videoBody);
 
       if (clipDurationSeconds + 0.05 < sceneDurationSeconds) {
         const extendedFilename = `${scene.id}-clip-extended.mp4`;
         const extendedDest = path.join(stillsDir, extendedFilename);
-        await buildPingPongClip(rawDest, extendedDest, clipDurationSeconds, sceneDurationSeconds);
+        await buildLoopedClip(rawDest, extendedDest, sceneDurationSeconds);
+        await unlink(rawDest).catch(() => undefined);
         prefetched += 1;
         next = {
           ...next,

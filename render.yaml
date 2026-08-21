@@ -46,15 +46,15 @@ projects:
           - type: worker
             name: music-video-worker
             runtime: node
-            plan: standard
+            plan: pro
             region: frankfurt
-            buildCommand: npm install --include=dev && npm run build -w @music-video/shared && npm run build -w @music-video/ai && npm run build -w @music-video/video && npm run bundle -w @music-video/video && npm run build -w @music-video/worker
+            buildCommand: NODE_OPTIONS=--max-old-space-size=1536 npm install --include=dev && npm run build -w @music-video/shared && npm run build -w @music-video/ai && npm run build -w @music-video/video && NODE_OPTIONS=--max-old-space-size=1536 npm run bundle -w @music-video/video && npm run build -w @music-video/worker
             startCommand: npm run start -w @music-video/worker
             envVars:
               - key: NODE_ENV
                 value: production
               - key: NODE_OPTIONS
-                value: --max-old-space-size=768
+                value: --max-old-space-size=1024
               - key: SESSION_SECRET
                 fromService:
                   name: music-video-api
