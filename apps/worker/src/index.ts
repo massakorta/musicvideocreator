@@ -207,6 +207,7 @@ async function renderJobInner(job: RenderJob): Promise<void> {
         stillsDir,
         stillsServer.baseUrl,
         {
+          exportFps: exportPreset.fps,
           onScene: ({ index, total: sceneTotal, sceneId, hasVideo }) => {
             if (hasVideo || (index + 1) % 10 === 0 || index === 0) {
               renderLog(job, project, 'prefetch scene', {

@@ -120,22 +120,80 @@ async function downloadSceneVideo(
   return downloadUrlToFile(videoUrl, dest);
 }
 
-/** Loop a short clip forward to fill the scene slot — much lighter on RAM than ping-pong filter graphs. */
-async function buildLoopedClip(
+async function probeVideoDurationSeconds(filePath: string): Promise<number | null> {
+  try {
+    const { stdout } = await execFileAsync('ffprobe', [
+      '-v',
+      'error',
+      '-show_entries',
+      'format=duration',
+      '-of',
+      'default=noprint_wrappers=1:nokey=1',
+      filePath,
+    ]);
+    const value = Number.parseFloat(stdout.trim());
+    return Number.isFinite(value) && value > 0 ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function buildPingPongFilter(clipDurationSeconds: number, sceneDurationSeconds: number): string {
+  const clip = Math.max(0.1, clipDurationSeconds);
+  const scene = Math.max(0.1, sceneDurationSeconds);
+
+  if (scene <= clip + 0.01) {
+    return `[0:v]trim=end=${scene},setpts=PTS-STARTPTS[out]`;
+  }
+
+  const reverseLen = Math.min(clip, scene - clip);
+  const cycleLen = clip + reverseLen;
+
+  if (scene <= cycleLen + 0.01) {
+    return [
+      `[0:v]trim=end=${clip},setpts=PTS-STARTPTS[fwd]`,
+      `[0:v]trim=end=${clip},reverse,trim=end=${reverseLen},setpts=PTS-STARTPTS[rev]`,
+      `[fwd][rev]concat=n=2:v=1:a=0,setpts=PTS-STARTPTS[out]`,
+    ].join(';');
+  }
+
+  const extraForward = scene - cycleLen;
+  return [
+    `[0:v]trim=end=${clip},setpts=PTS-STARTPTS[fwd]`,
+    `[0:v]trim=end=${clip},reverse,trim=end=${reverseLen},setpts=PTS-STARTPTS[rev]`,
+    `[0:v]trim=end=${clip},setpts=PTS-STARTPTS[fwd2]`,
+    `[fwd][rev]concat=n=2:v=1:a=0[cycle]`,
+    `[fwd2]trim=end=${extraForward},setpts=PTS-STARTPTS[extra]`,
+    `[cycle][extra]concat=n=2:v=1:a=0,setpts=PTS-STARTPTS[out]`,
+  ].join(';');
+}
+
+function withExportFps(filter: string, fps: number): string {
+  return filter.replace('[out]', `[prefps];[prefps]fps=fps=${fps}[out]`);
+}
+
+/** Bake ping-pong timing into a CFR clip Remotion can seek reliably. */
+async function buildPingPongClip(
   inputPath: string,
   outputPath: string,
+  clipDurationSeconds: number,
   sceneDurationSeconds: number,
-): Promise<void> {
+  exportFps: number,
+): Promise<number> {
+  const filter = withExportFps(
+    buildPingPongFilter(clipDurationSeconds, sceneDurationSeconds),
+    exportFps,
+  );
   await execFileAsync(
     'ffmpeg',
     [
       '-y',
-      '-stream_loop',
-      '-1',
       '-i',
       inputPath,
-      '-t',
-      String(Math.max(0.1, sceneDurationSeconds)),
+      '-filter_complex',
+      filter,
+      '-map',
+      '[out]',
       '-an',
       '-c:v',
       'libx264',
@@ -143,12 +201,47 @@ async function buildLoopedClip(
       'ultrafast',
       '-crf',
       '28',
+      '-pix_fmt',
+      'yuv420p',
       '-movflags',
       '+faststart',
       outputPath,
     ],
     { timeout: 1000 * 60 * 5 },
   );
+  return (await probeVideoDurationSeconds(outputPath)) ?? sceneDurationSeconds;
+}
+
+/** Re-encode to constant frame rate so Remotion frame extraction stays in sync. */
+async function normalizeVideoClip(
+  inputPath: string,
+  outputPath: string,
+  exportFps: number,
+): Promise<number> {
+  await execFileAsync(
+    'ffmpeg',
+    [
+      '-y',
+      '-i',
+      inputPath,
+      '-an',
+      '-vf',
+      `fps=fps=${exportFps}`,
+      '-c:v',
+      'libx264',
+      '-preset',
+      'ultrafast',
+      '-crf',
+      '28',
+      '-pix_fmt',
+      'yuv420p',
+      '-movflags',
+      '+faststart',
+      outputPath,
+    ],
+    { timeout: 1000 * 60 * 5 },
+  );
+  return (await probeVideoDurationSeconds(outputPath)) ?? 0;
 }
 
 /** Serves prefetched stills and clips over HTTP — headless Chromium blocks file:// URLs. */
@@ -208,6 +301,7 @@ async function prefetchSceneAssets(
   scene: CompositionProject['scenes'][number],
   stillsDir: string,
   assetsBaseUrl: string,
+  exportFps: number,
 ): Promise<{ scene: CompositionProject['scenes'][number]; prefetched: number }> {
   let next = scene;
   let prefetched = 0;
@@ -240,20 +334,30 @@ async function prefetchSceneAssets(
       if (clipDurationSeconds + 0.05 < sceneDurationSeconds) {
         const extendedFilename = `${scene.id}-clip-extended.mp4`;
         const extendedDest = path.join(stillsDir, extendedFilename);
-        await buildLoopedClip(rawDest, extendedDest, sceneDurationSeconds);
+        const bakedDuration = await buildPingPongClip(
+          rawDest,
+          extendedDest,
+          clipDurationSeconds,
+          sceneDurationSeconds,
+          exportFps,
+        );
         await unlink(rawDest).catch(() => undefined);
         prefetched += 1;
         next = {
           ...next,
           videoUrl: `${assetsBaseUrl}/${extendedFilename}`,
-          videoDurationSeconds: sceneDurationSeconds,
+          videoDurationSeconds: bakedDuration,
         };
       } else {
+        const normalizedFilename = `${scene.id}-clip-normalized.mp4`;
+        const normalizedDest = path.join(stillsDir, normalizedFilename);
+        const bakedDuration = await normalizeVideoClip(rawDest, normalizedDest, exportFps);
+        await unlink(rawDest).catch(() => undefined);
         prefetched += 1;
         next = {
           ...next,
-          videoUrl: `${assetsBaseUrl}/${rawFilename}`,
-          videoDurationSeconds: clipDurationSeconds,
+          videoUrl: `${assetsBaseUrl}/${normalizedFilename}`,
+          videoDurationSeconds: bakedDuration > 0 ? bakedDuration : clipDurationSeconds,
         };
       }
     }
@@ -268,11 +372,13 @@ export async function prefetchCompositionStills(
   stillsDir: string,
   assetsBaseUrl: string,
   options?: {
+    exportFps?: number;
     onScene?: (info: { index: number; total: number; sceneId: string; hasVideo: boolean }) => void;
   },
 ): Promise<{ composition: CompositionProject; prefetched: number; total: number }> {
   await mkdir(stillsDir, { recursive: true });
   const base = projectToComposition(project);
+  const exportFps = options?.exportFps ?? 15;
   let prefetched = 0;
   const scenes: CompositionProject['scenes'] = [];
 
@@ -284,7 +390,7 @@ export async function prefetchCompositionStills(
       sceneId: scene.id,
       hasVideo: Boolean(scene.videoUrl),
     });
-    const result = await prefetchSceneAssets(project, scene, stillsDir, assetsBaseUrl);
+    const result = await prefetchSceneAssets(project, scene, stillsDir, assetsBaseUrl, exportFps);
     prefetched += result.prefetched;
     scenes.push(result.scene);
   }
