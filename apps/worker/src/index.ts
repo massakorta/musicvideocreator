@@ -135,12 +135,6 @@ async function claimRender(): Promise<RenderJob | null> {
 }
 
 async function patchRenderJob(job: RenderJob, patch: Partial<RenderJob>): Promise<RenderJob> {
-  const next = { ...job, ...patch };
-  await getRepositories().renderJobs.save(next);
-  return next;
-}
-
-async function patchRenderJob(job: RenderJob, patch: Partial<RenderJob>): Promise<RenderJob> {
   const touched = patch.progress !== undefined && patch.progress !== job.progress;
   const next = {
     ...job,
