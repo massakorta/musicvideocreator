@@ -319,7 +319,7 @@ export function createSupabaseRepositories(): Repositories {
         return data ? renderJobFromRow(data as RenderJobRow) : null;
       },
       async save(job) {
-        const { error } = await client.from('video_render_jobs').upsert({
+        const row: Record<string, unknown> = {
           id: job.id,
           project_id: job.projectId,
           status: job.status,
@@ -332,8 +332,11 @@ export function createSupabaseRepositories(): Repositories {
           error: job.error ?? null,
           claimed_by: job.claimedBy ?? null,
           file_size_bytes: job.fileSizeBytes ?? null,
-          progress_updated_at: job.progressUpdatedAt ?? null,
-        });
+        };
+        if (job.progressUpdatedAt) {
+          row.progress_updated_at = job.progressUpdatedAt;
+        }
+        const { error } = await client.from('video_render_jobs').upsert(row);
         if (error) throw error;
         return job;
       },
@@ -432,7 +435,6 @@ async function recoverOrphanedRenderJobs(
       claimed_by: null,
       started_at: null,
       progress: 0,
-      progress_updated_at: null,
       error: null,
     })
     .in('status', ['preparing', 'rendering', 'uploading']);

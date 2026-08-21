@@ -146,6 +146,12 @@ async function patchRenderJob(job: RenderJob, patch: Partial<RenderJob>): Promis
   return next;
 }
 
+function touchRenderJob(job: RenderJob, patch: Partial<RenderJob>): void {
+  void patchRenderJob(job, patch).catch((error) => {
+    console.error('[render] failed to persist job update', errorText(error));
+  });
+}
+
 async function requeueActiveRenderJob(reason: string): Promise<void> {
   if (!activeRenderJobId) return;
   const job = await getRepositories().renderJobs.get(activeRenderJobId);
@@ -211,7 +217,7 @@ async function renderJobInner(job: RenderJob): Promise<void> {
               logMemory(`render ${job.id} prefetch ${index + 1}/${sceneTotal}`);
             }
             const progress = 2 + Math.round(((index + 1) / sceneTotal) * 5);
-            void patchRenderJob(current, { progress });
+            void touchRenderJob(current, { progress });
           },
         },
       );
@@ -224,7 +230,7 @@ async function renderJobInner(job: RenderJob): Promise<void> {
       let lastLoggedProgress = -1;
       const reportProgress = (progress: number, stage: string) => {
         current = { ...current, progress };
-        void patchRenderJob(current, { progress });
+        touchRenderJob(current, { progress });
         const bucket = Math.floor(progress / 10) * 10;
         if (bucket > lastLoggedProgress) {
           lastLoggedProgress = bucket;
@@ -464,13 +470,20 @@ function start(): void {
   };
   process.once('SIGTERM', () => shutdown('SIGTERM'));
   process.once('SIGINT', () => shutdown('SIGINT'));
-
-  void recoverInterruptedJobs().finally(() => {
-    Promise.all([pipelineLoop(), renderLoop()]).catch((error) => {
-      console.error(error);
-      process.exit(1);
-    });
+  process.on('unhandledRejection', (reason) => {
+    console.error('[worker] unhandled rejection', errorText(reason));
   });
+
+  void recoverInterruptedJobs()
+    .catch((error) => {
+      console.error('[worker] failed to recover interrupted jobs', errorText(error));
+    })
+    .finally(() => {
+      Promise.all([pipelineLoop(), renderLoop()]).catch((error) => {
+        console.error('[worker] fatal loop error', errorText(error));
+        process.exit(1);
+      });
+    });
 }
 
 async function muxOriginalAudio(
