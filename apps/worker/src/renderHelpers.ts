@@ -35,18 +35,50 @@ function h264CfrOutputArgs(exportFps: number, frameCount: number): string[] {
     '-pix_fmt',
     'yuv420p',
     '-g',
-    String(exportFps),
+    '1',
     '-keyint_min',
     '1',
     '-sc_threshold',
     '0',
     '-bf',
     '0',
-    '-force_key_frames',
-    '0',
     '-movflags',
     '+faststart',
   ];
+}
+
+async function probeVideoFrameCount(filePath: string): Promise<number | null> {
+  try {
+    const { stdout } = await execFileAsync('ffprobe', [
+      '-v',
+      'error',
+      '-select_streams',
+      'v:0',
+      '-count_frames',
+      '-show_entries',
+      'stream=nb_read_frames',
+      '-of',
+      'default=noprint_wrappers=1:nokey=1',
+      filePath,
+    ]);
+    const value = Number.parseInt(stdout.trim(), 10);
+    return Number.isFinite(value) && value > 0 ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+async function assertVideoHasFrames(
+  filePath: string,
+  expectedFrames: number,
+  exportFps: number,
+): Promise<void> {
+  const frames = await probeVideoFrameCount(filePath);
+  if (!frames || frames < Math.max(1, expectedFrames - 1)) {
+    throw new Error(`Clip has ${frames ?? 0} frames, expected about ${expectedFrames}.`);
+  }
+  await assertVideoFrameExtractable(filePath, 0);
+  await assertVideoFrameExtractable(filePath, 1 / exportFps);
 }
 
 async function assertVideoFrameExtractable(filePath: string, timeSeconds: number): Promise<void> {
@@ -204,73 +236,7 @@ async function probeVideoDurationSeconds(filePath: string): Promise<number | nul
   }
 }
 
-function buildPingPongFilter(clipDurationSeconds: number, sceneDurationSeconds: number): string {
-  const clip = Math.max(0.1, clipDurationSeconds);
-  const scene = Math.max(0.1, sceneDurationSeconds);
-
-  if (scene <= clip + 0.01) {
-    return `[0:v]trim=end=${scene},setpts=PTS-STARTPTS[out]`;
-  }
-
-  const reverseLen = Math.min(clip, scene - clip);
-  const cycleLen = clip + reverseLen;
-
-  if (scene <= cycleLen + 0.01) {
-    return [
-      `[0:v]trim=end=${clip},setpts=PTS-STARTPTS[fwd]`,
-      `[0:v]trim=end=${clip},reverse,trim=end=${reverseLen},setpts=PTS-STARTPTS[rev]`,
-      `[fwd][rev]concat=n=2:v=1:a=0,setpts=PTS-STARTPTS[out]`,
-    ].join(';');
-  }
-
-  const extraForward = scene - cycleLen;
-  return [
-    `[0:v]trim=end=${clip},setpts=PTS-STARTPTS[fwd]`,
-    `[0:v]trim=end=${clip},reverse,trim=end=${reverseLen},setpts=PTS-STARTPTS[rev]`,
-    `[0:v]trim=end=${clip},setpts=PTS-STARTPTS[fwd2]`,
-    `[fwd][rev]concat=n=2:v=1:a=0[cycle]`,
-    `[fwd2]trim=end=${extraForward},setpts=PTS-STARTPTS[extra]`,
-    `[cycle][extra]concat=n=2:v=1:a=0,setpts=PTS-STARTPTS[out]`,
-  ].join(';');
-}
-
-/** Bake ping-pong timing into a CFR clip Remotion can seek reliably. */
-async function buildPingPongClip(
-  inputPath: string,
-  outputPath: string,
-  clipDurationSeconds: number,
-  sceneDurationSeconds: number,
-  exportFps: number,
-): Promise<number> {
-  const decodedPath = `${inputPath}.decoded.mp4`;
-  await transcodeToH264(inputPath, decodedPath);
-  try {
-    const filter = buildPingPongFilter(clipDurationSeconds, sceneDurationSeconds);
-    const frameCount = exportFrameCount(sceneDurationSeconds, exportFps);
-    await execFileAsync(
-      'ffmpeg',
-      [
-        '-y',
-        '-i',
-        decodedPath,
-        '-filter_complex',
-        filter,
-        '-map',
-        '[out]',
-        ...h264CfrOutputArgs(exportFps, frameCount),
-        outputPath,
-      ],
-      { timeout: 1000 * 60 * 5 },
-    );
-    await assertVideoFrameExtractable(outputPath, 0);
-    await assertVideoFrameExtractable(outputPath, 1 / exportFps);
-    return (await probeVideoDurationSeconds(outputPath)) ?? sceneDurationSeconds;
-  } finally {
-    await unlink(decodedPath).catch(() => undefined);
-  }
-}
-
-/** Re-encode to constant frame rate so Remotion frame extraction stays in sync. */
+/** Re-encode source clips to all-keyframe CFR H.264 for Remotion frame extraction. */
 async function normalizeVideoClip(
   inputPath: string,
   outputPath: string,
@@ -286,7 +252,7 @@ async function normalizeVideoClip(
       ['-y', '-i', decodedPath, ...h264CfrOutputArgs(exportFps, frameCount), outputPath],
       { timeout: 1000 * 60 * 5 },
     );
-    await assertVideoFrameExtractable(outputPath, 0);
+    await assertVideoHasFrames(outputPath, frameCount, exportFps);
     return (await probeVideoDurationSeconds(outputPath)) ?? durationSeconds;
   } finally {
     await unlink(decodedPath).catch(() => undefined);
@@ -407,44 +373,16 @@ async function prefetchSceneAssets(
         scene.videoDurationSeconds ??
         projectScene?.video?.durationSeconds ??
         Math.max(0.1, scene.endTime - scene.startTime);
-      const sceneDurationSeconds = Math.max(0.1, scene.endTime - scene.startTime);
-
-      if (clipDurationSeconds + 0.05 < sceneDurationSeconds) {
-        const extendedFilename = `${scene.id}-clip-extended.mp4`;
-        const extendedDest = path.join(stillsDir, extendedFilename);
-        const bakedDuration = await buildPingPongClip(
-          rawDest,
-          extendedDest,
-          clipDurationSeconds,
-          sceneDurationSeconds,
-          exportFps,
-        );
-        await unlink(rawDest).catch(() => undefined);
-        prefetched += 1;
-        next = {
-          ...next,
-          videoUrl: `${assetsBaseUrl}/${extendedFilename}`,
-          videoDurationSeconds: bakedDuration,
-          videoBaked: true,
-        };
-      } else {
-        const normalizedFilename = `${scene.id}-clip-normalized.mp4`;
-        const normalizedDest = path.join(stillsDir, normalizedFilename);
-        const bakedDuration = await normalizeVideoClip(
-          rawDest,
-          normalizedDest,
-          exportFps,
-          clipDurationSeconds,
-        );
-        await unlink(rawDest).catch(() => undefined);
-        prefetched += 1;
-        next = {
-          ...next,
-          videoUrl: `${assetsBaseUrl}/${normalizedFilename}`,
-          videoDurationSeconds: bakedDuration > 0 ? bakedDuration : clipDurationSeconds,
-          videoBaked: true,
-        };
-      }
+      const normalizedFilename = `${scene.id}-clip-normalized.mp4`;
+      const normalizedDest = path.join(stillsDir, normalizedFilename);
+      await normalizeVideoClip(rawDest, normalizedDest, exportFps, clipDurationSeconds);
+      await unlink(rawDest).catch(() => undefined);
+      prefetched += 1;
+      next = {
+        ...next,
+        videoUrl: `${assetsBaseUrl}/${normalizedFilename}`,
+        videoDurationSeconds: clipDurationSeconds,
+      };
     }
   }
 

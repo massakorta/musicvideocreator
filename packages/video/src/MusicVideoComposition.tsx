@@ -64,15 +64,10 @@ const SceneLayer: React.FC<{
       {scene.videoUrl && scene.videoDurationSeconds ? (
         <PingPongSceneVideo
           src={scene.videoUrl}
-          clipDurationSeconds={
-            scene.videoBaked
-              ? sceneDurationSeconds
-              : (scene.videoDurationSeconds ?? sceneDurationSeconds)
-          }
+          clipDurationSeconds={scene.videoDurationSeconds ?? sceneDurationSeconds}
           sceneDurationSeconds={sceneDurationSeconds}
           fallbackImageUrl={scene.imageUrl}
           playbackActive={playbackActive}
-          videoBaked={scene.videoBaked}
           style={mediaStyle}
         />
       ) : (

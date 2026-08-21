@@ -83,23 +83,16 @@ function PingPongSceneVideoRender({
   clipDurationSeconds,
   sceneDurationSeconds,
   fallbackImageUrl,
-  videoBaked = false,
   style,
 }: {
   src: string;
   clipDurationSeconds: number;
   sceneDurationSeconds: number;
   fallbackImageUrl: string;
-  videoBaked?: boolean;
   style?: React.CSSProperties;
 }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const playbackRate = videoBaked
-    ? 1
-    : clipDurationSeconds > sceneDurationSeconds
-      ? clipDurationSeconds / sceneDurationSeconds
-      : 1;
   const sourceTime = sceneVideoSourceSeconds(frame / fps, clipDurationSeconds, sceneDurationSeconds);
   const sourceFrame = Math.max(0, Math.round(sourceTime * fps));
   const fillStyle: React.CSSProperties = {
@@ -117,13 +110,8 @@ function PingPongSceneVideoRender({
       <OffthreadVideo
         src={src}
         muted
-        playbackRate={playbackRate}
-        {...(videoBaked
-          ? {}
-          : {
-              trimBefore: sourceFrame,
-              trimAfter: sourceFrame + 1,
-            })}
+        trimBefore={sourceFrame}
+        trimAfter={sourceFrame + 1}
         style={{ ...fillStyle, zIndex: 1 }}
       />
     </AbsoluteFill>
@@ -136,7 +124,6 @@ export function PingPongSceneVideo({
   sceneDurationSeconds,
   fallbackImageUrl,
   playbackActive = false,
-  videoBaked = false,
   style,
 }: {
   src: string;
@@ -144,7 +131,6 @@ export function PingPongSceneVideo({
   sceneDurationSeconds: number;
   fallbackImageUrl: string;
   playbackActive?: boolean;
-  videoBaked?: boolean;
   style?: React.CSSProperties;
 }) {
   const frame = useCurrentFrame();
@@ -159,7 +145,6 @@ export function PingPongSceneVideo({
         clipDurationSeconds={clipDurationSeconds}
         sceneDurationSeconds={sceneDurationSeconds}
         fallbackImageUrl={fallbackImageUrl}
-        videoBaked={videoBaked}
         style={style}
       />
     );

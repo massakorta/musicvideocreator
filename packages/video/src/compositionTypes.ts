@@ -8,8 +8,6 @@ export interface CompositionScene {
   imageUrl: string;
   videoUrl?: string;
   videoDurationSeconds?: number;
-  /** True when export prefetch baked timing into the clip file (linear OffthreadVideo playback). */
-  videoBaked?: boolean;
   motion: MotionPresetId;
   transitionIn: TransitionPresetId;
   transitionOut: TransitionPresetId;
