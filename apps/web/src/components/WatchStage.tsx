@@ -72,6 +72,7 @@ export function WatchStage(props: WatchStageProps) {
 
   const unlockSceneVideos = useCallback(() => {
     stageRef.current?.querySelectorAll('video').forEach((video) => {
+      if (video === videoRef.current) return;
       video.muted = true;
       void video.play().catch(() => {});
     });
@@ -94,10 +95,10 @@ export function WatchStage(props: WatchStageProps) {
 
   const play = useCallback(async () => {
     setPlaybackActive(true);
-    unlockSceneVideos();
     if (props.mode === 'video') {
       const video = videoRef.current;
       if (video) {
+        video.muted = false;
         try {
           await video.play();
         } catch {
@@ -106,6 +107,8 @@ export function WatchStage(props: WatchStageProps) {
       }
       return;
     }
+
+    unlockSceneVideos();
 
     if (props.audioUrl && audioRef.current) {
       try {
