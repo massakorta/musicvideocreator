@@ -215,11 +215,30 @@ export function createFileRepositories(): Repositories {
           job.claimedBy = undefined;
           job.startedAt = undefined;
           job.progress = 0;
+          job.progressUpdatedAt = undefined;
           db.renderJobs[job.id] = job;
           render += 1;
         }
       });
       return { pipeline, render };
+    },
+    async recoverOrphanedRenderJobs(exceptJobId?: string) {
+      let render = 0;
+      await writeDb((db) => {
+        for (const job of Object.values(db.renderJobs)) {
+          if (job.status !== 'preparing' && job.status !== 'rendering' && job.status !== 'uploading') continue;
+          if (exceptJobId && job.id === exceptJobId) continue;
+          job.status = 'queued';
+          job.claimedBy = undefined;
+          job.startedAt = undefined;
+          job.progress = 0;
+          job.progressUpdatedAt = undefined;
+          job.error = undefined;
+          db.renderJobs[job.id] = job;
+          render += 1;
+        }
+      });
+      return render;
     },
   };
 }

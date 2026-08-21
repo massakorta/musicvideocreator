@@ -1,9 +1,12 @@
-import { AppError, ERROR_CODES, computeProjectHealth, exportDurationFrames, estimateRenderTimeoutMs, type RenderJob } from '@music-video/shared';
+import { AppError, ERROR_CODES, computeProjectHealth, exportDurationFrames, estimateRenderTimeoutMs, isOrphanedRenderJob, type RenderJob } from '@music-video/shared';
 import { getRepositories } from '../repositories/index.js';
 import { getProjectOrThrow, saveProject } from './projects.js';
 import { newId, nowIso } from './projectUtils.js';
 
-export async function enqueueRender(projectId: string): Promise<{ project: Awaited<ReturnType<typeof getProjectOrThrow>>; job: RenderJob }> {
+export async function enqueueRender(
+  projectId: string,
+  options?: { force?: boolean },
+): Promise<{ project: Awaited<ReturnType<typeof getProjectOrThrow>>; job: RenderJob }> {
   const project = await getProjectOrThrow(projectId);
   const health = computeProjectHealth(project);
   if (!health.readyToRender) {
@@ -23,7 +26,16 @@ export async function enqueueRender(projectId: string): Promise<{ project: Await
     );
     const staleAfterMs = estimateRenderTimeoutMs(exportFrames) + 5 * 60 * 1000;
     const startedAt = active.startedAt ?? active.createdAt;
-    if (Date.now() - Date.parse(startedAt) > staleAfterMs) {
+    if (options?.force || isOrphanedRenderJob(active)) {
+      await getRepositories().renderJobs.save({
+        ...active,
+        status: 'failed',
+        error: options?.force
+          ? 'Export cancelled so a new one could start.'
+          : 'Export interrupted (worker restarted). Start a new export.',
+        completedAt: new Date().toISOString(),
+      });
+    } else if (Date.now() - Date.parse(startedAt) > staleAfterMs) {
       await getRepositories().renderJobs.save({
         ...active,
         status: 'failed',

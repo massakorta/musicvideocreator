@@ -42,4 +42,5 @@ export interface Repositories {
     add(log: AiUsageLog): Promise<void>;
   };
   recoverInterruptedJobs(): Promise<{ pipeline: number; render: number }>;
+  recoverOrphanedRenderJobs(exceptJobId?: string): Promise<number>;
 }

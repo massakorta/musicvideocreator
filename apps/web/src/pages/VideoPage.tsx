@@ -94,13 +94,16 @@ export function VideoPage() {
     lastRenderProgress !== null &&
     renderJob?.progress === lastRenderProgress &&
     Date.now() - lastRenderProgressAt > 3 * 60 * 1000;
+  const canRetryExport = renderProgressStale || renderFailed;
 
-  async function startRender() {
+  async function startRender(force = false) {
     setRenderBusy(true);
     setError(null);
     try {
-      const { job } = await api.render(project.id);
+      const { job } = await api.render(project.id, force ? { force: true } : undefined);
       setRenderJob(job);
+      setLastRenderProgress(job.progress);
+      setLastRenderProgressAt(Date.now());
     } catch (err) {
       setRenderBusy(false);
       setError(err instanceof ApiClientError ? err.message : 'Could not start MP4 export.');
@@ -214,14 +217,16 @@ export function VideoPage() {
             <>
               <button
                 className="btn btn-primary"
-                disabled={renderBusy || renderActive}
-                onClick={() => void startRender()}
+                disabled={renderBusy || (renderActive && !canRetryExport)}
+                onClick={() => void startRender(canRetryExport)}
               >
-                {renderBusy || renderActive
+                {renderBusy || (renderActive && !canRetryExport)
                   ? RENDER_JOB_STATUS_LABELS[renderJob?.status ?? 'queued']
-                  : renderComplete && !(stale?.videoStale)
-                    ? 'Re-export MP4'
-                    : 'Generate MP4'}
+                  : canRetryExport
+                    ? 'Retry export'
+                    : renderComplete && !(stale?.videoStale)
+                      ? 'Re-export MP4'
+                      : 'Generate MP4'}
               </button>
               <button className="btn" onClick={() => void copyShareLink('watch')}>
                 {copied ? 'Watch link copied!' : 'Copy watch link'}
@@ -244,8 +249,8 @@ export function VideoPage() {
             </p>
             {renderProgressStale ? (
               <p className="banner warning" style={{ marginBottom: 12 }}>
-                Progress has not moved for a few minutes. The worker may still be busy, or the current export may have
-                stalled — check worker logs, then try Generate MP4 again after redeploying the worker.
+                Progress has not moved for a few minutes. The export was likely interrupted by a worker
+                restart — use Retry export to queue a fresh MP4.
               </p>
             ) : null}
             {stale?.videoStale ? (

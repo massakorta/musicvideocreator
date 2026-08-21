@@ -419,7 +419,8 @@ apiRouter.post(
 apiRouter.post(
   '/projects/:id/render',
   asyncHandler(async (req, res) => {
-    const result = await enqueueRender(param(req, 'id'));
+    const force = req.body?.force === true;
+    const result = await enqueueRender(param(req, 'id'), { force });
     res.status(201).json(result);
   }),
 );

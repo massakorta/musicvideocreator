@@ -242,10 +242,10 @@ export const api = {
         };
       };
     }>(`/api/public/watch/${shareId}`),
-  render: (id: string) =>
+  render: (id: string, options?: { force?: boolean }) =>
     request<{ project: import('@music-video/shared').MusicVideoProject; job: import('@music-video/shared').RenderJob }>(
       `/api/projects/${id}/render`,
-      { method: 'POST' },
+      { method: 'POST', body: JSON.stringify(options ?? {}) },
     ),
   job: (jobId: string) =>
     request<{ job: import('@music-video/shared').RenderJob }>(`/api/render-jobs/${jobId}`),

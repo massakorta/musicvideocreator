@@ -113,6 +113,8 @@ export interface RenderJob {
   error?: string;
   claimedBy?: string;
   fileSizeBytes?: number;
+  /** Last time progress changed; used to detect deploy-killed exports. */
+  progressUpdatedAt?: string;
 }
 
 export interface AssetRecord {

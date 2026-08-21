@@ -36,6 +36,8 @@ const OFFTHREAD_CACHE_BYTES = 8 * 1024 * 1024;
 
 let cachedServeUrl: string | undefined;
 let lastRenderBlockedLogAt = 0;
+let activeRenderJobId: string | undefined;
+let shuttingDown = false;
 
 function effectiveRemotionConcurrency(): number {
   return Math.min(Math.max(1, config.remotionConcurrency), os.availableParallelism());
@@ -138,7 +140,45 @@ async function patchRenderJob(job: RenderJob, patch: Partial<RenderJob>): Promis
   return next;
 }
 
+async function patchRenderJob(job: RenderJob, patch: Partial<RenderJob>): Promise<RenderJob> {
+  const touched = patch.progress !== undefined && patch.progress !== job.progress;
+  const next = {
+    ...job,
+    ...patch,
+    ...(touched ? { progressUpdatedAt: new Date().toISOString() } : {}),
+  };
+  await getRepositories().renderJobs.save(next);
+  return next;
+}
+
+async function requeueActiveRenderJob(reason: string): Promise<void> {
+  if (!activeRenderJobId) return;
+  const job = await getRepositories().renderJobs.get(activeRenderJobId);
+  if (!job || job.status === 'complete' || job.status === 'failed') return;
+  await getRepositories().renderJobs.save({
+    ...job,
+    status: 'queued',
+    claimedBy: undefined,
+    startedAt: undefined,
+    progress: 0,
+    progressUpdatedAt: undefined,
+    error: undefined,
+  });
+  console.log(`[render] requeued job=${job.id} (${reason})`);
+}
+
 async function renderJob(job: RenderJob): Promise<void> {
+  activeRenderJobId = job.id;
+  try {
+    await renderJobInner(job);
+  } finally {
+    if (activeRenderJobId === job.id) {
+      activeRenderJobId = undefined;
+    }
+  }
+}
+
+async function renderJobInner(job: RenderJob): Promise<void> {
   let current = await patchRenderJob(job, { status: 'preparing', progress: 2 });
   const project = await getProjectOrThrow(job.projectId);
   const workdir = path.join(os.tmpdir(), `mv-render-${job.id}`);
@@ -357,6 +397,7 @@ async function pipelineLoop(): Promise<void> {
 async function renderLoop(): Promise<void> {
   let lastActivity = Date.now();
   for (;;) {
+    if (shuttingDown) return;
     try {
       if (isRenderBlockedByPipeline()) {
         logRenderBlocked();
@@ -378,9 +419,15 @@ async function renderLoop(): Promise<void> {
         } catch (error) {
           await failRender(job, error);
         }
-      } else if (Date.now() - lastActivity >= IDLE_HEARTBEAT_MS) {
-        console.log('[worker] render loop: no queued jobs');
-        lastActivity = Date.now();
+      } else {
+        const recovered = await getRepositories().recoverOrphanedRenderJobs(activeRenderJobId);
+        if (recovered > 0) {
+          console.log(`[render] requeued ${recovered} orphaned export job(s)`);
+          lastActivity = Date.now();
+        } else if (Date.now() - lastActivity >= IDLE_HEARTBEAT_MS) {
+          console.log('[worker] render loop: no queued jobs');
+          lastActivity = Date.now();
+        }
       }
     } catch (error) {
       console.error('[worker] render poll error', error);
@@ -394,6 +441,18 @@ function start(): void {
   healthCheck();
   logMemory('boot');
   console.log(`Worker ${config.workerId} polling every ${config.workerPollMs}ms`);
+
+  const shutdown = (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`[worker] received ${signal}, requeueing active export if needed`);
+    void requeueActiveRenderJob(`worker ${signal.toLowerCase()}`).finally(() => {
+      process.exit(0);
+    });
+  };
+  process.once('SIGTERM', () => shutdown('SIGTERM'));
+  process.once('SIGINT', () => shutdown('SIGINT'));
+
   void recoverInterruptedJobs().finally(() => {
     Promise.all([pipelineLoop(), renderLoop()]).catch((error) => {
       console.error(error);

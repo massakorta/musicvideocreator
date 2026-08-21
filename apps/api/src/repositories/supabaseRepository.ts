@@ -47,6 +47,7 @@ interface RenderJobRow {
   error: string | null;
   claimed_by: string | null;
   file_size_bytes: number | null;
+  progress_updated_at: string | null;
 }
 
 function projectFromRow(row: ProjectRow & { share_id?: string | null }): MusicVideoProject {
@@ -135,6 +136,7 @@ function renderJobFromRow(row: RenderJobRow): RenderJob {
     error: row.error ?? undefined,
     claimedBy: row.claimed_by ?? undefined,
     fileSizeBytes: row.file_size_bytes ?? undefined,
+    progressUpdatedAt: row.progress_updated_at ?? undefined,
   };
 }
 
@@ -330,6 +332,7 @@ export function createSupabaseRepositories(): Repositories {
           error: job.error ?? null,
           claimed_by: job.claimedBy ?? null,
           file_size_bytes: job.fileSizeBytes ?? null,
+          progress_updated_at: job.progressUpdatedAt ?? null,
         });
         if (error) throw error;
         return job;
@@ -398,24 +401,47 @@ export function createSupabaseRepositories(): Repositories {
       },
     },
     async recoverInterruptedJobs() {
-      const { data: pipelineRows, error: pipelineError } = await client
-        .from('video_pipeline_jobs')
-        .update({ status: 'queued', claimed_by: null })
-        .eq('status', 'running')
-        .select('id');
-      if (pipelineError) throw pipelineError;
-
-      const { data: renderRows, error: renderError } = await client
-        .from('video_render_jobs')
-        .update({ status: 'queued', claimed_by: null, started_at: null, progress: 0 })
-        .in('status', ['preparing', 'rendering', 'uploading'])
-        .select('id');
-      if (renderError) throw renderError;
-
-      return {
-        pipeline: pipelineRows?.length ?? 0,
-        render: renderRows?.length ?? 0,
-      };
+      const pipeline = await recoverOrphanedPipelineJobs(client);
+      const render = await recoverOrphanedRenderJobs(client);
+      return { pipeline, render };
+    },
+    async recoverOrphanedRenderJobs(exceptJobId?: string) {
+      return recoverOrphanedRenderJobs(client, exceptJobId);
     },
   };
+}
+
+async function recoverOrphanedPipelineJobs(client: SupabaseClient): Promise<number> {
+  const { data: pipelineRows, error: pipelineError } = await client
+    .from('video_pipeline_jobs')
+    .update({ status: 'queued', claimed_by: null })
+    .eq('status', 'running')
+    .select('id');
+  if (pipelineError) throw pipelineError;
+  return pipelineRows?.length ?? 0;
+}
+
+async function recoverOrphanedRenderJobs(
+  client: SupabaseClient,
+  exceptJobId?: string,
+): Promise<number> {
+  let query = client
+    .from('video_render_jobs')
+    .update({
+      status: 'queued',
+      claimed_by: null,
+      started_at: null,
+      progress: 0,
+      progress_updated_at: null,
+      error: null,
+    })
+    .in('status', ['preparing', 'rendering', 'uploading']);
+
+  if (exceptJobId) {
+    query = query.neq('id', exceptJobId);
+  }
+
+  const { data: renderRows, error: renderError } = await query.select('id');
+  if (renderError) throw renderError;
+  return renderRows?.length ?? 0;
 }

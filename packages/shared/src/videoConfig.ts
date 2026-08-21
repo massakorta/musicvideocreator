@@ -33,6 +33,8 @@ export const RENDER_BASE_TIMEOUT_MS = 3 * 60 * 1000;
 export const RENDER_MS_PER_FRAME = 2000;
 /** Abort when encode progress stops moving for this long. */
 export const RENDER_STALL_TIMEOUT_MS = 3 * 60 * 1000;
+/** Treat active exports with no progress change for this long as orphaned. */
+export const RENDER_ORPHAN_MS = RENDER_STALL_TIMEOUT_MS + 60 * 1000;
 
 export function getExportPreset(formatId: VideoFormatId = DEFAULT_VIDEO_FORMAT) {
   return EXPORT_PRESETS[formatId];

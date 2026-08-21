@@ -11,6 +11,7 @@ export * from './storyboard.js';
 export * from './lyrics.js';
 export * from './lyricAlignment.js';
 export * from './project.js';
+export * from './renderJob.js';
 export * from './errors.js';
 export * from './validation/storyboard.js';
 export * from './validation/schemas.js';
